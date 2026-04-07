@@ -11,6 +11,7 @@ anyhow = "1"
 winnow = "1.0"
 logos = "0.16"
 miette = "7"
+rhai = "1.24"
 
 # Serialize
 serde = "1"
