@@ -54,13 +54,16 @@
 //!                         └─ ScriptEngine (rhai)
 //! ```
 
-// ─── Module declarations ──────────────────────────────────────────────────────
+// ─── Syntax crate re-exports (lexer, parser, AST, errors) ────────────────────
 
-pub mod ast;
-pub mod error;
+pub use kag_syntax::ast;
+pub use kag_syntax::error;
+pub use kag_syntax::lexer;
+pub use kag_syntax::parser;
+
+// ─── Interpreter-local modules ────────────────────────────────────────────────
+
 pub mod events;
-pub mod lexer;
-pub mod parser;
 pub mod runtime;
 
 // ─── Primary public re-exports ────────────────────────────────────────────────

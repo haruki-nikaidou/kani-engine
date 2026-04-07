@@ -4,9 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+kag-syntax = { path = "../kag-syntax" }
 thiserror = { workspace = true }
-winnow = { workspace = true }
-logos = { workspace = true }
 miette = { workspace = true }
 rhai = { workspace = true }
 tokio = { workspace = true }

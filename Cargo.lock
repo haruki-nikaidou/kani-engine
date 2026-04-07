@@ -179,11 +179,20 @@ dependencies = [
 name = "kag-interpreter"
 version = "0.1.0"
 dependencies = [
- "logos",
+ "kag-syntax",
  "miette",
  "rhai",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "kag-syntax"
+version = "0.1.0"
+dependencies = [
+ "logos",
+ "miette",
+ "thiserror",
  "winnow",
 ]
 
