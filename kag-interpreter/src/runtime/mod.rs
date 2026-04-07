@@ -247,6 +247,36 @@ async fn interpreter_task(
                     }
                 }
 
+                // ── Cross-file return: reload caller's script ──────────────
+                KagEvent::Return { storage } => {
+                    let _ = event_tx
+                        .send(KagEvent::Return { storage: storage.clone() })
+                        .await;
+                    loop {
+                        match input_rx.recv().await {
+                            Some(HostEvent::ScenarioLoaded { name, source }) => {
+                                match parse_script(&source, &name) {
+                                    Ok(new_script) => {
+                                        script = new_script.into_owned();
+                                        ctx.current_storage = name;
+                                        // ctx.pc was already set to return_pc by the
+                                        // executor — do NOT override it here.
+                                    }
+                                    Err(e) => {
+                                        let _ = event_tx
+                                            .send(KagEvent::Error(e.to_string()))
+                                            .await;
+                                        return;
+                                    }
+                                }
+                                break;
+                            }
+                            None => return,
+                            _ => {}
+                        }
+                    }
+                }
+
                 // ── Choice prompt ──────────────────────────────────────────
                 KagEvent::BeginChoices(choices) => {
                     let _ = event_tx.send(KagEvent::BeginChoices(choices)).await;
@@ -394,6 +424,76 @@ mod tests {
             |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after")),
         );
         assert!(has_after, "post-stop events: {:?}", post);
+        })
+        .await;
+    }
+
+    /// Verify that `[call storage=sub.ks]` / `[return]` across two files works:
+    /// the interpreter should execute the callee, return to the caller, and
+    /// emit the text that follows the original `[call]` tag.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_cross_file_call_return() {
+        with_local(|| async {
+            let caller_src = "[call storage=sub.ks target=*fn]\nback\n";
+            let sub_src = "*fn\nin sub\n[return]\n";
+
+            let (mut handle, _task) =
+                KagInterpreter::spawn_from_source(caller_src, "caller.ks").unwrap();
+
+            let mut all_events = Vec::<KagEvent>::new();
+
+            loop {
+                match handle.recv().await {
+                    None => break,
+                    Some(KagEvent::End) => {
+                        all_events.push(KagEvent::End);
+                        break;
+                    }
+                    // Interpreter crossed into sub.ks — supply its source.
+                    Some(KagEvent::Jump { storage: Some(ref s), .. }) if s == "sub.ks" => {
+                        handle
+                            .send(HostEvent::ScenarioLoaded {
+                                name: "sub.ks".into(),
+                                source: sub_src.into(),
+                            })
+                            .await
+                            .unwrap();
+                    }
+                    // Interpreter is returning to caller.ks — supply its source again.
+                    Some(KagEvent::Return { ref storage }) if storage == "caller.ks" => {
+                        handle
+                            .send(HostEvent::ScenarioLoaded {
+                                name: "caller.ks".into(),
+                                source: caller_src.into(),
+                            })
+                            .await
+                            .unwrap();
+                    }
+                    Some(e) => all_events.push(e),
+                }
+            }
+
+            let has_in_sub = all_events
+                .iter()
+                .any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("in sub")));
+            assert!(has_in_sub, "expected 'in sub' text; events: {:?}", all_events);
+
+            let has_back = all_events
+                .iter()
+                .any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("back")));
+            assert!(has_back, "expected 'back' text after return; events: {:?}", all_events);
+
+            // "back" must come after "in sub"
+            let sub_pos = all_events.iter().position(
+                |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("in sub")),
+            );
+            let back_pos = all_events.iter().position(
+                |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("back")),
+            );
+            assert!(
+                sub_pos < back_pos,
+                "'in sub' ({sub_pos:?}) should precede 'back' ({back_pos:?})"
+            );
         })
         .await;
     }

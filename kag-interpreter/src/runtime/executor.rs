@@ -237,7 +237,14 @@ fn execute_tag<'s>(
         TAG_RETURN => {
             if let Some(frame) = ctx.pop_call() {
                 ctx.jump_to(frame.return_pc);
-                Ok(vec![])
+                if frame.return_storage != ctx.current_storage {
+                    // Cross-file return: host must reload the caller's script.
+                    // ctx.pc is already set to return_pc; the interpreter loop
+                    // must NOT override it after loading.
+                    Ok(vec![KagEvent::Return { storage: frame.return_storage }])
+                } else {
+                    Ok(vec![])
+                }
             } else {
                 Err(KagError::CallStackUnderflow)
             }
@@ -576,6 +583,7 @@ mod tests {
                 KagEvent::Warning(w) => format!("warn:{}", w),
                 KagEvent::Error(e) => format!("err:{}", e),
                 KagEvent::VariableChanged { .. } => "var_changed".to_string(),
+                KagEvent::Return { storage } => format!("return:{}", storage),
             })
             .collect()
     }

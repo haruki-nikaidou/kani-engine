@@ -58,6 +58,13 @@ pub enum KagEvent {
         target: Option<String>,
     },
 
+    /// Return from a `[call]` that crossed into a different scenario file.
+    /// The host must respond with `HostEvent::ScenarioLoaded` containing the
+    /// caller's file. The interpreter will resume at the saved return PC.
+    Return {
+        storage: String,
+    },
+
     // ── Choices ──────────────────────────────────────────────────────────────
 
     /// Present a set of choices to the player.  The host responds with
@@ -115,8 +122,8 @@ pub enum HostEvent {
     ChoiceSelected(usize),
 
     /// The host has loaded a scenario file and provides its raw text.
-    /// Used when the interpreter asks for a `[jump storage=…]` or
-    /// `[call storage=…]` that targets a different file.
+    /// Used when the interpreter asks for a `[jump storage=…]`,
+    /// `[call storage=…]`, or `[return]` that targets a different file.
     ScenarioLoaded {
         name: String,
         source: String,
