@@ -454,11 +454,10 @@ impl<'src> ParseCtx<'src> {
                 }
             }
             "endmacro" => {
-                if let Some(name) = self.macro_stack.pop() {
-                    if let Some(def) = self.macro_map.get_mut(&name) {
+                if let Some(name) = self.macro_stack.pop()
+                    && let Some(def) = self.macro_map.get_mut(&name) {
                         def.body_end = self.ops.len();
                     }
-                }
             }
             _ => {
                 self.emit(Op::Tag(tag));
@@ -523,12 +522,12 @@ fn is_tag_line_named(tokens: &[Spanned<'_>], pos: usize, expected: &str) -> bool
         Token::At => {
             tokens
                 .get(pos + 1)
-                .map_or(false, |t| t.slice == expected)
+                .is_some_and(|t| t.slice == expected)
         }
         Token::LBracket => {
             tokens
                 .get(pos + 1)
-                .map_or(false, |t| t.slice == expected)
+                .is_some_and(|t| t.slice == expected)
         }
         _ => false,
     }

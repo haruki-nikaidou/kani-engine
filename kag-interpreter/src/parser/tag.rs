@@ -321,7 +321,7 @@ where
     // param position — not handled here; handled by line parser)
     let name_tok = next_ident(&mut input).map_err(|_| ContextError::new())?;
 
-    let params = parse_params(&mut input).map_err(|e| e)?;
+    let params = parse_params(&mut input)?;
 
     Ok(Tag {
         name: Cow::Borrowed(name_tok.slice),

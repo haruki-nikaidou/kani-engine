@@ -61,11 +61,10 @@ pub fn execute_op<'s>(
     // ── Control-flow tags are processed regardless of the if-skip state ───────
     // (we must track nesting to know when an `[endif]` closes the *current*
     //  if block rather than an outer one)
-    if let Op::Tag(tag) = op {
-        if is_control_flow_tag(tag.name.as_ref()) {
+    if let Op::Tag(tag) = op
+        && is_control_flow_tag(tag.name.as_ref()) {
             return execute_control_flow(script, ctx, tag);
         }
-    }
 
     // ── When inside a skipped conditional branch, skip everything else ────────
     if !ctx.is_executing() {
@@ -147,11 +146,10 @@ fn execute_inline_tag(
 ) -> Result<Vec<KagEvent>, KagError> {
     // Honour optional `cond=` guard on any inline tag
     let cond_expr = tag.param_str("cond").map(str::to_owned);
-    if let Some(ref expr) = cond_expr {
-        if !ctx.script_engine.eval_bool(expr).unwrap_or(true) {
+    if let Some(ref expr) = cond_expr
+        && !ctx.script_engine.eval_bool(expr).unwrap_or(true) {
             return Ok(vec![]);
         }
-    }
 
     match tag.name.as_ref() {
         TAG_R => Ok(vec![KagEvent::InsertLineBreak]),
@@ -192,12 +190,11 @@ fn execute_tag<'s>(
 ) -> Result<Vec<KagEvent>, KagError> {
     // Check optional `cond=` guard — if false, skip the tag entirely
     let cond_expr = tag.param_str("cond").map(str::to_owned);
-    if let Some(ref expr) = cond_expr {
-        if !ctx.script_engine.eval_bool(expr).unwrap_or(true) {
+    if let Some(ref expr) = cond_expr
+        && !ctx.script_engine.eval_bool(expr).unwrap_or(true) {
             ctx.advance();
             return Ok(vec![]);
         }
-    }
 
     let name = tag.name.as_ref();
 
