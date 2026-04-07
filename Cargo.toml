@@ -3,7 +3,14 @@ resolver = "3"
 members = ["kag-interpreter"]
 
 [workspace.dependencies]
+# Error handling
 thiserror = "2"
+anyhow = "1"
+
+# Interpreter
 winnow = "1.0"
 logos = "0.16"
 miette = "7"
+
+# Serialize
+serde = "1"
