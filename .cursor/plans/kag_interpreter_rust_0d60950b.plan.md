@@ -4,37 +4,37 @@ overview: Implement a KAG scenario-script interpreter in Rust inside the existin
 todos:
   - id: deps
     content: Add tokio to workspace Cargo.toml and kag-interpreter/Cargo.toml
-    status: pending
+    status: completed
   - id: error
     content: "Implement error.rs: KagError with thiserror + miette Diagnostic, NamedSource, SourceSpan"
-    status: pending
+    status: completed
   - id: lexer
     content: "Implement lexer.rs: logos Token enum + tokenize() returning Vec<(Token, SourceSpan)> with unit tests"
-    status: pending
+    status: completed
   - id: ast
     content: "Implement ast.rs: Op, Tag, Param, ParamValue, TextPart, LabelDef, Script with Cow<'src,str> and into_owned()"
-    status: pending
+    status: completed
   - id: events
     content: "Implement events.rs: KagEvent, HostEvent, ChoiceOption, VarScope enums"
-    status: pending
+    status: completed
   - id: parser
     content: "Implement parser/mod.rs, parser/line.rs, parser/tag.rs: winnow combinators over token stream with unit tests"
-    status: pending
+    status: completed
   - id: script_engine
     content: "Implement runtime/script_engine.rs: RhaiEngine wrapping rhai::Engine + Scope, eval_bool/eval_to_string/exec, variable scope sync"
-    status: pending
+    status: completed
   - id: context
     content: "Implement runtime/context.rs: RuntimeContext with PC, call/if/macro stacks, variables"
-    status: pending
+    status: completed
   - id: executor
     content: "Implement runtime/executor.rs: execute_op dispatch for all core tags + generic tag fallthrough with unit tests"
-    status: pending
+    status: completed
   - id: runtime
     content: "Implement runtime/mod.rs: KagInterpreter actor, spawn(), async run() loop with tokio mpsc channels"
-    status: pending
+    status: completed
   - id: lib
     content: "Wire up lib.rs: pub re-exports, module declarations"
-    status: pending
+    status: completed
 isProject: false
 ---
 

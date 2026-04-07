@@ -2,3 +2,80 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 #![forbid(unsafe_code)]
+
+//! # kag-interpreter
+//!
+//! A Rust implementation of the KAG (Kirikiri Adventure Game) scenario-script
+//! interpreter, designed to be embedded in a visual-novel game engine.
+//!
+//! ## Quick start
+//!
+//! ```rust,no_run
+//! use kag_interpreter::{KagInterpreter, KagEvent, HostEvent};
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let source = r#"
+//! *start
+//! Hello, world![l]
+//! @jump target=*start
+//! "#;
+//!     let (mut interp, _task) =
+//!         KagInterpreter::spawn_from_source(source, "demo.ks").unwrap();
+//!
+//!     loop {
+//!         match interp.recv().await {
+//!             Some(KagEvent::DisplayText { text, speaker }) => {
+//!                 if let Some(spk) = speaker { print!("{spk}: "); }
+//!                 println!("{text}");
+//!             }
+//!             Some(KagEvent::WaitForClick { .. }) => {
+//!                 // Simulate an immediate click
+//!                 interp.send(HostEvent::Clicked).await.unwrap();
+//!             }
+//!             Some(KagEvent::End) | None => break,
+//!             _ => {}
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! ## Architecture
+//!
+//! ```text
+//! source .ks text
+//!     └─ lexer (logos) ─────────────────── Vec<Spanned<Token>>
+//!         └─ parser (winnow) ───────────── Script<'src>
+//!             └─ Script::into_owned() ──── Script<'static>
+//!                 └─ KagInterpreter (tokio task)
+//!                         │ KagEvent channel (to host)
+//!                         │ HostEvent channel (from host)
+//!                     RuntimeContext
+//!                         └─ ScriptEngine (rhai)
+//! ```
+
+// ─── Module declarations ──────────────────────────────────────────────────────
+
+pub mod ast;
+pub mod error;
+pub mod events;
+pub mod lexer;
+pub mod parser;
+pub mod runtime;
+
+// ─── Primary public re-exports ────────────────────────────────────────────────
+
+/// The main interpreter actor handle.
+pub use runtime::KagInterpreter;
+
+/// All event types used across the public API.
+pub use events::{ChoiceOption, HostEvent, KagEvent, VarScope};
+
+/// The parsed scenario representation.
+pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
+
+/// Rich error type with source-code attribution.
+pub use error::KagError;
+
+/// Parse a `.ks` source string into a `Script`.
+pub use parser::parse_script;

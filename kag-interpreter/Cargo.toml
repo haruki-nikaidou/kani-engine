@@ -9,3 +9,7 @@ winnow = { workspace = true }
 logos = { workspace = true }
 miette = { workspace = true }
 rhai = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
