@@ -156,14 +156,24 @@ impl<'src> ParseCtx<'src> {
             self.emit(Op::ScriptBlock(script_text));
             advance_to_newline(tokens, pos);
         } else {
-            // Accumulate raw source text for this line
-            let buf = self.iscript_buf.as_mut().unwrap();
+            // Accumulate raw source text for this line.
+            // Compute line_text first so the None arm can borrow self freely.
             let line_text = collect_line_source(tokens, *pos);
-            buf.push_str(&line_text);
-            buf.push('\n');
+            match self.iscript_buf.as_mut() {
+                Some(buf) => {
+                    buf.push_str(&line_text);
+                    buf.push('\n');
+                }
+                None => {
+                    return Err(KagError::parse(
+                        "internal error: iscript accumulation buffer missing",
+                        self.named_source(),
+                        tok_span(tokens, start, *pos),
+                    ));
+                }
+            }
             advance_to_newline(tokens, pos);
         }
-        let _ = start;
         Ok(())
     }
 
