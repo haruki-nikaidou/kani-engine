@@ -213,13 +213,26 @@ async fn interpreter_task(
                                             .await;
                                     }
                                     // Resolve jump target inside the new script.
-                                    let idx = target
-                                        .as_deref()
-                                        .and_then(|t| {
-                                            let key = t.trim_start_matches('*');
-                                            script.label_map.get(key).copied()
-                                        })
-                                        .unwrap_or(0);
+                                    let idx = if let Some(ref t) = target {
+                                        let key = t.trim_start_matches('*');
+                                        match script.label_map.get(key).copied() {
+                                            Some(i) => i,
+                                            None => {
+                                                let _ = event_tx
+                                                    .send(KagEvent::Warning(format!(
+                                                        "label '{key}' not found in '{}' \
+                                                         (script.label_map has {} label(s)); \
+                                                         jumping to start",
+                                                        ctx.current_storage,
+                                                        script.label_map.len(),
+                                                    )))
+                                                    .await;
+                                                0
+                                            }
+                                        }
+                                    } else {
+                                        0
+                                    };
                                     ctx.jump_to(idx);
                                     break;
                                 }
