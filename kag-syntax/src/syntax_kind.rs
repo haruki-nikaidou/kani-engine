@@ -12,6 +12,8 @@ use rowan::Language;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u16)]
 #[allow(non_camel_case_types)]
+// `__LAST` is used as a bounds sentinel in `from_raw`, not as a non-exhaustive marker.
+#[allow(clippy::manual_non_exhaustive)]
 pub enum SyntaxKind {
     // ── Tokens (must stay in sync with `lexer::Token`) ────────────────────
 

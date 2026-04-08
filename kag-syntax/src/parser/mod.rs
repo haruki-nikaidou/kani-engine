@@ -50,6 +50,7 @@ impl<T: AstNode> Parse<T> {
     }
 
     /// The typed CST root node.
+    #[allow(clippy::expect_used)] // invariant: the builder always produces a castable root
     pub fn tree(&self) -> T {
         T::cast(self.syntax_node()).expect("root node should cast")
     }
@@ -82,6 +83,7 @@ pub(crate) struct Parser<'src> {
     pub(crate) pending_macro: bool,
 }
 
+#[allow(dead_code)] // parser helper API — not all methods are exercised yet
 impl<'src> Parser<'src> {
     pub(crate) fn new(source: &'src str, tokens: Vec<Spanned<'src>>) -> Self {
         Self {
