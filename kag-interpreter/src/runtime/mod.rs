@@ -18,7 +18,7 @@ pub mod script_engine;
 use tokio::sync::mpsc;
 
 use crate::ast::Script;
-use crate::error::KagError;
+use crate::error::{KagError, ParseDiagnostic};
 use crate::events::{HostEvent, KagEvent};
 use crate::parser::parse_script;
 
@@ -78,12 +78,18 @@ impl KagInterpreter {
     ///
     /// The source is borrowed during parsing and then converted to owned data
     /// before the async task starts.
+    ///
+    /// Any [`ParseDiagnostic`]s produced during parsing are returned alongside
+    /// the handle and join-handle so callers can inspect or log them.  A
+    /// non-empty diagnostics list does **not** mean the script is unusable —
+    /// the interpreter still receives a best-effort op stream.
     pub fn spawn_from_source(
         source: &str,
         source_name: &str,
-    ) -> Result<(Self, tokio::task::JoinHandle<()>), KagError> {
-        let (script, _diags) = parse_script(source, source_name);
-        Ok(Self::spawn(script))
+    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<ParseDiagnostic>), KagError> {
+        let (script, diags) = parse_script(source, source_name);
+        let (handle, task) = Self::spawn(script);
+        Ok((handle, task, diags))
     }
 
     // ── Channel convenience ───────────────────────────────────────────────────
@@ -347,7 +353,7 @@ mod tests {
     async fn test_simple_text_scenario() {
         with_local(|| async {
             let src = "Hello!\n@l\nWorld!\n";
-            let (mut handle, _task) =
+            let (mut handle, _task, _diags) =
                 KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
 
             let mut events = Vec::new();
@@ -443,7 +449,7 @@ mod tests {
             let caller_src = "[call storage=sub.ks target=*fn]\nback\n";
             let sub_src = "*fn\nin sub\n[return]\n";
 
-            let (mut handle, _task) =
+            let (mut handle, _task, _diags) =
                 KagInterpreter::spawn_from_source(caller_src, "caller.ks").unwrap();
 
             let mut all_events = Vec::<KagEvent>::new();
