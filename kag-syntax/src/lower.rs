@@ -411,6 +411,11 @@ impl LowerCtx {
         let body_start = self.ops.len();
         let name_cow: Cow<'static, str> = Cow::Owned(name.clone());
 
+        // duplicate macro warning
+        if self.macro_map.contains_key(&name_cow) {
+            self.push_warning(format!("duplicate macro: {name}"), def.span());
+        }
+
         // Push a placeholder so body_start is recorded before lower_items advances ops.
         self.macro_stack.push(name_cow.clone());
         self.macro_map.insert(
