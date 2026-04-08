@@ -18,7 +18,7 @@ pub mod script_engine;
 use tokio::sync::mpsc;
 
 use crate::ast::Script;
-use crate::error::KagError;
+use crate::error::{KagError, ParseDiagnostic};
 use crate::events::{HostEvent, KagEvent};
 use crate::parser::parse_script;
 
@@ -78,12 +78,18 @@ impl KagInterpreter {
     ///
     /// The source is borrowed during parsing and then converted to owned data
     /// before the async task starts.
+    ///
+    /// Any [`ParseDiagnostic`]s produced during parsing are returned alongside
+    /// the handle and join-handle so callers can inspect or log them.  A
+    /// non-empty diagnostics list does **not** mean the script is unusable —
+    /// the interpreter still receives a best-effort op stream.
     pub fn spawn_from_source(
         source: &str,
         source_name: &str,
-    ) -> Result<(Self, tokio::task::JoinHandle<()>), KagError> {
-        let script = parse_script(source, source_name)?.into_owned();
-        Ok(Self::spawn(script))
+    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<ParseDiagnostic>), KagError> {
+        let (script, diags) = parse_script(source, source_name);
+        let (handle, task) = Self::spawn(script);
+        Ok((handle, task, diags))
     }
 
     // ── Channel convenience ───────────────────────────────────────────────────
@@ -203,27 +209,37 @@ async fn interpreter_task(
                         loop {
                             match input_rx.recv().await {
                                 Some(HostEvent::ScenarioLoaded { name, source }) => {
-                                    match parse_script(&source, &name) {
-                                        Ok(new_script) => {
-                                            script = new_script.into_owned();
-                                            ctx.current_storage = name.clone();
-                                            // Resolve jump target inside the new script
-                                            let idx = target
-                                                .as_deref()
-                                                .and_then(|t| {
-                                                    let key = t.trim_start_matches('*');
-                                                    script.label_map.get(key).copied()
-                                                })
-                                                .unwrap_or(0);
-                                            ctx.jump_to(idx);
-                                        }
-                                        Err(e) => {
-                                            let _ = event_tx
-                                                .send(KagEvent::Error(e.to_string()))
-                                                .await;
-                                            return;
-                                        }
+                                    let (new_script, diags) = parse_script(&source, &name);
+                                    script = new_script;
+                                    ctx.current_storage = name.clone();
+                                    // Forward any parse-error diagnostics as warnings.
+                                    for d in diags {
+                                        let _ = event_tx
+                                            .send(KagEvent::Warning(d.message))
+                                            .await;
                                     }
+                                    // Resolve jump target inside the new script.
+                                    let idx = if let Some(ref t) = target {
+                                        let key = t.trim_start_matches('*');
+                                        match script.label_map.get(key).copied() {
+                                            Some(i) => i,
+                                            None => {
+                                                let _ = event_tx
+                                                    .send(KagEvent::Warning(format!(
+                                                        "label '{key}' not found in '{}' \
+                                                         (script.label_map has {} label(s)); \
+                                                         jumping to start",
+                                                        ctx.current_storage,
+                                                        script.label_map.len(),
+                                                    )))
+                                                    .await;
+                                                0
+                                            }
+                                        }
+                                    } else {
+                                        0
+                                    };
+                                    ctx.jump_to(idx);
                                     break;
                                 }
                                 None => return,
@@ -255,20 +271,16 @@ async fn interpreter_task(
                     loop {
                         match input_rx.recv().await {
                             Some(HostEvent::ScenarioLoaded { name, source }) => {
-                                match parse_script(&source, &name) {
-                                    Ok(new_script) => {
-                                        script = new_script.into_owned();
-                                        ctx.current_storage = name;
-                                        // ctx.pc was already set to return_pc by the
-                                        // executor — do NOT override it here.
-                                    }
-                                    Err(e) => {
-                                        let _ = event_tx
-                                            .send(KagEvent::Error(e.to_string()))
-                                            .await;
-                                        return;
-                                    }
+                                let (new_script, diags) = parse_script(&source, &name);
+                                script = new_script;
+                                ctx.current_storage = name;
+                                for d in diags {
+                                    let _ = event_tx
+                                        .send(KagEvent::Warning(d.message))
+                                        .await;
                                 }
+                                // ctx.pc was already set to return_pc by the
+                                // executor — do NOT override it here.
                                 break;
                             }
                             None => return,
@@ -341,7 +353,7 @@ mod tests {
     async fn test_simple_text_scenario() {
         with_local(|| async {
             let src = "Hello!\n@l\nWorld!\n";
-            let (mut handle, _task) =
+            let (mut handle, _task, _diags) =
                 KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
 
             let mut events = Vec::new();
@@ -383,7 +395,7 @@ mod tests {
     async fn test_end_event_emitted() {
         with_local(|| async {
             let src = "text\n";
-            let script = parse_script(src, "t.ks").unwrap().into_owned();
+            let (script, _diags) = parse_script(src, "t.ks");
             let (mut handle, _) = KagInterpreter::spawn(script);
             let events = collect_events(&mut handle, 10).await;
             assert!(
@@ -399,7 +411,7 @@ mod tests {
     async fn test_stop_unblocks_on_click() {
         with_local(|| async {
             let src = "@s\nafter stop\n";
-            let script = parse_script(src, "t.ks").unwrap().into_owned();
+            let (script, _diags) = parse_script(src, "t.ks");
             let (mut handle, _) = KagInterpreter::spawn(script);
 
             loop {
@@ -437,7 +449,7 @@ mod tests {
             let caller_src = "[call storage=sub.ks target=*fn]\nback\n";
             let sub_src = "*fn\nin sub\n[return]\n";
 
-            let (mut handle, _task) =
+            let (mut handle, _task, _diags) =
                 KagInterpreter::spawn_from_source(caller_src, "caller.ks").unwrap();
 
             let mut all_events = Vec::<KagEvent>::new();
@@ -502,7 +514,7 @@ mod tests {
     async fn test_wait_ms_unblocks_on_timer_elapsed() {
         with_local(|| async {
             let src = "@wait time=100\ndone\n";
-            let script = parse_script(src, "t.ks").unwrap().into_owned();
+            let (script, _diags) = parse_script(src, "t.ks");
             let (mut handle, _) = KagInterpreter::spawn(script);
 
             loop {

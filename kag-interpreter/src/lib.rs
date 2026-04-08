@@ -45,8 +45,8 @@
 //! ```text
 //! source .ks text
 //!     └─ lexer (logos) ─────────────────── Vec<Spanned<Token>>
-//!         └─ parser (winnow) ───────────── Script<'src>
-//!             └─ Script::into_owned() ──── Script<'static>
+//!         └─ CST parser (Rowan) ────────── Parse<cst::Root>  (lossless)
+//!             └─ lower::lower_root() ───── Script<'static>   (semantic AST)
 //!                 └─ KagInterpreter (tokio task)
 //!                         │ KagEvent channel (to host)
 //!                         │ HostEvent channel (from host)
@@ -80,5 +80,9 @@ pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 /// Rich error type with source-code attribution.
 pub use error::KagError;
 
-/// Parse a `.ks` source string into a `Script`.
+/// Parse a `.ks` source string into a `Script` together with any diagnostics.
+/// Returns `(Script<'static>, Vec<ParseDiagnostic>)`.
 pub use parser::parse_script;
+
+/// Non-fatal diagnostic emitted during parsing.
+pub use error::ParseDiagnostic;
