@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["kag-syntax", "kag-interpreter"]
+members = ["kag-syntax", "kag-interpreter", "kag-lsp"]
 
 [workspace.dependencies]
 # Error handling
@@ -21,3 +21,7 @@ serde = "1"
 
 # Syntax trees
 rowan = "0.16.1"
+
+# LSP
+tower-lsp = "0.20"
+dashmap = "6.1"

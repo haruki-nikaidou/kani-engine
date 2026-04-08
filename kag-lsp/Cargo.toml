@@ -1,0 +1,15 @@
+[package]
+name = "kag-lsp"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "kag-lsp"
+path = "src/main.rs"
+
+[dependencies]
+kag-syntax = { path = "../kag-syntax" }
+tower-lsp = { workspace = true }
+tokio = { version = "1", features = ["sync", "rt", "macros", "rt-multi-thread", "io-std"] }
+dashmap = { workspace = true }
+rowan = { workspace = true }
