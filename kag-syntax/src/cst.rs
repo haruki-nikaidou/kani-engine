@@ -192,11 +192,7 @@ impl LabelDef {
                 if t.kind() == SyntaxKind::PIPE {
                     found_pipe = true;
                     false
-                } else if found_pipe && !matches!(t.kind(), SyntaxKind::NEWLINE) {
-                    true
-                } else {
-                    false
-                }
+                } else { found_pipe && !matches!(t.kind(), SyntaxKind::NEWLINE) }
             })
             .map(|t| t.text().to_owned())
             .collect();

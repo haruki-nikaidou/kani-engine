@@ -159,8 +159,8 @@ impl LowerCtx {
                     // followed by an ISCRIPT_BLOCK / MACRO_DEF sibling.
                     // Detect that pattern here before delegating.
                     let parts: Vec<cst::TextPart> = line.parts().collect();
-                    if parts.len() == 1 {
-                        if let cst::TextPart::InlineTag(ref tag) = parts[0] {
+                    if parts.len() == 1
+                        && let cst::TextPart::InlineTag(ref tag) = parts[0] {
                             match tag.name().as_deref() {
                                 Some("iscript") => {
                                     if let Some(Item::IscriptBlock(block)) = items.get(i + 1) {
@@ -186,7 +186,6 @@ impl LowerCtx {
                                 _ => {}
                             }
                         }
-                    }
                     self.lower_text_line(line);
                 }
                 Item::CharaLine(chara) => {
@@ -377,11 +376,10 @@ impl LowerCtx {
         let name = tag
             .params()
             .find_map(|p| {
-                if p.key().as_deref() == Some("name") {
-                    if let Some(cst::ParamValue::Literal(lit)) = p.value() {
+                if p.key().as_deref() == Some("name")
+                    && let Some(cst::ParamValue::Literal(lit)) = p.value() {
                         return Some(lit.text());
                     }
-                }
                 None
             })
             .unwrap_or_default();
@@ -392,11 +390,10 @@ impl LowerCtx {
         let name = tag
             .params()
             .find_map(|p| {
-                if p.key().as_deref() == Some("name") {
-                    if let Some(cst::ParamValue::Literal(lit)) = p.value() {
+                if p.key().as_deref() == Some("name")
+                    && let Some(cst::ParamValue::Literal(lit)) = p.value() {
                         return Some(lit.text());
                     }
-                }
                 None
             })
             .unwrap_or_default();
