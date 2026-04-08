@@ -82,7 +82,7 @@ impl KagInterpreter {
         source: &str,
         source_name: &str,
     ) -> Result<(Self, tokio::task::JoinHandle<()>), KagError> {
-        let script = parse_script(source, source_name)?.into_owned();
+        let (script, _diags) = parse_script(source, source_name);
         Ok(Self::spawn(script))
     }
 
@@ -203,27 +203,24 @@ async fn interpreter_task(
                         loop {
                             match input_rx.recv().await {
                                 Some(HostEvent::ScenarioLoaded { name, source }) => {
-                                    match parse_script(&source, &name) {
-                                        Ok(new_script) => {
-                                            script = new_script.into_owned();
-                                            ctx.current_storage = name.clone();
-                                            // Resolve jump target inside the new script
-                                            let idx = target
-                                                .as_deref()
-                                                .and_then(|t| {
-                                                    let key = t.trim_start_matches('*');
-                                                    script.label_map.get(key).copied()
-                                                })
-                                                .unwrap_or(0);
-                                            ctx.jump_to(idx);
-                                        }
-                                        Err(e) => {
-                                            let _ = event_tx
-                                                .send(KagEvent::Error(e.to_string()))
-                                                .await;
-                                            return;
-                                        }
+                                    let (new_script, diags) = parse_script(&source, &name);
+                                    script = new_script;
+                                    ctx.current_storage = name.clone();
+                                    // Forward any parse-error diagnostics as warnings.
+                                    for d in diags {
+                                        let _ = event_tx
+                                            .send(KagEvent::Warning(d.message))
+                                            .await;
                                     }
+                                    // Resolve jump target inside the new script.
+                                    let idx = target
+                                        .as_deref()
+                                        .and_then(|t| {
+                                            let key = t.trim_start_matches('*');
+                                            script.label_map.get(key).copied()
+                                        })
+                                        .unwrap_or(0);
+                                    ctx.jump_to(idx);
                                     break;
                                 }
                                 None => return,
@@ -255,20 +252,16 @@ async fn interpreter_task(
                     loop {
                         match input_rx.recv().await {
                             Some(HostEvent::ScenarioLoaded { name, source }) => {
-                                match parse_script(&source, &name) {
-                                    Ok(new_script) => {
-                                        script = new_script.into_owned();
-                                        ctx.current_storage = name;
-                                        // ctx.pc was already set to return_pc by the
-                                        // executor — do NOT override it here.
-                                    }
-                                    Err(e) => {
-                                        let _ = event_tx
-                                            .send(KagEvent::Error(e.to_string()))
-                                            .await;
-                                        return;
-                                    }
+                                let (new_script, diags) = parse_script(&source, &name);
+                                script = new_script;
+                                ctx.current_storage = name;
+                                for d in diags {
+                                    let _ = event_tx
+                                        .send(KagEvent::Warning(d.message))
+                                        .await;
                                 }
+                                // ctx.pc was already set to return_pc by the
+                                // executor — do NOT override it here.
                                 break;
                             }
                             None => return,
@@ -383,7 +376,7 @@ mod tests {
     async fn test_end_event_emitted() {
         with_local(|| async {
             let src = "text\n";
-            let script = parse_script(src, "t.ks").unwrap().into_owned();
+            let (script, _diags) = parse_script(src, "t.ks");
             let (mut handle, _) = KagInterpreter::spawn(script);
             let events = collect_events(&mut handle, 10).await;
             assert!(
@@ -399,7 +392,7 @@ mod tests {
     async fn test_stop_unblocks_on_click() {
         with_local(|| async {
             let src = "@s\nafter stop\n";
-            let script = parse_script(src, "t.ks").unwrap().into_owned();
+            let (script, _diags) = parse_script(src, "t.ks");
             let (mut handle, _) = KagInterpreter::spawn(script);
 
             loop {
@@ -502,7 +495,7 @@ mod tests {
     async fn test_wait_ms_unblocks_on_timer_elapsed() {
         with_local(|| async {
             let src = "@wait time=100\ndone\n";
-            let script = parse_script(src, "t.ks").unwrap().into_owned();
+            let (script, _diags) = parse_script(src, "t.ks");
             let (mut handle, _) = KagInterpreter::spawn(script);
 
             loop {

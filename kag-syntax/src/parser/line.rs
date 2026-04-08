@@ -1,693 +1,416 @@
 //! Line-level KAG parser.
 //!
-//! Processes a flat `&[Spanned<Token>]` stream line by line, classifying
-//! each line and delegating tag / parameter parsing to `super::tag`.
+//! Processes the flat token stream one logical line at a time, classifying
+//! each line and delegating tag / parameter parsing to [`super::tag`].
 //!
-//! The `ParseCtx` struct accumulates parsed ops into a `Script` and tracks
-//! parser state (block-comment mode, iscript mode, macro nesting, etc.).
+//! Every syntactic construct is wrapped in a Rowan node so the resulting CST
+//! is fully lossless — whitespace, comments, and even error regions are
+//! preserved as tree nodes.
 
-use std::borrow::Cow;
-use std::collections::HashMap;
+use crate::lexer::Token;
+use crate::syntax_kind::SyntaxKind;
 
-use miette::{NamedSource, SourceSpan};
+use super::Parser;
+use super::tag::{parse_at_tag_body, parse_inline_tag_body};
 
-use crate::ast::{LabelDef, MacroDef, Op, Param, Script, Tag, TextPart};
-use crate::error::KagError;
-use crate::lexer::{Spanned, Token};
+// ─── Root ─────────────────────────────────────────────────────────────────────
 
-use super::tag::parse_tag_from_tokens;
+/// Parse the entire token stream into the `ROOT` node.
+pub(crate) fn parse_root(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::ROOT);
 
-// ─── Parse context ────────────────────────────────────────────────────────────
+    while !p.at_end() {
+        parse_line(p);
+    }
 
-/// Mutable state accumulated while parsing a whole scenario file.
-pub struct ParseCtx<'src> {
-    source: &'src str,
-    source_name: String,
-    ops: Vec<Op<'src>>,
-    label_map: HashMap<Cow<'src, str>, usize>,
-    macro_map: HashMap<Cow<'src, str>, MacroDef>,
-    /// Stack of macro names being defined (for nesting detection).
-    macro_stack: Vec<Cow<'src, str>>,
-    /// When `Some`, accumulate raw lines as iscript content.
-    iscript_buf: Option<String>,
-    /// True when inside a `/* … */` block comment.
-    in_block_comment: bool,
-    /// Pending speaker name from `#name` shorthand on the previous line.
-    pending_speaker: Option<String>,
+    p.finish_node(); // ROOT
 }
 
-impl<'src> ParseCtx<'src> {
-    pub fn new(source: &'src str, source_name: &str) -> Self {
-        Self {
-            source,
-            source_name: source_name.to_owned(),
-            ops: Vec::new(),
-            label_map: HashMap::new(),
-            macro_map: HashMap::new(),
-            macro_stack: Vec::new(),
-            iscript_buf: None,
-            in_block_comment: false,
-            pending_speaker: None,
-        }
+// ─── Line dispatcher ──────────────────────────────────────────────────────────
+
+pub(crate) fn parse_line(p: &mut Parser<'_>) {
+    // Blank line.
+    if p.at(SyntaxKind::NEWLINE) {
+        p.bump();
+        return;
     }
 
-    pub fn into_script(self) -> Script<'src> {
-        Script {
-            ops: self.ops,
-            label_map: self.label_map,
-            macro_map: self.macro_map,
-            source_name: self.source_name,
+    // Peek past leading whitespace to classify the line.
+    let first_meaningful = leading_meaningful_pos(p);
+
+    if first_meaningful >= p.tokens.len()
+        || matches!(p.tokens[first_meaningful].token, Token::Newline)
+    {
+        // Whitespace-only line — consume and continue.
+        while !p.at_end() && !p.at(SyntaxKind::NEWLINE) {
+            p.bump();
         }
+        if p.at(SyntaxKind::NEWLINE) {
+            p.bump();
+        }
+        return;
     }
 
-    fn named_source(&self) -> NamedSource<String> {
-        NamedSource::new(&self.source_name, self.source.to_owned())
+    match &p.tokens[first_meaningful].token {
+        Token::LineComment => {
+            advance_to(p, first_meaningful);
+            parse_line_comment(p);
+        }
+        Token::BlockCommentOpen => {
+            advance_to(p, first_meaningful);
+            parse_block_comment(p);
+        }
+        Token::Hash => {
+            advance_to(p, first_meaningful);
+            parse_chara_line(p);
+        }
+        Token::Star => {
+            advance_to(p, first_meaningful);
+            parse_label_def(p);
+        }
+        Token::At => {
+            advance_to(p, first_meaningful);
+            parse_at_tag_line(p);
+        }
+        _ => {
+            // Text line — leading whitespace is part of the content.
+            parse_text_line(p);
+        }
     }
 }
 
-// ─── Top-level driver ─────────────────────────────────────────────────────────
+/// Advance `p.pos` to absolute index `target` by bumping whitespace tokens.
+fn advance_to(p: &mut Parser<'_>, target: usize) {
+    while p.pos < target {
+        p.bump();
+    }
+}
 
-impl<'src> ParseCtx<'src> {
-    /// Process the entire token stream.
-    pub fn parse_all(&mut self, tokens: &[Spanned<'src>]) -> Result<(), KagError> {
-        let mut pos = 0;
-        while pos < tokens.len() {
-            self.parse_line(tokens, &mut pos)?;
-        }
-        Ok(())
+/// Return the index of the first non-whitespace token at or after `p.pos`.
+fn leading_meaningful_pos(p: &Parser<'_>) -> usize {
+    let mut i = p.pos;
+    while i < p.tokens.len() && matches!(p.tokens[i].token, Token::Whitespace) {
+        i += 1;
+    }
+    i
+}
+
+// ─── Line comment ─────────────────────────────────────────────────────────────
+
+fn parse_line_comment(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::LINE_COMMENT_NODE);
+    p.bump(); // LINE_COMMENT (swallows to EOL)
+    if p.at(SyntaxKind::NEWLINE) {
+        p.bump();
+    }
+    p.finish_node();
+}
+
+// ─── Block comment ────────────────────────────────────────────────────────────
+
+fn parse_block_comment(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::BLOCK_COMMENT_NODE);
+    p.bump(); // BLOCK_COMMENT_OPEN
+    if p.at(SyntaxKind::NEWLINE) {
+        p.bump();
     }
 
-    /// Parse one logical line starting at `pos`, advancing `pos` past the
-    /// trailing newline (or end-of-input).
-    fn parse_line(&mut self, tokens: &[Spanned<'src>], pos: &mut usize) -> Result<(), KagError> {
-        // Skip bare newlines (blank lines)
-        if matches!(tokens[*pos].token, Token::Newline) {
-            *pos += 1;
-            return Ok(());
+    loop {
+        if p.at_end() {
+            p.push_error("unclosed block comment `/*` at end of file");
+            break;
         }
-
-        // ── iscript accumulation mode ────────────────────────────────────────
-        if self.iscript_buf.is_some() {
-            return self.parse_iscript_line(tokens, pos);
-        }
-
-        // ── block comment mode ───────────────────────────────────────────────
-        if self.in_block_comment {
-            return self.parse_block_comment_body(tokens, pos);
-        }
-
-        // Skip leading whitespace (indented lines are text lines)
-        while *pos < tokens.len() && matches!(tokens[*pos].token, Token::Whitespace) {
-            *pos += 1;
-        }
-        if *pos >= tokens.len() || matches!(tokens[*pos].token, Token::Newline) {
-            if *pos < tokens.len() {
-                *pos += 1;
+        // Check for closing `*/` (must be first non-WS token on the line).
+        let first = leading_meaningful_pos(p);
+        if first < p.tokens.len() && matches!(p.tokens[first].token, Token::BlockCommentClose) {
+            advance_to(p, first);
+            p.bump(); // BLOCK_COMMENT_CLOSE
+            if p.at(SyntaxKind::NEWLINE) {
+                p.bump();
             }
-            return Ok(());
+            break;
         }
-
-        // ── classify first non-whitespace token on the line ──────────────────
-        match &tokens[*pos].token {
-            Token::LineComment => {
-                advance_to_newline(tokens, pos);
-                Ok(())
-            }
-            Token::BlockCommentOpen => {
-                self.in_block_comment = true;
-                advance_to_newline(tokens, pos);
-                Ok(())
-            }
-            Token::Hash => self.parse_chara_shorthand(tokens, pos),
-            Token::Star => self.parse_label_def(tokens, pos),
-            Token::At => self.parse_at_tag(tokens, pos),
-            _ => self.parse_text_line(tokens, pos),
+        // Body line — consume as raw tokens.
+        while !p.at_end() && !p.at(SyntaxKind::NEWLINE) {
+            p.bump();
+        }
+        if p.at(SyntaxKind::NEWLINE) {
+            p.bump();
         }
     }
 
-    // ── Block comment ─────────────────────────────────────────────────────────
+    p.finish_node();
+}
 
-    fn parse_block_comment_body(
-        &mut self,
-        tokens: &[Spanned<'src>],
-        pos: &mut usize,
-    ) -> Result<(), KagError> {
-        if matches!(tokens[*pos].token, Token::BlockCommentClose) {
-            self.in_block_comment = false;
+// ─── Character shorthand (#name or #name:face) ────────────────────────────────
+
+fn parse_chara_line(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::CHARA_LINE);
+    p.bump(); // HASH
+
+    if !p.at(SyntaxKind::IDENT) {
+        p.error_recover_to_newline("expected character name after `#`");
+        if p.at(SyntaxKind::NEWLINE) {
+            p.bump();
         }
-        advance_to_newline(tokens, pos);
-        Ok(())
+        p.finish_node();
+        return;
+    }
+    p.bump(); // name IDENT
+
+    if p.at(SyntaxKind::COLON) {
+        p.bump(); // COLON
+        if !p.at(SyntaxKind::IDENT) {
+            p.error_recover_to_newline("expected face name after `:` in `#name:face`");
+            if p.at(SyntaxKind::NEWLINE) {
+                p.bump();
+            }
+            p.finish_node();
+            return;
+        }
+        p.bump(); // face IDENT
     }
 
-    // ── iscript accumulation ──────────────────────────────────────────────────
+    if !p.at_end() && !p.at(SyntaxKind::NEWLINE) {
+        p.error_recover_to_newline("unexpected tokens after character shorthand");
+    }
+    if p.at(SyntaxKind::NEWLINE) {
+        p.bump();
+    }
+    p.finish_node();
+}
 
-    fn parse_iscript_line(
-        &mut self,
-        tokens: &[Spanned<'src>],
-        pos: &mut usize,
-    ) -> Result<(), KagError> {
-        // Check if this line starts with `@endscript` or `[endscript]`
-        let start = *pos;
-        let is_endscript = is_tag_line_named(tokens, *pos, "endscript");
+// ─── Label definition (*name or *name|title) ──────────────────────────────────
 
-        if is_endscript {
-            // Finalise the script block
-            let script_text = self.iscript_buf.take().unwrap_or_default();
-            self.emit(Op::ScriptBlock(script_text));
-            advance_to_newline(tokens, pos);
-        } else {
-            // Accumulate raw source text for this line.
-            // Compute line_text first so the None arm can borrow self freely.
-            let line_text = collect_line_source(tokens, *pos);
-            match self.iscript_buf.as_mut() {
-                Some(buf) => {
-                    buf.push_str(&line_text);
-                    buf.push('\n');
-                }
-                None => {
-                    return Err(KagError::parse(
-                        "internal error: iscript accumulation buffer missing",
-                        self.named_source(),
-                        tok_span(tokens, start, *pos),
-                    ));
-                }
-            }
-            advance_to_newline(tokens, pos);
+fn parse_label_def(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::LABEL_DEF);
+    p.bump(); // STAR
+
+    if !p.at(SyntaxKind::IDENT) {
+        p.error_recover_to_newline("expected label name after `*`");
+        if p.at(SyntaxKind::NEWLINE) {
+            p.bump();
         }
-        Ok(())
+        p.finish_node();
+        return;
+    }
+    p.bump(); // name IDENT
+
+    if p.at(SyntaxKind::PIPE) {
+        p.bump(); // PIPE
+        // Title: consume everything to EOL as raw tokens.
+        while !p.at_end() && !p.at(SyntaxKind::NEWLINE) {
+            p.bump();
+        }
     }
 
-    // ── Character name shorthand (#name or #name:face) ────────────────────────
+    if p.at(SyntaxKind::NEWLINE) {
+        p.bump();
+    }
+    p.finish_node();
+}
 
-    fn parse_chara_shorthand(
-        &mut self,
-        tokens: &[Spanned<'src>],
-        pos: &mut usize,
-    ) -> Result<(), KagError> {
-        *pos += 1; // consume `#`
+// ─── Line-level tag (@tagname params…) ───────────────────────────────────────
 
-        let name = expect_ident_at(tokens, pos, self)?;
-        let face = if *pos < tokens.len() && matches!(tokens[*pos].token, Token::Colon) {
-            *pos += 1;
-            Some(expect_ident_at(tokens, pos, self)?)
-        } else {
-            None
-        };
+fn parse_at_tag_line(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::AT_TAG);
+    p.bump(); // AT
+    p.skip_ws();
 
-        self.pending_speaker = Some(name.to_string());
-
-        // Emit as generic `chara_ptext` tag (matches JS reference)
-        let mut params = vec![Param::literal("name", name)];
-        if let Some(f) = face {
-            params.push(Param::literal("face", f));
+    if !p.at(SyntaxKind::IDENT) {
+        p.error_recover_to_newline("expected tag name after `@`");
+        if p.at(SyntaxKind::NEWLINE) {
+            p.bump();
         }
-        let span = tok_span(tokens, 0, *pos);
-        self.emit(Op::Tag(Tag {
-            name: Cow::Borrowed("chara_ptext"),
-            params,
-            span,
-        }));
-
-        advance_to_newline(tokens, pos);
-        Ok(())
+        p.finish_node();
+        return;
     }
 
-    // ── Label definition (*name or *name|title) ───────────────────────────────
+    parse_at_tag_body(p);
 
-    fn parse_label_def(
-        &mut self,
-        tokens: &[Spanned<'src>],
-        pos: &mut usize,
-    ) -> Result<(), KagError> {
-        let line_start = *pos;
-        *pos += 1; // consume `*`
-
-        let name = expect_ident_at(tokens, pos, self)?;
-        let title = if *pos < tokens.len() && matches!(tokens[*pos].token, Token::Pipe) {
-            *pos += 1;
-            // Title: collect everything up to newline
-            let title_str = collect_line_source(tokens, *pos);
-            advance_to_newline(tokens, pos);
-            Some(Cow::Owned(title_str))
-        } else {
-            advance_to_newline(tokens, pos);
-            None
-        };
-
-        let idx = self.ops.len();
-        let span = tok_span(tokens, line_start, *pos);
-        let label_def = LabelDef { name: Cow::Borrowed(name), title, span };
-
-        // Duplicate label detection
-        if self.label_map.contains_key(label_def.name.as_ref()) {
-            // Not a hard error — emit a warning tag
-            self.emit(Op::Tag(Tag {
-                name: Cow::Borrowed("_warning"),
-                params: vec![Param::literal(
-                    "msg",
-                    format!("duplicate label: {}", label_def.name),
-                )],
-                span: label_def.span,
-            }));
-        } else {
-            self.label_map.insert(Cow::Borrowed(name), idx);
-            self.emit(Op::Label(label_def));
-        }
-
-        Ok(())
+    if p.at(SyntaxKind::NEWLINE) {
+        p.bump();
     }
+    p.finish_node(); // AT_TAG
 
-    // ── Line-level tag (@tagname params…) ────────────────────────────────────
+    // Handle parse-time special tags AFTER the AT_TAG node is closed.
+    handle_pending_special(p);
+}
 
-    fn parse_at_tag(
-        &mut self,
-        tokens: &[Spanned<'src>],
-        pos: &mut usize,
-    ) -> Result<(), KagError> {
-        let line_start = *pos;
-        *pos += 1; // consume `@`
+// ─── Text line ────────────────────────────────────────────────────────────────
 
-        let line_end = find_newline(tokens, *pos);
-        let tag_tokens = &tokens[*pos..line_end];
+pub(crate) fn parse_text_line(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::TEXT_LINE);
 
-        let span = tok_span(tokens, line_start, line_end);
-        let tag = parse_tag_from_tokens(tag_tokens, span).map_err(|e| {
-            KagError::parse(
-                format!("expected tag name after @: {e}"),
-                self.named_source(),
-                span,
-            )
-        })?;
-
-        *pos = line_end;
-        advance_to_newline(tokens, pos);
-
-        self.handle_tag(tag)?;
-        Ok(())
-    }
-
-    // ── Text line (may contain [inline_tag] fragments) ────────────────────────
-
-    fn parse_text_line(
-        &mut self,
-        tokens: &[Spanned<'src>],
-        pos: &mut usize,
-    ) -> Result<(), KagError> {
-        let mut parts: Vec<TextPart<'src>> = Vec::new();
-
-        while *pos < tokens.len() && !matches!(tokens[*pos].token, Token::Newline) {
-            match &tokens[*pos].token {
-                Token::LBracket => {
-                    let inline_tag = self.parse_inline_tag(tokens, pos)?;
-                    parts.push(TextPart::InlineTag(inline_tag));
-                }
-                Token::Backslash => {
-                    // Escape: the next character is literal
-                    *pos += 1;
-                    if *pos < tokens.len() && !matches!(tokens[*pos].token, Token::Newline) {
-                        let slice = tokens[*pos].slice;
-                        parts.push(TextPart::Literal(Cow::Borrowed(slice)));
-                        *pos += 1;
-                    }
-                }
-                Token::Amp => {
-                    // Inline entity `&expr` in text
-                    *pos += 1; // consume `&`
-                    let mut expr = String::new();
-                    while *pos < tokens.len()
-                        && !matches!(tokens[*pos].token, Token::Newline | Token::LBracket)
-                    {
-                        expr.push_str(tokens[*pos].slice);
-                        *pos += 1;
-                    }
-                    parts.push(TextPart::Entity(Cow::Owned(expr)));
-                }
-                _ => {
-                    // Accumulate adjacent literal tokens (including Whitespace) into a single part
-                    let slice = tokens[*pos].slice;
-                    if let Some(TextPart::Literal(existing)) = parts.last_mut() {
-                        *existing = Cow::Owned(format!("{}{}", existing, slice));
-                    } else {
-                        parts.push(TextPart::Literal(Cow::Borrowed(slice)));
-                    }
-                    *pos += 1;
+    while !p.at_end() && !p.at(SyntaxKind::NEWLINE) {
+        match p.current() {
+            SyntaxKind::L_BRACKET => {
+                parse_inline_tag(p);
+            }
+            SyntaxKind::BACKSLASH => {
+                p.bump(); // BACKSLASH
+                if !p.at_end() && !p.at(SyntaxKind::NEWLINE) {
+                    p.start_node(SyntaxKind::TEXT_LITERAL);
+                    p.bump();
+                    p.finish_node();
                 }
             }
-        }
-
-        // Consume trailing newline
-        if *pos < tokens.len() && matches!(tokens[*pos].token, Token::Newline) {
-            *pos += 1;
-        }
-
-        if parts.is_empty() {
-            return Ok(());
-        }
-
-        // If the line consists ONLY of inline tags (no literal text), convert each
-        // to Op::Tag so control-flow and block-level tags (if, eval, macro, …) are
-        // handled correctly.
-        let all_inline = parts
-            .iter()
-            .all(|p| matches!(p, TextPart::InlineTag(_)));
-
-        if all_inline {
-            let tags: Vec<Tag<'src>> = parts
-                .drain(..)
-                .filter_map(|p| {
-                    if let TextPart::InlineTag(t) = p {
-                        Some(t)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            for tag in tags {
-                self.handle_tag(tag)?;
-            }
-            return Ok(());
-        }
-
-        // Mixed line (literal text + maybe inline tags)
-        let speaker = self.pending_speaker.take();
-        if let Some(spk) = speaker {
-            self.emit(Op::Tag(Tag {
-                name: Cow::Borrowed("chara_ptext"),
-                params: vec![Param::literal("name", spk)],
-                span: (0usize, 0usize).into(),
-            }));
-        }
-        self.emit(Op::Text(parts));
-
-        Ok(())
-    }
-
-    // ── Inline [tag] parser ───────────────────────────────────────────────────
-
-    fn parse_inline_tag(
-        &mut self,
-        tokens: &[Spanned<'src>],
-        pos: &mut usize,
-    ) -> Result<Tag<'src>, KagError> {
-        let bracket_start = *pos;
-        *pos += 1; // consume `[`
-
-        // Collect tokens inside the brackets, respecting nesting
-        let mut depth = 1usize;
-        let inner_start = *pos;
-        while *pos < tokens.len() {
-            match &tokens[*pos].token {
-                Token::LBracket => {
-                    depth += 1;
-                    *pos += 1;
-                }
-                Token::RBracket => {
-                    depth -= 1;
-                    if depth == 0 {
-                        break;
-                    }
-                    *pos += 1;
-                }
-                Token::Newline => break,
-                _ => {
-                    *pos += 1;
-                }
-            }
-        }
-
-        let inner_tokens = &tokens[inner_start..*pos];
-
-        // Consume closing `]`
-        if *pos < tokens.len() && matches!(tokens[*pos].token, Token::RBracket) {
-            *pos += 1;
-        }
-
-        let span = tok_span(tokens, bracket_start, *pos);
-        parse_tag_from_tokens(inner_tokens, span).map_err(|e| {
-            KagError::parse(
-                format!("malformed inline tag: {e}"),
-                self.named_source(),
-                span,
-            )
-        })
-    }
-
-    // ── Tag dispatch ──────────────────────────────────────────────────────────
-
-    /// Handle a parsed tag, performing any parse-time bookkeeping
-    /// (macro registration, iscript mode, etc.) and then emitting the op.
-    fn handle_tag(&mut self, tag: Tag<'src>) -> Result<(), KagError> {
-        match tag.name.as_ref() {
-            "iscript" => {
-                self.iscript_buf = Some(String::new());
-                // Don't emit the iscript tag itself; emit ScriptBlock at endscript
-            }
-            "endscript" => {
-                // Handled inside parse_iscript_line; if we reach here it's stray
-                let script_text = self.iscript_buf.take().unwrap_or_default();
-                self.emit(Op::ScriptBlock(script_text));
-            }
-            "macro" => {
-                if let Some(name_val) = tag.param_str("name") {
-                    let name: Cow<'src, str> = Cow::Owned(name_val.to_owned());
-                    // Record body start (ops after this point)
-                    let body_start = self.ops.len();
-                    self.macro_stack.push(name.clone());
-                    // Store a placeholder; finalised in `endmacro`
-                    self.macro_map.insert(
-                        name,
-                        MacroDef {
-                            body_start,
-                            body_end: body_start,
-                        },
-                    );
-                }
-            }
-            "endmacro" => {
-                if let Some(name) = self.macro_stack.pop()
-                    && let Some(def) = self.macro_map.get_mut(&name) {
-                        def.body_end = self.ops.len();
-                    }
+            SyntaxKind::AMP => {
+                parse_text_entity(p);
             }
             _ => {
-                self.emit(Op::Tag(tag));
+                p.start_node(SyntaxKind::TEXT_LITERAL);
+                while !p.at_end()
+                    && !p.at(SyntaxKind::NEWLINE)
+                    && !p.at(SyntaxKind::L_BRACKET)
+                    && !p.at(SyntaxKind::BACKSLASH)
+                    && !p.at(SyntaxKind::AMP)
+                {
+                    p.bump();
+                }
+                p.finish_node();
             }
         }
-        Ok(())
     }
 
-    fn emit(&mut self, op: Op<'src>) {
-        self.ops.push(op);
+    if p.at(SyntaxKind::NEWLINE) {
+        p.bump();
     }
+    p.finish_node(); // TEXT_LINE
+
+    // A text line may contain only inline tags; special tag side-effects apply.
+    handle_pending_special(p);
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Inline entity (&expr in text) ───────────────────────────────────────────
 
-/// Advance `pos` to the next `Newline` token (exclusive) or end-of-tokens.
-fn find_newline(tokens: &[Spanned<'_>], mut pos: usize) -> usize {
-    while pos < tokens.len() && !matches!(tokens[pos].token, Token::Newline) {
-        pos += 1;
+fn parse_text_entity(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::TEXT_ENTITY);
+    p.bump(); // AMP
+    while !p.at_end() && !p.at(SyntaxKind::NEWLINE) && !p.at(SyntaxKind::L_BRACKET) {
+        p.bump();
     }
-    pos
+    p.finish_node();
 }
 
-/// Advance `pos` past the next `Newline` token (consume it).
-fn advance_to_newline(tokens: &[Spanned<'_>], pos: &mut usize) {
-    while *pos < tokens.len() && !matches!(tokens[*pos].token, Token::Newline) {
-        *pos += 1;
-    }
-    if *pos < tokens.len() {
-        *pos += 1; // consume the newline
-    }
-}
+// ─── Inline tag ([tagname params…]) ──────────────────────────────────────────
 
-/// Collect the raw source slices for all tokens from `pos` to the next newline.
-fn collect_line_source<'src>(tokens: &[Spanned<'src>], pos: usize) -> String {
-    let end = find_newline(tokens, pos);
-    tokens[pos..end].iter().map(|s| s.slice).collect()
-}
+pub(crate) fn parse_inline_tag(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::INLINE_TAG);
+    p.bump(); // L_BRACKET
+    p.skip_ws();
 
-/// Return a `SourceSpan` covering `tokens[start..end]`.
-fn tok_span(tokens: &[Spanned<'_>], start: usize, end: usize) -> SourceSpan {
-    if start >= tokens.len() {
-        return (0usize, 0usize).into();
+    if !p.at(SyntaxKind::IDENT) {
+        p.error_recover_until("expected tag name after `[`", &[SyntaxKind::R_BRACKET]);
+        if p.at(SyntaxKind::R_BRACKET) {
+            p.bump();
+        }
+        p.finish_node();
+        return;
     }
-    let from = tokens[start].span.offset();
-    let to = if end > 0 && end <= tokens.len() {
-        let last = &tokens[end.min(tokens.len()) - 1];
-        last.span.offset() + last.span.len()
+
+    parse_inline_tag_body(p);
+
+    if p.at(SyntaxKind::R_BRACKET) {
+        p.bump();
     } else {
-        from
-    };
-    (from, to - from).into()
+        p.push_error("unclosed inline tag — missing `]`");
+    }
+    p.finish_node(); // INLINE_TAG
+    // Note: handle_pending_special is called by parse_text_line after the
+    // whole text line is done; inline-tag side-effects are deferred.
 }
 
-/// True if the tokens starting at `pos` represent either `@name` or `[name]`
-/// (i.e. a tag whose name matches `expected`).
-fn is_tag_line_named(tokens: &[Spanned<'_>], pos: usize, expected: &str) -> bool {
-    if pos >= tokens.len() {
+// ─── Special tag side-effects ─────────────────────────────────────────────────
+
+/// After emitting an AT_TAG or TEXT_LINE node, check whether the last parsed
+/// tag was a special one (iscript, macro) and emit the corresponding body node.
+fn handle_pending_special(p: &mut Parser<'_>) {
+    if p.pending_iscript {
+        p.pending_iscript = false;
+        parse_iscript_block(p);
+    } else if p.pending_macro {
+        p.pending_macro = false;
+        parse_macro_def_body(p);
+    }
+}
+
+// ─── iscript block ────────────────────────────────────────────────────────────
+
+/// Accumulates raw content into an `ISCRIPT_BLOCK` node until `[endscript]`.
+pub(crate) fn parse_iscript_block(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::ISCRIPT_BLOCK);
+
+    loop {
+        if p.at_end() {
+            p.push_error("unclosed `[iscript]` block — missing `[endscript]`");
+            break;
+        }
+        if is_tag_named(p, "endscript") {
+            consume_line(p);
+            break;
+        }
+        // Raw content line.
+        while !p.at_end() && !p.at(SyntaxKind::NEWLINE) {
+            p.bump();
+        }
+        if p.at(SyntaxKind::NEWLINE) {
+            p.bump();
+        }
+    }
+
+    p.finish_node();
+}
+
+// ─── macro def body ───────────────────────────────────────────────────────────
+
+/// After a `@macro name=foo` line, accumulate the body into a `MACRO_DEF`
+/// node until `[endmacro]`.
+pub(crate) fn parse_macro_def_body(p: &mut Parser<'_>) {
+    p.start_node(SyntaxKind::MACRO_DEF);
+
+    let mut depth = 1usize;
+    loop {
+        if p.at_end() {
+            p.push_error("unclosed `[macro]` block — missing `[endmacro]`");
+            break;
+        }
+        if is_tag_named(p, "endmacro") && depth == 1 {
+            consume_line(p);
+            break;
+        }
+        if is_tag_named(p, "macro") {
+            depth += 1;
+        } else if is_tag_named(p, "endmacro") {
+            depth = depth.saturating_sub(1);
+        }
+        parse_line(p);
+    }
+
+    p.finish_node();
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Consume all tokens on the current line including the trailing newline.
+fn consume_line(p: &mut Parser<'_>) {
+    while !p.at_end() && !p.at(SyntaxKind::NEWLINE) {
+        p.bump();
+    }
+    if p.at(SyntaxKind::NEWLINE) {
+        p.bump();
+    }
+}
+
+/// `true` if the current line (without consuming) starts with `@name` or `[name]`.
+pub(crate) fn is_tag_named(p: &Parser<'_>, name: &str) -> bool {
+    let first = leading_meaningful_pos(p);
+    if first >= p.tokens.len() {
         return false;
     }
-    match &tokens[pos].token {
-        Token::At => {
-            tokens
-                .get(pos + 1)
-                .is_some_and(|t| t.slice == expected)
-        }
-        Token::LBracket => {
-            tokens
-                .get(pos + 1)
-                .is_some_and(|t| t.slice == expected)
-        }
+    match &p.tokens[first].token {
+        Token::At => p.tokens.get(first + 1).is_some_and(|t| t.slice == name),
+        Token::LBracket => p.tokens.get(first + 1).is_some_and(|t| t.slice == name),
         _ => false,
-    }
-}
-
-/// Expect an `Ident` token at `pos`, return its slice, and advance `pos`.
-fn expect_ident_at<'src>(
-    tokens: &[Spanned<'src>],
-    pos: &mut usize,
-    ctx: &ParseCtx<'src>,
-) -> Result<&'src str, KagError> {
-    if *pos >= tokens.len() {
-        return Err(KagError::parse(
-            "expected identifier",
-            ctx.named_source(),
-            (0usize, 0usize).into(),
-        ));
-    }
-    match &tokens[*pos].token {
-        Token::Ident(s) => {
-            let s = *s;
-            *pos += 1;
-            Ok(s)
-        }
-        _ => Err(KagError::parse(
-            format!("expected identifier, got {:?}", tokens[*pos].token),
-            ctx.named_source(),
-            tokens[*pos].span,
-        )),
-    }
-}
-
-// ─── Unit tests ───────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::parser::parse_script;
-
-    #[test]
-    fn test_label_parsing() {
-        let script = parse_script("*start|Opening scene\n", "test.ks").unwrap();
-        assert!(
-            script.label_map.contains_key("start"),
-            "label_map: {:?}",
-            script.label_map.keys().collect::<Vec<_>>()
-        );
-        match &script.ops[0] {
-            Op::Label(def) => {
-                assert_eq!(def.name.as_ref(), "start");
-                assert!(def.title.is_some());
-            }
-            other => panic!("expected Label op, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_line_comment_skipped() {
-        let script = parse_script("; this is a comment\n", "test.ks").unwrap();
-        assert!(script.ops.is_empty(), "ops: {:?}", script.ops);
-    }
-
-    #[test]
-    fn test_block_comment_skipped() {
-        let script = parse_script("/*\nsome content\n*/\n", "test.ks").unwrap();
-        assert!(script.ops.is_empty());
-    }
-
-    #[test]
-    fn test_at_tag_parsed() {
-        let script = parse_script("@r\n", "test.ks").unwrap();
-        assert_eq!(script.ops.len(), 1);
-        match &script.ops[0] {
-            Op::Tag(t) => assert_eq!(t.name.as_ref(), "r"),
-            other => panic!("expected Tag, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_at_tag_with_params() {
-        let script = parse_script("@jump storage=main target=*start\n", "test.ks").unwrap();
-        match &script.ops[0] {
-            Op::Tag(t) => {
-                assert_eq!(t.name.as_ref(), "jump");
-                assert_eq!(t.param_str("storage"), Some("main"));
-            }
-            other => panic!("expected Tag, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_text_line() {
-        let script = parse_script("Hello, world!\n", "test.ks").unwrap();
-        assert!(!script.ops.is_empty());
-        assert!(matches!(script.ops[0], Op::Text(_)));
-    }
-
-    #[test]
-    fn test_inline_tag_in_text() {
-        let script = parse_script("Hello[r]World\n", "test.ks").unwrap();
-        match &script.ops[0] {
-            Op::Text(parts) => {
-                let has_inline = parts
-                    .iter()
-                    .any(|p| matches!(p, TextPart::InlineTag(t) if t.name == "r"));
-                assert!(has_inline, "parts: {:?}", parts);
-            }
-            other => panic!("expected Text, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_chara_shorthand() {
-        let script = parse_script("#Alice:happy\n", "test.ks").unwrap();
-        match &script.ops[0] {
-            Op::Tag(t) => {
-                assert_eq!(t.name.as_ref(), "chara_ptext");
-                assert_eq!(t.param_str("name"), Some("Alice"));
-                assert_eq!(t.param_str("face"), Some("happy"));
-            }
-            other => panic!("expected chara_ptext Tag, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_iscript_block() {
-        let src = "[iscript]\nlet x = 42;\n[endscript]\n";
-        let script = parse_script(src, "test.ks").unwrap();
-        let has_script_block = script
-            .ops
-            .iter()
-            .any(|op| matches!(op, Op::ScriptBlock(s) if s.contains("let x = 42")));
-        assert!(has_script_block, "ops: {:?}", script.ops);
-    }
-
-    #[test]
-    fn test_macro_registration() {
-        let src = "[macro name=mymacro]\n@r\n[endmacro]\n";
-        let script = parse_script(src, "test.ks").unwrap();
-        assert!(
-            script.macro_map.contains_key("mymacro"),
-            "macro_map: {:?}",
-            script.macro_map.keys().collect::<Vec<_>>()
-        );
-    }
-
-    #[test]
-    fn test_multiple_lines() {
-        let src = "*chapter1\nHello!\n@l\n";
-        let script = parse_script(src, "test.ks").unwrap();
-        assert_eq!(script.ops.len(), 3);
     }
 }

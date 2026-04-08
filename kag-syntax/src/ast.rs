@@ -47,24 +47,38 @@ pub struct Param<'src> {
     /// `None` for positional (bare) values; `Some(key)` for named ones.
     pub key: Option<Cow<'src, str>>,
     pub value: ParamValue<'src>,
+    /// Byte span of the entire parameter (key + `=` + value) in the source.
+    pub span: Span,
 }
 
 impl<'src> Param<'src> {
-    pub fn named(key: impl Into<Cow<'src, str>>, value: ParamValue<'src>) -> Self {
+    pub fn named(key: impl Into<Cow<'src, str>>, value: ParamValue<'src>, span: Span) -> Self {
         Self {
             key: Some(key.into()),
             value,
+            span,
         }
     }
 
-    pub fn literal(key: impl Into<Cow<'src, str>>, val: impl Into<Cow<'src, str>>) -> Self {
-        Self::named(key, ParamValue::Literal(val.into()))
+    pub fn literal(
+        key: impl Into<Cow<'src, str>>,
+        val: impl Into<Cow<'src, str>>,
+        span: Span,
+    ) -> Self {
+        Self::named(key, ParamValue::Literal(val.into()), span)
+    }
+
+    /// Convenience constructor for synthetic params (e.g. from `#chara` sugar)
+    /// where no meaningful source span exists.
+    pub fn synthetic(key: impl Into<Cow<'src, str>>, val: impl Into<Cow<'src, str>>) -> Self {
+        Self::named(key, ParamValue::Literal(val.into()), (0usize, 0usize).into())
     }
 
     pub fn into_owned(self) -> Param<'static> {
         Param {
             key: self.key.map(|k| Cow::Owned(k.into_owned())),
             value: self.value.into_owned(),
+            span: self.span,
         }
     }
 }
@@ -122,19 +136,40 @@ impl<'src> Tag<'src> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TextPart<'src> {
     /// A literal string segment (may contain escaped characters already resolved).
-    Literal(Cow<'src, str>),
+    Literal {
+        text: Cow<'src, str>,
+        span: Span,
+    },
     /// An inline `[tag …]` embedded within running text.
     InlineTag(Tag<'src>),
     /// A runtime-evaluated entity `&expr` appearing directly in text.
-    Entity(Cow<'src, str>),
+    Entity {
+        expr: Cow<'src, str>,
+        span: Span,
+    },
 }
 
 impl<'src> TextPart<'src> {
+    /// Byte span of this text fragment.
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Literal { span, .. } => *span,
+            Self::InlineTag(t) => t.span,
+            Self::Entity { span, .. } => *span,
+        }
+    }
+
     pub fn into_owned(self) -> TextPart<'static> {
         match self {
-            Self::Literal(s) => TextPart::Literal(Cow::Owned(s.into_owned())),
+            Self::Literal { text, span } => TextPart::Literal {
+                text: Cow::Owned(text.into_owned()),
+                span,
+            },
             Self::InlineTag(t) => TextPart::InlineTag(t.into_owned()),
-            Self::Entity(s) => TextPart::Entity(Cow::Owned(s.into_owned())),
+            Self::Entity { expr, span } => TextPart::Entity {
+                expr: Cow::Owned(expr.into_owned()),
+                span,
+            },
         }
     }
 }
@@ -178,22 +213,43 @@ pub struct MacroDef {
 #[derive(Debug, Clone)]
 pub enum Op<'src> {
     /// One or more text fragments including inline tags.
-    Text(Vec<TextPart<'src>>),
+    Text {
+        parts: Vec<TextPart<'src>>,
+        /// Byte span of the entire text line.
+        span: Span,
+    },
     /// A tag instruction (both `@tag` and `[tag]` parse to this).
     Tag(Tag<'src>),
     /// A label definition (`*name` or `*name|title`).
     Label(LabelDef<'src>),
     /// A raw script block between `[iscript]` and `[endscript]`.
-    ScriptBlock(String),
+    ScriptBlock {
+        content: String,
+        /// Byte span of the entire `[iscript]…[endscript]` block.
+        span: Span,
+    },
 }
 
 impl<'src> Op<'src> {
+    /// Byte span of this op in the original source.
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Text { span, .. } => *span,
+            Self::Tag(t) => t.span,
+            Self::Label(l) => l.span,
+            Self::ScriptBlock { span, .. } => *span,
+        }
+    }
+
     pub fn into_owned(self) -> Op<'static> {
         match self {
-            Self::Text(parts) => Op::Text(parts.into_iter().map(TextPart::into_owned).collect()),
+            Self::Text { parts, span } => Op::Text {
+                parts: parts.into_iter().map(TextPart::into_owned).collect(),
+                span,
+            },
             Self::Tag(tag) => Op::Tag(tag.into_owned()),
             Self::Label(def) => Op::Label(def.into_owned()),
-            Self::ScriptBlock(s) => Op::ScriptBlock(s),
+            Self::ScriptBlock { content, span } => Op::ScriptBlock { content, span },
         }
     }
 }

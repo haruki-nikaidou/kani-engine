@@ -74,13 +74,13 @@ pub fn execute_op<'s>(
 
     // ── Normal execution ──────────────────────────────────────────────────────
     match op {
-        Op::Text(parts) => execute_text(ctx, parts),
+        Op::Text { parts, .. } => execute_text(ctx, parts),
         Op::Tag(tag) => execute_tag(script, ctx, tag),
         Op::Label(_) => {
             ctx.advance();
             Ok(vec![])
         }
-        Op::ScriptBlock(script_text) => {
+        Op::ScriptBlock { content: script_text, .. } => {
             let script_text = script_text.clone();
             ctx.advance();
             ctx.script_engine
@@ -104,10 +104,10 @@ fn execute_text<'s>(
 
     for part in parts {
         match part {
-            TextPart::Literal(s) => {
+            TextPart::Literal { text: s, .. } => {
                 text_buf.push_str(s.as_ref());
             }
-            TextPart::Entity(expr) => {
+            TextPart::Entity { expr, .. } => {
                 let val = ctx.script_engine.eval_soft(expr.as_ref()).to_string();
                 text_buf.push_str(&val);
             }
@@ -548,9 +548,7 @@ mod tests {
     use crate::parser::parse_script;
 
     fn run_script(src: &str) -> (Vec<KagEvent>, RuntimeContext) {
-        let script = parse_script(src, "test.ks")
-            .expect("parse failed")
-            .into_owned();
+        let (script, _diags) = parse_script(src, "test.ks");
         let mut ctx = RuntimeContext::new("test.ks");
         let mut all_events = Vec::new();
 
@@ -740,9 +738,7 @@ mod tests {
         // Script: main calls sub, sub runs body and returns, main prints after.
         // @s after "after" ensures we stop before re-entering sub.
         let src = "*main\n@call target=*sub\nafter\n@s\n*sub\nbody\n@return\n";
-        let script = parse_script(src, "test.ks")
-            .expect("parse failed")
-            .into_owned();
+        let (script, _diags) = parse_script(src, "test.ks");
         let mut ctx = RuntimeContext::new("test.ks");
         let mut events = Vec::new();
 

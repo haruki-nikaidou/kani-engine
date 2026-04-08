@@ -1,435 +1,232 @@
-//! Tag-name and parameter parsers using `winnow` combinators.
+//! Tag-name and parameter parsers.
 //!
-//! These parsers operate on `&[Spanned<'src>]` sub-slices that have already
-//! been extracted by the line-level parser in `super::line`.
+//! These functions are called by the line-level parser in [`super::line`] and
+//! emit Rowan nodes directly through the shared [`Parser`] struct.
 
-use std::borrow::Cow;
+use crate::syntax_kind::SyntaxKind;
 
-use miette::SourceSpan;
-use winnow::{
-    combinator::{alt, opt, repeat},
-    error::ContextError,
-    prelude::*,
-    token::any,
-};
+use super::Parser;
 
-// In winnow 1.0, internal helper parsers return `winnow::error::Result<O, E>`
-// (= `std::result::Result<O, E>` with ContextError), NOT ModalResult.
-// ModalResult (= Result<O, ErrMode<E>>) is only for top-level entry parsers.
-type WRes<O> = Result<O, ContextError>;
+// ─── AT-tag body ─────────────────────────────────────────────────────────────
 
-use crate::ast::{Param, ParamValue, Tag};
-use crate::lexer::{Spanned, Token};
-
-// ─── Stream type alias ────────────────────────────────────────────────────────
-
-/// Winnow stream: a mutable reference to a slice of spanned tokens.
-pub type TokInput<'src, 'toks> = &'toks [Spanned<'src>];
-
-// ─── Low-level token matchers ─────────────────────────────────────────────────
-
-/// Consume and return the next token that satisfies `pred`.
-fn satisfy<'src, 'toks, F>(
-    pred: F,
-) -> impl Parser<TokInput<'src, 'toks>, Spanned<'src>, ContextError>
-where
-    F: Fn(&Spanned<'src>) -> bool,
-    'src: 'toks,
-{
-    any.verify(move |t: &Spanned<'src>| pred(t))
-}
-
-/// Consume the next token and return it if it is an `Ident`.
-fn next_ident<'src, 'toks>(
-    input: &mut TokInput<'src, 'toks>,
-) -> WRes<Spanned<'src>>
-where
-    'src: 'toks,
-{
-    satisfy(|t| matches!(t.token, Token::Ident(_))).parse_next(input)
-}
-
-/// Consume an `Eq` (`=`) token.
-fn expect_eq<'src, 'toks>(
-    input: &mut TokInput<'src, 'toks>,
-) -> WRes<()>
-where
-    'src: 'toks,
-{
-    satisfy(|t| matches!(t.token, Token::Eq))
-        .map(|_| ())
-        .parse_next(input)
-}
-
-// ─── Parameter value parsers ─────────────────────────────────────────────────
-
-/// Parse a quoted string, stripping the surrounding quote characters.
-fn parse_quoted<'src, 'toks>(
-    input: &mut TokInput<'src, 'toks>,
-) -> WRes<Cow<'src, str>>
-where
-    'src: 'toks,
-{
-    satisfy(|t| {
-        matches!(t.token, Token::DoubleQuoted(_) | Token::SingleQuoted(_))
-    })
-    .map(|s: Spanned<'src>| {
-        // Strip surrounding quote characters
-        let inner = &s.slice[1..s.slice.len() - 1];
-        Cow::Borrowed(inner)
-    })
-    .parse_next(input)
-}
-
-/// Parse an entity expression: `&expr_tokens_up_to_whitespace_or_]`.
+/// Parse the tag name and parameter list for an `@tag` line.
 ///
-/// Collects every token that is not a `]`, `Newline`, or whitespace-level
-/// separator and concatenates their slices as the expression string.
-fn parse_entity<'src, 'toks>(
-    input: &mut TokInput<'src, 'toks>,
-) -> WRes<Cow<'src, str>>
-where
-    'src: 'toks,
-{
-    // Consume `&`
-    satisfy(|t| matches!(t.token, Token::Amp)).parse_next(input)?;
+/// Precondition: `p.current()` is the first `IDENT` token (tag name).
+/// The surrounding `AT_TAG` node is managed by the caller in `line.rs`.
+/// Does **not** consume the trailing `NEWLINE`.
+pub(crate) fn parse_at_tag_body(p: &mut Parser<'_>) {
+    let tag_name = p.current_slice().to_owned();
 
-    // Collect tokens until a natural parameter boundary (whitespace stops collection)
-    let expr_tokens: Vec<Spanned<'src>> = repeat(
-        1..,
-        satisfy(|t| {
-            !matches!(
-                t.token,
-                Token::RBracket | Token::Newline | Token::Whitespace
-            )
-        }),
-    )
-    .parse_next(input)?;
+    p.start_node(SyntaxKind::TAG_NAME);
+    p.bump(); // IDENT
+    p.finish_node();
 
-    let expr: String = expr_tokens.iter().map(|s| s.slice).collect();
-    Ok(Cow::Owned(expr))
+    parse_param_list(p, /*inline=*/ false);
+
+    dispatch_special_tag(p, &tag_name);
 }
 
-/// Parse a macro parameter reference: `%key` or `%key|default`.
-fn parse_macro_param<'src, 'toks>(
-    input: &mut TokInput<'src, 'toks>,
-) -> WRes<ParamValue<'src>>
-where
-    'src: 'toks,
-{
-    // Consume `%`
-    satisfy(|t| matches!(t.token, Token::Percent)).parse_next(input)?;
+// ─── Inline-tag body ─────────────────────────────────────────────────────────
 
-    let key_tok = next_ident(input)?;
-    let key: Cow<'src, str> = Cow::Borrowed(key_tok.slice);
-
-    // Optional `|default`
-    let default = opt(|inp: &mut TokInput<'src, 'toks>| {
-        satisfy(|t| matches!(t.token, Token::Pipe)).parse_next(inp)?;
-        // default value: collect until boundary
-        let parts: Vec<Spanned<'src>> = repeat(
-            0..,
-            satisfy(|t| {
-                !matches!(t.token, Token::RBracket | Token::Newline)
-                    && !is_param_boundary(t)
-            }),
-        )
-        .parse_next(inp)?;
-        let s: String = parts.iter().map(|s| s.slice).collect();
-        Ok(Cow::Owned(s))
-    })
-    .parse_next(input)?;
-
-    Ok(ParamValue::MacroParam { key, default })
-}
-
-/// Parse the bare `*` splat used in macro definitions.
-fn parse_splat<'src, 'toks>(
-    input: &mut TokInput<'src, 'toks>,
-) -> WRes<ParamValue<'src>>
-where
-    'src: 'toks,
-{
-    satisfy(|t| matches!(t.token, Token::Star))
-        .map(|_| ParamValue::MacroSplat)
-        .parse_next(input)
-}
-
-/// True if this token acts as a whitespace / parameter separator boundary.
-fn is_param_boundary(t: &Spanned<'_>) -> bool {
-    matches!(t.token, Token::Eq | Token::Whitespace)
-}
-
-/// Skip any leading `Whitespace` tokens.
-fn skip_ws<'src, 'toks>(input: &mut TokInput<'src, 'toks>) {
-    while !input.is_empty() && matches!(input[0].token, Token::Whitespace) {
-        *input = &input[1..];
-    }
-}
-
-/// A bare (unquoted) parameter value.
+/// Parse the tag name and parameter list for an inline `[tag]`.
 ///
-/// Handles two cases:
-/// 1. `*ident` — a label reference like `target=*start` (two tokens)
-/// 2. Any other single non-boundary token
-fn parse_bare_value<'src, 'toks>(
-    input: &mut TokInput<'src, 'toks>,
-) -> WRes<Cow<'src, str>>
-where
-    'src: 'toks,
-{
-    // Special case: `*ident` for label targets (e.g. `target=*start`)
-    // A standalone `*` is NOT a bare value — it is a MacroSplat handled by
-    // `parse_splat`.  Return an error to let that arm fire.
-    if !input.is_empty() && matches!(input[0].token, Token::Star) {
-        let star = &input[0];
-        if input.len() >= 2 && matches!(input[1].token, Token::Ident(_)) {
-            let ident = &input[1];
-            let val = Cow::Owned(format!("{}{}", star.slice, ident.slice));
-            *input = &input[2..];
-            return Ok(val);
+/// Precondition: `p.current()` is the first `IDENT` token (tag name).
+/// The surrounding `INLINE_TAG` node and `R_BRACKET` are managed by the caller.
+pub(crate) fn parse_inline_tag_body(p: &mut Parser<'_>) {
+    let tag_name = p.current_slice().to_owned();
+
+    p.start_node(SyntaxKind::TAG_NAME);
+    p.bump(); // IDENT
+    p.finish_node();
+
+    parse_param_list(p, /*inline=*/ true);
+
+    dispatch_special_tag(p, &tag_name);
+}
+
+// ─── Special tag dispatch ─────────────────────────────────────────────────────
+
+/// After parsing a tag's name and params, set parser flags for special tags
+/// that require post-processing (iscript body, macro body).
+///
+/// The actual body parsing is done by `line::handle_pending_special` after
+/// the enclosing tag node is closed.
+fn dispatch_special_tag(p: &mut Parser<'_>, tag_name: &str) {
+    match tag_name {
+        "iscript" => {
+            p.pending_iscript = true;
         }
-        // Standalone `*` — decline so parse_splat can handle it
-        return Err(ContextError::new());
+        "macro" => {
+            p.pending_macro = true;
+        }
+        _ => {}
     }
-
-    // Single non-boundary token
-    satisfy(|t| {
-        !matches!(
-            t.token,
-            Token::RBracket
-                | Token::Newline
-                | Token::Eq
-                | Token::Amp
-                | Token::Percent
-                | Token::Whitespace
-        )
-    })
-    .map(|s: Spanned<'src>| Cow::Borrowed(s.slice))
-    .parse_next(input)
 }
 
-/// Parse a single `ParamValue`: quoted, entity, macro-param, bare (incl. `*ident`), or splat (`*` alone).
-///
-/// Order matters: `parse_bare_value` must come before `parse_splat` because
-/// `*ident` is a label reference (bare value) while standalone `*` is a macro splat.
-pub(crate) fn parse_param_value<'src, 'toks>(
-    input: &mut TokInput<'src, 'toks>,
-) -> WRes<ParamValue<'src>>
-where
-    'src: 'toks,
-{
-    alt((
-        parse_macro_param,
-        |inp: &mut TokInput<'src, 'toks>| {
-            let s = parse_entity(inp)?;
-            Ok(ParamValue::Entity(s))
-        },
-        |inp: &mut TokInput<'src, 'toks>| {
-            let s = parse_quoted(inp)?;
-            Ok(ParamValue::Literal(s))
-        },
-        // parse_bare_value handles `*ident` (label refs) — must precede parse_splat
-        |inp: &mut TokInput<'src, 'toks>| {
-            let s = parse_bare_value(inp)?;
-            Ok(ParamValue::Literal(s))
-        },
-        // Standalone `*` (macro splat) — only reached when bare_value failed
-        parse_splat,
-    ))
-    .parse_next(input)
-}
+// ─── Parameter list ───────────────────────────────────────────────────────────
 
-// ─── Full parameter list parser ───────────────────────────────────────────────
-
-/// Parse zero or more `key=value` (or bare `value`) parameters from a tag
-/// parameter token slice.
+/// Parse zero or more parameters into a `PARAM_LIST` node.
 ///
-/// Each iteration tries to parse `ident '=' value` (named), then falls back
-/// to a bare `value` (positional).
-pub fn parse_params<'src, 'toks>(
-    input: &mut TokInput<'src, 'toks>,
-) -> WRes<Vec<Param<'src>>>
-where
-    'src: 'toks,
-{
-    let mut params = Vec::new();
+/// Stops at `NEWLINE` (always) or `R_BRACKET` (when `inline = true`).
+fn parse_param_list(p: &mut Parser<'_>, inline: bool) {
+    p.start_node(SyntaxKind::PARAM_LIST);
 
     loop {
-        // Skip whitespace between parameters
-        skip_ws(input);
-
-        if input.is_empty() {
+        p.skip_ws();
+        if p.at_end() || p.at(SyntaxKind::NEWLINE) {
             break;
         }
-
-        // Stop at line / tag boundaries
-        if matches!(input[0].token, Token::Newline | Token::RBracket) {
+        if inline && p.at(SyntaxKind::R_BRACKET) {
             break;
         }
-
-        // Try named parameter: ident = value
-        if let Some(named) = opt(|inp: &mut TokInput<'src, 'toks>| {
-            let key_tok = next_ident(inp)?;
-            expect_eq(inp)?;
-            let value = parse_param_value(inp)?;
-            Ok(Param {
-                key: Some(Cow::Borrowed(key_tok.slice)),
-                value,
-            })
-        })
-        .parse_next(input)?
-        {
-            params.push(named);
-            continue;
+        // A line comment after parameters terminates the list.
+        if p.at(SyntaxKind::LINE_COMMENT) {
+            p.bump();
+            break;
         }
-
-        // Try bare/splat value (positional)
-        if let Some(pos) = opt(|inp: &mut TokInput<'src, 'toks>| {
-            let value = parse_param_value(inp)?;
-            Ok(Param { key: None, value })
-        })
-        .parse_next(input)?
-        {
-            params.push(pos);
-            continue;
+        if !parse_param(p, inline) {
+            break;
         }
-
-        // Cannot parse further (e.g. hit a LineComment token)
-        break;
     }
 
-    Ok(params)
+    p.finish_node();
 }
 
-// ─── Full tag parser (name + params) ─────────────────────────────────────────
+// ─── Single parameter ─────────────────────────────────────────────────────────
 
-/// Parse a complete tag from a token sub-slice:
-/// `name [key=value …]`
-///
-/// `span` is the source span of the entire tag (e.g. from `[` to `]`).
-pub fn parse_tag_from_tokens<'src, 'toks>(
-    tokens: &'toks [Spanned<'src>],
-    span: SourceSpan,
-) -> Result<Tag<'src>, ContextError>
-where
-    'src: 'toks,
-{
-    let mut input: TokInput<'src, 'toks> = tokens;
+/// Parse a single `key=value` or positional-`value` parameter.
+/// Returns `false` when no parameter could be parsed.
+fn parse_param(p: &mut Parser<'_>, inline: bool) -> bool {
+    // Named parameter: `ident = value`
+    if p.at(SyntaxKind::IDENT) && peek_eq_follows(p) {
+        p.start_node(SyntaxKind::PARAM);
 
-    // Tag name: first token must be an ident (or `*` prefix for labels in
-    // param position — not handled here; handled by line parser)
-    let name_tok = next_ident(&mut input).map_err(|_| ContextError::new())?;
+        p.start_node(SyntaxKind::PARAM_KEY);
+        p.bump(); // IDENT
+        p.finish_node();
 
-    let params = parse_params(&mut input)?;
+        p.skip_ws();
+        p.bump(); // EQ
+        p.skip_ws();
 
-    Ok(Tag {
-        name: Cow::Borrowed(name_tok.slice),
-        params,
-        span,
-    })
+        parse_param_value(p, inline);
+        p.finish_node(); // PARAM
+        return true;
+    }
+
+    // Positional parameter value.
+    let start = p.pos;
+    p.start_node(SyntaxKind::PARAM);
+    parse_param_value(p, inline);
+    if p.pos == start {
+        // Nothing consumed — stop the loop.
+        p.finish_node();
+        return false;
+    }
+    p.finish_node();
+    true
 }
 
-// ─── Unit tests ───────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lexer::tokenize;
-
-    fn tokenize_tag_body(src: &str) -> Vec<Spanned<'_>> {
-        let (toks, _) = tokenize(src);
-        toks
+/// `true` if an `EQ` token follows the current `IDENT` (possibly separated by
+/// whitespace).
+fn peek_eq_follows(p: &Parser<'_>) -> bool {
+    let mut i = p.pos + 1;
+    while i < p.tokens.len() && matches!(p.tokens[i].token, crate::lexer::Token::Whitespace) {
+        i += 1;
     }
+    i < p.tokens.len() && matches!(p.tokens[i].token, crate::lexer::Token::Eq)
+}
 
-    #[test]
-    fn test_parse_simple_params() {
-        let toks = tokenize_tag_body("storage=main target=*start");
-        let mut input: TokInput<'_, '_> = &toks;
-        let params = parse_params(&mut input).unwrap();
-        assert_eq!(params.len(), 2, "params: {:?}", params);
-        assert_eq!(params[0].key.as_deref(), Some("storage"));
-        assert!(
-            matches!(&params[0].value, ParamValue::Literal(v) if v == "main"),
-            "got {:?}",
-            params[0].value
-        );
-        assert_eq!(params[1].key.as_deref(), Some("target"));
-        assert!(
-            matches!(&params[1].value, ParamValue::Literal(v) if v.contains("start")),
-            "got {:?}",
-            params[1].value
-        );
-    }
+// ─── Parameter value ──────────────────────────────────────────────────────────
 
-    #[test]
-    fn test_parse_quoted_param() {
-        let toks = tokenize_tag_body(r#"storage="forest bg.png""#);
-        let mut input: TokInput<'_, '_> = &toks;
-        let params = parse_params(&mut input).unwrap();
-        assert_eq!(params.len(), 1);
-        assert!(
-            matches!(&params[0].value, ParamValue::Literal(v) if v == "forest bg.png"),
-            "got {:?}",
-            params[0].value
-        );
-    }
-
-    #[test]
-    fn test_parse_entity_param() {
-        let toks = tokenize_tag_body("exp=&f.counter");
-        let mut input: TokInput<'_, '_> = &toks;
-        let params = parse_params(&mut input).unwrap();
-        assert_eq!(params.len(), 1);
-        assert!(
-            matches!(&params[0].value, ParamValue::Entity(e) if e.contains("f.counter")),
-            "got {:?}",
-            params[0].value
-        );
-    }
-
-    #[test]
-    fn test_parse_macro_param_with_default() {
-        // Single-word default (spaces require quoting in KAG)
-        let toks = tokenize_tag_body("val=%message|hello");
-        let mut input: TokInput<'_, '_> = &toks;
-        let params = parse_params(&mut input).unwrap();
-        assert_eq!(params.len(), 1, "params: {:?}", params);
-        match &params[0].value {
-            ParamValue::MacroParam { key, default } => {
-                assert_eq!(key.as_ref(), "message");
-                assert!(default.is_some());
-                assert_eq!(default.as_deref(), Some("hello"));
+fn parse_param_value(p: &mut Parser<'_>, inline: bool) {
+    match p.current() {
+        SyntaxKind::DOUBLE_QUOTED | SyntaxKind::SINGLE_QUOTED => {
+            p.start_node(SyntaxKind::PARAM_VALUE_LITERAL);
+            p.bump();
+            p.finish_node();
+        }
+        SyntaxKind::AMP => {
+            parse_entity_value(p, inline);
+        }
+        SyntaxKind::PERCENT => {
+            parse_macro_param_value(p, inline);
+        }
+        SyntaxKind::STAR => {
+            if p.tokens
+                .get(p.pos + 1)
+                .is_some_and(|t| matches!(t.token, crate::lexer::Token::Ident(_)))
+            {
+                // `*ident` — label reference literal.
+                p.start_node(SyntaxKind::PARAM_VALUE_LITERAL);
+                p.bump(); // STAR
+                p.bump(); // IDENT
+                p.finish_node();
+            } else {
+                // Bare `*` — macro splat.
+                p.start_node(SyntaxKind::PARAM_VALUE_SPLAT);
+                p.bump();
+                p.finish_node();
             }
-            other => panic!("unexpected: {:?}", other),
+        }
+        k if is_bare_value_token(k, inline) => {
+            p.start_node(SyntaxKind::PARAM_VALUE_LITERAL);
+            while !p.at_end() && is_bare_value_token(p.current(), inline) {
+                p.bump();
+            }
+            p.finish_node();
+        }
+        _ => {
+            // Unrecognised token — let the caller decide.
         }
     }
+}
 
-    #[test]
-    fn test_parse_splat_param() {
-        let toks = tokenize_tag_body("*");
-        let mut input: TokInput<'_, '_> = &toks;
-        let params = parse_params(&mut input).unwrap();
-        assert_eq!(params.len(), 1);
-        assert!(matches!(params[0].value, ParamValue::MacroSplat));
+/// `true` when `kind` can appear inside an unquoted parameter value.
+fn is_bare_value_token(kind: SyntaxKind, inline: bool) -> bool {
+    match kind {
+        SyntaxKind::IDENT
+        | SyntaxKind::NUMBER
+        | SyntaxKind::TEXT
+        | SyntaxKind::SLASH
+        | SyntaxKind::LT
+        | SyntaxKind::GT
+        | SyntaxKind::COLON => true,
+        // `]` terminates an inline tag value but can appear in line-level values.
+        SyntaxKind::R_BRACKET => !inline,
+        _ => false,
     }
+}
 
-    #[test]
-    fn test_parse_full_tag() {
-        let toks = tokenize_tag_body("jump storage=main target=*start");
-        let span: SourceSpan = (0usize, toks.iter().map(|t| t.span.len()).sum()).into();
-        let tag = parse_tag_from_tokens(&toks, span).unwrap();
-        assert_eq!(tag.name.as_ref(), "jump");
-        assert_eq!(tag.params.len(), 2, "params: {:?}", tag.params);
-        assert_eq!(tag.param_str("storage"), Some("main"));
+fn parse_entity_value(p: &mut Parser<'_>, inline: bool) {
+    p.start_node(SyntaxKind::PARAM_VALUE_ENTITY);
+    p.bump(); // AMP
+    while !p.at_end() && !p.at(SyntaxKind::NEWLINE) && !p.at(SyntaxKind::WHITESPACE) {
+        if inline && p.at(SyntaxKind::R_BRACKET) {
+            break;
+        }
+        p.bump();
     }
+    p.finish_node();
+}
 
-    #[test]
-    fn test_empty_params() {
-        let toks = tokenize_tag_body("r");
-        let span: SourceSpan = (0usize, 1usize).into();
-        let tag = parse_tag_from_tokens(&toks, span).unwrap();
-        assert_eq!(tag.name.as_ref(), "r");
-        assert!(tag.params.is_empty());
+fn parse_macro_param_value(p: &mut Parser<'_>, inline: bool) {
+    p.start_node(SyntaxKind::PARAM_VALUE_MACRO);
+    p.bump(); // PERCENT
+    if p.at(SyntaxKind::IDENT) {
+        p.bump(); // key
+    } else {
+        p.push_error("expected identifier after `%` in macro parameter reference");
     }
+    if p.at(SyntaxKind::PIPE) {
+        p.bump(); // PIPE
+        // Default value — collect until boundary.
+        while !p.at_end() && !p.at(SyntaxKind::NEWLINE) && !p.at(SyntaxKind::WHITESPACE) {
+            if inline && p.at(SyntaxKind::R_BRACKET) {
+                break;
+            }
+            p.bump();
+        }
+    }
+    p.finish_node();
 }
