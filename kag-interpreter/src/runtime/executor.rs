@@ -756,7 +756,6 @@ mod tests {
                 KagEvent::End => "end".to_string(),
                 KagEvent::Warning(w) => format!("warn:{}", w),
                 KagEvent::Error(e) => format!("err:{}", e),
-                KagEvent::VariableChanged { .. } => "var_changed".to_string(),
                 KagEvent::Return { storage } => format!("return:{}", storage),
                 KagEvent::Trace(s) => format!("trace:{}", s),
                 KagEvent::PushBacklog { text, join } => {

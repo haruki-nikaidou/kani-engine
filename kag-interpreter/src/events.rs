@@ -73,15 +73,6 @@ pub enum KagEvent {
     /// `HostEvent::ChoiceSelected(index)`.
     BeginChoices(Vec<ChoiceOption>),
 
-    // ── Variable mutations ───────────────────────────────────────────────────
-    /// Notifies the host that a variable was changed by the script.
-    VariableChanged {
-        scope: VarScope,
-        key: String,
-        /// JSON-compatible value serialised as a string for simplicity.
-        value: String,
-    },
-
     // ── Embedded expression output ───────────────────────────────────────────
     /// The result of an `[emb exp=…]` tag — display this string inline.
     EmbedText(String),
