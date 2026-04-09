@@ -49,7 +49,6 @@ pub struct IfFrame {
 #[derive(Debug)]
 pub struct RuntimeContext {
     // ── Program counter ───────────────────────────────────────────────────────
-
     /// Index into `Script::ops` of the *next* op to execute.
     pub pc: usize,
 
@@ -57,7 +56,6 @@ pub struct RuntimeContext {
     pub current_storage: String,
 
     // ── Stacks ────────────────────────────────────────────────────────────────
-
     /// `[call]` / `[return]` stack.
     pub call_stack: Vec<CallFrame>,
 
@@ -68,12 +66,10 @@ pub struct RuntimeContext {
     pub macro_stack: Vec<MacroFrame>,
 
     // ── Scripting engine ──────────────────────────────────────────────────────
-
     /// Rhai engine with persistent variable scope (`f`, `sf`, `tf`, `mp`).
     pub script_engine: ScriptEngine,
 
     // ── Narrative state ───────────────────────────────────────────────────────
-
     /// Speaker name set by the most recent `#name` shorthand (reset after the
     /// next text op is emitted).
     pub current_speaker: Option<String>,
@@ -181,12 +177,7 @@ impl RuntimeContext {
     // ── Macro stack ───────────────────────────────────────────────────────────
 
     /// Enter a macro invocation, saving the current `mp` and setting the new one.
-    pub fn push_macro(
-        &mut self,
-        macro_name: impl Into<String>,
-        return_pc: usize,
-        new_mp: Map,
-    ) {
+    pub fn push_macro(&mut self, macro_name: impl Into<String>, return_pc: usize, new_mp: Map) {
         let saved_mp = self.script_engine.mp();
         self.script_engine.set_mp(new_mp);
         self.macro_stack.push(MacroFrame {

@@ -42,7 +42,11 @@ impl Index {
             index_item(&item, &mut labels, &mut macros, &mut tag_refs);
         }
 
-        Self { labels, macros, tag_refs }
+        Self {
+            labels,
+            macros,
+            tag_refs,
+        }
     }
 }
 
@@ -57,7 +61,9 @@ fn index_item(
     match item {
         Item::LabelDef(label) => {
             if let Some(name) = label.name() {
-                labels.entry(name).or_insert_with(|| label.syntax().text_range());
+                labels
+                    .entry(name)
+                    .or_insert_with(|| label.syntax().text_range());
             }
         }
         Item::AtTag(tag) => {
@@ -68,7 +74,9 @@ fn index_item(
             if tag.name().as_deref() == Some("macro")
                 && let Some(macro_name) = tag_param_value(tag.params(), "name")
             {
-                macros.entry(macro_name).or_insert_with(|| tag.syntax().text_range());
+                macros
+                    .entry(macro_name)
+                    .or_insert_with(|| tag.syntax().text_range());
             }
         }
         Item::InlineTag(tag) => {
@@ -77,7 +85,9 @@ fn index_item(
             if tag.name().as_deref() == Some("macro")
                 && let Some(macro_name) = tag_param_value(tag.params(), "name")
             {
-                macros.entry(macro_name).or_insert_with(|| tag.syntax().text_range());
+                macros
+                    .entry(macro_name)
+                    .or_insert_with(|| tag.syntax().text_range());
             }
         }
         Item::MacroDef(def) => {
@@ -106,10 +116,7 @@ fn index_tag_name(name_node: Option<&cst::TagName>, tag_refs: &mut Vec<(String, 
 }
 
 /// Extract the value of a named parameter from a tag's params iterator.
-fn tag_param_value(
-    mut params: impl Iterator<Item = cst::Param>,
-    key: &str,
-) -> Option<String> {
+fn tag_param_value(mut params: impl Iterator<Item = cst::Param>, key: &str) -> Option<String> {
     params.find_map(|p| {
         if p.key().as_deref() == Some(key)
             && let Some(cst::ParamValue::Literal(lit)) = p.value()

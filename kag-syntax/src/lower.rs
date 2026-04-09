@@ -15,13 +15,17 @@ use crate::error::ParseDiagnostic;
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
-pub fn lower_root(
-    root: cst::Root,
-    source_name: &str,
-) -> (Script<'static>, Vec<ParseDiagnostic>) {
+pub fn lower_root(root: cst::Root, source_name: &str) -> (Script<'static>, Vec<ParseDiagnostic>) {
     let mut ctx = LowerCtx::new(source_name);
     ctx.lower_items(root.items());
-    let LowerCtx { ops, label_map, macro_map, source_name: sn, errors, .. } = ctx;
+    let LowerCtx {
+        ops,
+        label_map,
+        macro_map,
+        source_name: sn,
+        errors,
+        ..
+    } = ctx;
     let script = Script {
         ops,
         label_map,
@@ -106,7 +110,9 @@ impl LowerCtx {
                             // Should not appear outside their respective blocks.
                         }
                         _ => {
-                            if let Some(ast_tag) = self.lower_tag_node(tag.name(), tag.params(), tag.span()) {
+                            if let Some(ast_tag) =
+                                self.lower_tag_node(tag.name(), tag.params(), tag.span())
+                            {
                                 self.handle_tag(ast_tag);
                             }
                         }
@@ -131,11 +137,8 @@ impl LowerCtx {
                             if let Some(Item::MacroDef(def)) = items.get(i + 1) {
                                 // Treat as if the inline tag were an @macro.
                                 // We need an AtTag-like accessor; reuse the InlineTag data.
-                                let ast_tag = self.lower_tag_node(
-                                    tag.name(),
-                                    tag.params(),
-                                    tag.span(),
-                                );
+                                let ast_tag =
+                                    self.lower_tag_node(tag.name(), tag.params(), tag.span());
                                 let _ = ast_tag; // macro tags don't emit an op
                                 self.lower_macro_def_from_inline(tag, def);
                                 i += 2;
@@ -144,7 +147,9 @@ impl LowerCtx {
                         }
                         "endmacro" | "endscript" => {}
                         _ => {
-                            if let Some(ast_tag) = self.lower_tag_node(tag.name(), tag.params(), tag.span()) {
+                            if let Some(ast_tag) =
+                                self.lower_tag_node(tag.name(), tag.params(), tag.span())
+                            {
                                 self.handle_tag(ast_tag);
                             }
                         }
@@ -160,32 +165,33 @@ impl LowerCtx {
                     // Detect that pattern here before delegating.
                     let parts: Vec<cst::TextPart> = line.parts().collect();
                     if parts.len() == 1
-                        && let cst::TextPart::InlineTag(ref tag) = parts[0] {
-                            match tag.name().as_deref() {
-                                Some("iscript") => {
-                                    if let Some(Item::IscriptBlock(block)) = items.get(i + 1) {
-                                        self.lower_iscript_block(block, tag.span());
-                                        i += 2;
-                                        continue;
-                                    } else {
-                                        self.emit(Op::ScriptBlock {
-                                            content: String::new(),
-                                            span: tag.span(),
-                                        });
-                                        i += 1;
-                                        continue;
-                                    }
+                        && let cst::TextPart::InlineTag(ref tag) = parts[0]
+                    {
+                        match tag.name().as_deref() {
+                            Some("iscript") => {
+                                if let Some(Item::IscriptBlock(block)) = items.get(i + 1) {
+                                    self.lower_iscript_block(block, tag.span());
+                                    i += 2;
+                                    continue;
+                                } else {
+                                    self.emit(Op::ScriptBlock {
+                                        content: String::new(),
+                                        span: tag.span(),
+                                    });
+                                    i += 1;
+                                    continue;
                                 }
-                                Some("macro") => {
-                                    if let Some(Item::MacroDef(def)) = items.get(i + 1) {
-                                        self.lower_macro_def_from_inline(tag, def);
-                                        i += 2;
-                                        continue;
-                                    }
-                                }
-                                _ => {}
                             }
+                            Some("macro") => {
+                                if let Some(Item::MacroDef(def)) = items.get(i + 1) {
+                                    self.lower_macro_def_from_inline(tag, def);
+                                    i += 2;
+                                    continue;
+                                }
+                            }
+                            _ => {}
                         }
+                    }
                     self.lower_text_line(line);
                 }
                 Item::CharaLine(chara) => {
@@ -291,7 +297,9 @@ impl LowerCtx {
 
         // If the line consists only of inline tags (no literal text), convert
         // each to `Op::Tag` so control-flow tags work correctly.
-        let all_inline = parts.iter().all(|p| matches!(p, cst::TextPart::InlineTag(_)));
+        let all_inline = parts
+            .iter()
+            .all(|p| matches!(p, cst::TextPart::InlineTag(_)));
         if all_inline {
             for part in parts {
                 if let cst::TextPart::InlineTag(tag) = part {
@@ -299,7 +307,9 @@ impl LowerCtx {
                     match name.as_str() {
                         "endmacro" | "endscript" => {}
                         _ => {
-                            if let Some(ast_tag) = self.lower_tag_node(Some(name), tag.params(), tag.span()) {
+                            if let Some(ast_tag) =
+                                self.lower_tag_node(Some(name), tag.params(), tag.span())
+                            {
                                 self.handle_tag(ast_tag);
                             }
                         }
@@ -326,7 +336,8 @@ impl LowerCtx {
                     });
                 }
                 cst::TextPart::InlineTag(tag) => {
-                    if let Some(ast_tag) = self.lower_tag_node(tag.name(), tag.params(), tag.span()) {
+                    if let Some(ast_tag) = self.lower_tag_node(tag.name(), tag.params(), tag.span())
+                    {
                         ast_parts.push(TextPart::InlineTag(ast_tag));
                     }
                 }
@@ -334,7 +345,10 @@ impl LowerCtx {
         }
 
         if !ast_parts.is_empty() {
-            self.emit(Op::Text { parts: ast_parts, span });
+            self.emit(Op::Text {
+                parts: ast_parts,
+                span,
+            });
         }
     }
 }
@@ -377,9 +391,10 @@ impl LowerCtx {
             .params()
             .find_map(|p| {
                 if p.key().as_deref() == Some("name")
-                    && let Some(cst::ParamValue::Literal(lit)) = p.value() {
-                        return Some(lit.text());
-                    }
+                    && let Some(cst::ParamValue::Literal(lit)) = p.value()
+                {
+                    return Some(lit.text());
+                }
                 None
             })
             .unwrap_or_default();
@@ -391,9 +406,10 @@ impl LowerCtx {
             .params()
             .find_map(|p| {
                 if p.key().as_deref() == Some("name")
-                    && let Some(cst::ParamValue::Literal(lit)) = p.value() {
-                        return Some(lit.text());
-                    }
+                    && let Some(cst::ParamValue::Literal(lit)) = p.value()
+                {
+                    return Some(lit.text());
+                }
                 None
             })
             .unwrap_or_default();

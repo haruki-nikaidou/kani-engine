@@ -71,7 +71,11 @@ impl<'src> Param<'src> {
     /// Convenience constructor for synthetic params (e.g. from `#chara` sugar)
     /// where no meaningful source span exists.
     pub fn synthetic(key: impl Into<Cow<'src, str>>, val: impl Into<Cow<'src, str>>) -> Self {
-        Self::named(key, ParamValue::Literal(val.into()), (0usize, 0usize).into())
+        Self::named(
+            key,
+            ParamValue::Literal(val.into()),
+            (0usize, 0usize).into(),
+        )
     }
 
     pub fn into_owned(self) -> Param<'static> {
@@ -136,17 +140,11 @@ impl<'src> Tag<'src> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TextPart<'src> {
     /// A literal string segment (may contain escaped characters already resolved).
-    Literal {
-        text: Cow<'src, str>,
-        span: Span,
-    },
+    Literal { text: Cow<'src, str>, span: Span },
     /// An inline `[tag …]` embedded within running text.
     InlineTag(Tag<'src>),
     /// A runtime-evaluated entity `&expr` appearing directly in text.
-    Entity {
-        expr: Cow<'src, str>,
-        span: Span,
-    },
+    Entity { expr: Cow<'src, str>, span: Span },
 }
 
 impl<'src> TextPart<'src> {

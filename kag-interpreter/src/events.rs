@@ -22,7 +22,6 @@ pub enum VarScope {
 #[derive(Debug, Clone)]
 pub enum KagEvent {
     // ── Text output ──────────────────────────────────────────────────────────
-
     /// Display a chunk of text in the current message window.
     /// `speaker` is set when a preceding `#name` shorthand was encountered.
     DisplayText {
@@ -37,7 +36,6 @@ pub enum KagEvent {
     ClearMessage,
 
     // ── Input waits ──────────────────────────────────────────────────────────
-
     /// Pause until the player clicks/taps.
     /// `clear_after = false` → `[l]` (keep text), `true` → `[p]` (clear on advance).
     WaitForClick { clear_after: bool },
@@ -50,7 +48,6 @@ pub enum KagEvent {
     Stop,
 
     // ── Navigation ───────────────────────────────────────────────────────────
-
     /// Jump to a label (and optionally a different scenario file).
     /// Both fields `None` is invalid but handled gracefully.
     Jump {
@@ -61,18 +58,14 @@ pub enum KagEvent {
     /// Return from a `[call]` that crossed into a different scenario file.
     /// The host must respond with `HostEvent::ScenarioLoaded` containing the
     /// caller's file. The interpreter will resume at the saved return PC.
-    Return {
-        storage: String,
-    },
+    Return { storage: String },
 
     // ── Choices ──────────────────────────────────────────────────────────────
-
     /// Present a set of choices to the player.  The host responds with
     /// `HostEvent::ChoiceSelected(index)`.
     BeginChoices(Vec<ChoiceOption>),
 
     // ── Variable mutations ───────────────────────────────────────────────────
-
     /// Notifies the host that a variable was changed by the script.
     VariableChanged {
         scope: VarScope,
@@ -82,12 +75,10 @@ pub enum KagEvent {
     },
 
     // ── Embedded expression output ───────────────────────────────────────────
-
     /// The result of an `[emb exp=…]` tag — display this string inline.
     EmbedText(String),
 
     // ── Passthrough for non-core tags ────────────────────────────────────────
-
     /// Any tag the interpreter does not handle internally is forwarded here.
     /// The host can use this for images, audio, transitions, etc.
     Tag {
@@ -96,7 +87,6 @@ pub enum KagEvent {
     },
 
     // ── Interpreter lifecycle ────────────────────────────────────────────────
-
     /// The scenario has reached its end naturally.
     End,
 
@@ -124,10 +114,7 @@ pub enum HostEvent {
     /// The host has loaded a scenario file and provides its raw text.
     /// Used when the interpreter asks for a `[jump storage=…]`,
     /// `[call storage=…]`, or `[return]` that targets a different file.
-    ScenarioLoaded {
-        name: String,
-        source: String,
-    },
+    ScenarioLoaded { name: String, source: String },
 
     /// Explicit signal to resume from a `Stop` state.
     Resume,

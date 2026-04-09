@@ -163,9 +163,7 @@ async fn interpreter_task(
 
                 // ── Click waits ────────────────────────────────────────────
                 KagEvent::WaitForClick { clear_after } => {
-                    let _ = event_tx
-                        .send(KagEvent::WaitForClick { clear_after })
-                        .await;
+                    let _ = event_tx.send(KagEvent::WaitForClick { clear_after }).await;
                     loop {
                         match input_rx.recv().await {
                             Some(HostEvent::Clicked) => break,
@@ -191,7 +189,10 @@ async fn interpreter_task(
                 }
 
                 // ── Jump / Call: may require scenario load ─────────────────
-                KagEvent::Jump { storage: new_storage, target } => {
+                KagEvent::Jump {
+                    storage: new_storage,
+                    target,
+                } => {
                     let needs_load = new_storage
                         .as_deref()
                         .map(|s| s != ctx.current_storage)
@@ -214,9 +215,7 @@ async fn interpreter_task(
                                     ctx.current_storage = name.clone();
                                     // Forward any parse-error diagnostics as warnings.
                                     for d in diags {
-                                        let _ = event_tx
-                                            .send(KagEvent::Warning(d.message))
-                                            .await;
+                                        let _ = event_tx.send(KagEvent::Warning(d.message)).await;
                                     }
                                     // Resolve jump target inside the new script.
                                     let idx = if let Some(ref t) = target {
@@ -266,7 +265,9 @@ async fn interpreter_task(
                 // ── Cross-file return: reload caller's script ──────────────
                 KagEvent::Return { storage } => {
                     let _ = event_tx
-                        .send(KagEvent::Return { storage: storage.clone() })
+                        .send(KagEvent::Return {
+                            storage: storage.clone(),
+                        })
                         .await;
                     loop {
                         match input_rx.recv().await {
@@ -275,9 +276,7 @@ async fn interpreter_task(
                                 script = new_script;
                                 ctx.current_storage = name;
                                 for d in diags {
-                                    let _ = event_tx
-                                        .send(KagEvent::Warning(d.message))
-                                        .await;
+                                    let _ = event_tx.send(KagEvent::Warning(d.message)).await;
                                 }
                                 // ctx.pc was already set to return_pc by the
                                 // executor — do NOT override it here.
@@ -432,10 +431,10 @@ mod tests {
                 }
             }
 
-        let has_after = post.iter().any(
-            |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after")),
-        );
-        assert!(has_after, "post-stop events: {:?}", post);
+            let has_after = post
+                .iter()
+                .any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after")));
+            assert!(has_after, "post-stop events: {:?}", post);
         })
         .await;
     }
@@ -462,7 +461,10 @@ mod tests {
                         break;
                     }
                     // Interpreter crossed into sub.ks — supply its source.
-                    Some(KagEvent::Jump { storage: Some(ref s), .. }) if s == "sub.ks" => {
+                    Some(KagEvent::Jump {
+                        storage: Some(ref s),
+                        ..
+                    }) if s == "sub.ks" => {
                         handle
                             .send(HostEvent::ScenarioLoaded {
                                 name: "sub.ks".into(),
@@ -485,15 +487,23 @@ mod tests {
                 }
             }
 
-            let has_in_sub = all_events
-                .iter()
-                .any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("in sub")));
-            assert!(has_in_sub, "expected 'in sub' text; events: {:?}", all_events);
+            let has_in_sub = all_events.iter().any(
+                |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("in sub")),
+            );
+            assert!(
+                has_in_sub,
+                "expected 'in sub' text; events: {:?}",
+                all_events
+            );
 
             let has_back = all_events
                 .iter()
                 .any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("back")));
-            assert!(has_back, "expected 'back' text after return; events: {:?}", all_events);
+            assert!(
+                has_back,
+                "expected 'back' text after return; events: {:?}",
+                all_events
+            );
 
             // "back" must come after "in sub"
             let sub_pos = all_events.iter().position(
@@ -536,8 +546,9 @@ mod tests {
             }
 
             assert!(
-                post.iter()
-                    .any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("done"))),
+                post.iter().any(
+                    |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("done"))
+                ),
                 "{:?}",
                 post
             );

@@ -62,9 +62,10 @@ pub fn execute_op<'s>(
     // (we must track nesting to know when an `[endif]` closes the *current*
     //  if block rather than an outer one)
     if let Op::Tag(tag) = op
-        && is_control_flow_tag(tag.name.as_ref()) {
-            return execute_control_flow(script, ctx, tag);
-        }
+        && is_control_flow_tag(tag.name.as_ref())
+    {
+        return execute_control_flow(script, ctx, tag);
+    }
 
     // ── When inside a skipped conditional branch, skip everything else ────────
     if !ctx.is_executing() {
@@ -80,7 +81,10 @@ pub fn execute_op<'s>(
             ctx.advance();
             Ok(vec![])
         }
-        Op::ScriptBlock { content: script_text, .. } => {
+        Op::ScriptBlock {
+            content: script_text,
+            ..
+        } => {
             let script_text = script_text.clone();
             ctx.advance();
             ctx.script_engine
@@ -140,16 +144,14 @@ fn execute_text<'s>(
 
 // ─── Inline tag dispatch (occurs within text lines) ───────────────────────────
 
-fn execute_inline_tag(
-    ctx: &mut RuntimeContext,
-    tag: &Tag<'_>,
-) -> Result<Vec<KagEvent>, KagError> {
+fn execute_inline_tag(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> Result<Vec<KagEvent>, KagError> {
     // Honour optional `cond=` guard on any inline tag
     let cond_expr = tag.param_str("cond").map(str::to_owned);
     if let Some(ref expr) = cond_expr
-        && !ctx.script_engine.eval_bool(expr).unwrap_or(true) {
-            return Ok(vec![]);
-        }
+        && !ctx.script_engine.eval_bool(expr).unwrap_or(true)
+    {
+        return Ok(vec![]);
+    }
 
     match tag.name.as_ref() {
         TAG_R => Ok(vec![KagEvent::InsertLineBreak]),
@@ -191,10 +193,11 @@ fn execute_tag<'s>(
     // Check optional `cond=` guard — if false, skip the tag entirely
     let cond_expr = tag.param_str("cond").map(str::to_owned);
     if let Some(ref expr) = cond_expr
-        && !ctx.script_engine.eval_bool(expr).unwrap_or(true) {
-            ctx.advance();
-            return Ok(vec![]);
-        }
+        && !ctx.script_engine.eval_bool(expr).unwrap_or(true)
+    {
+        ctx.advance();
+        return Ok(vec![]);
+    }
 
     let name = tag.name.as_ref();
 
@@ -241,7 +244,9 @@ fn execute_tag<'s>(
                     // Cross-file return: host must reload the caller's script.
                     // ctx.pc is already set to return_pc; the interpreter loop
                     // must NOT override it after loading.
-                    Ok(vec![KagEvent::Return { storage: frame.return_storage }])
+                    Ok(vec![KagEvent::Return {
+                        storage: frame.return_storage,
+                    }])
                 } else {
                     Ok(vec![])
                 }
@@ -268,10 +273,7 @@ fn execute_tag<'s>(
 
         TAG_EMB => {
             let exp = tag.param_str("exp").unwrap_or("").to_owned();
-            let result = ctx
-                .script_engine
-                .eval_to_string(&exp)
-                .unwrap_or_default();
+            let result = ctx.script_engine.eval_to_string(&exp).unwrap_or_default();
             Ok(vec![KagEvent::EmbedText(result)])
         }
 
@@ -281,12 +283,13 @@ fn execute_tag<'s>(
             let storage = resolved_str(ctx, tag, "storage");
             let target = resolved_str(ctx, tag, "target");
             let exp = tag.param_str("exp").map(str::to_owned);
-            ctx.pending_choices.push(crate::runtime::context::PendingChoice {
-                text: String::new(),
-                storage,
-                target,
-                exp,
-            });
+            ctx.pending_choices
+                .push(crate::runtime::context::PendingChoice {
+                    text: String::new(),
+                    storage,
+                    target,
+                    exp,
+                });
             Ok(vec![build_generic_event(ctx, tag)])
         }
 
@@ -365,7 +368,10 @@ fn execute_tag<'s>(
 // ─── Control-flow dispatch (always executed, even inside skipped blocks) ──────
 
 fn is_control_flow_tag(name: &str) -> bool {
-    matches!(name, TAG_IF | TAG_ELSIF | TAG_ELSE | TAG_ENDIF | TAG_IGNORE | TAG_ENDIGNORE)
+    matches!(
+        name,
+        TAG_IF | TAG_ELSIF | TAG_ELSE | TAG_ENDIF | TAG_IGNORE | TAG_ENDIGNORE
+    )
 }
 
 fn execute_control_flow<'s>(
@@ -436,7 +442,11 @@ fn invoke_macro<'s>(
     let macro_name = tag.name.as_ref();
     let def = match script.macro_map.get(macro_name) {
         Some(d) => d.clone(),
-        None => return Ok(vec![KagEvent::Warning(format!("macro not found: {macro_name}"))]),
+        None => {
+            return Ok(vec![KagEvent::Warning(format!(
+                "macro not found: {macro_name}"
+            ))]);
+        }
     };
 
     let return_pc = ctx.pc + 1; // return to op after the macro call
@@ -467,7 +477,11 @@ fn invoke_macro<'s>(
     }
 
     // Handle MacroSplat: merge current mp into new mp
-    if tag.params.iter().any(|p| matches!(p.value, ParamValue::MacroSplat)) {
+    if tag
+        .params
+        .iter()
+        .any(|p| matches!(p.value, ParamValue::MacroSplat))
+    {
         let current_mp = ctx.script_engine.mp();
         for (k, v) in current_mp {
             mp.entry(k).or_insert(v);
@@ -573,7 +587,9 @@ mod tests {
                 KagEvent::WaitForClick { clear_after } => format!("wait_click:{}", clear_after),
                 KagEvent::WaitMs(n) => format!("wait_ms:{}", n),
                 KagEvent::Stop => "stop".to_string(),
-                KagEvent::Jump { target, .. } => format!("jump:{}", target.as_deref().unwrap_or("")),
+                KagEvent::Jump { target, .. } => {
+                    format!("jump:{}", target.as_deref().unwrap_or(""))
+                }
                 KagEvent::BeginChoices(_) => "choices".to_string(),
                 KagEvent::EmbedText(s) => format!("emb:{}", s),
                 KagEvent::Tag { name, .. } => format!("tag:{}", name),
@@ -601,14 +617,22 @@ mod tests {
     fn test_wait_click_l() {
         let (events, _) = run_script("@l\n");
         let names = event_names(&events);
-        assert!(names.contains(&"wait_click:false".to_string()), "{:?}", names);
+        assert!(
+            names.contains(&"wait_click:false".to_string()),
+            "{:?}",
+            names
+        );
     }
 
     #[test]
     fn test_wait_click_p() {
         let (events, _) = run_script("@p\n");
         let names = event_names(&events);
-        assert!(names.contains(&"wait_click:true".to_string()), "{:?}", names);
+        assert!(
+            names.contains(&"wait_click:true".to_string()),
+            "{:?}",
+            names
+        );
     }
 
     #[test]
@@ -629,11 +653,7 @@ mod tests {
     fn test_jump_tag() {
         let (events, _) = run_script("@jump storage=main target=*start\n");
         let names = event_names(&events);
-        assert!(
-            names.iter().any(|n| n.starts_with("jump:")),
-            "{:?}",
-            names
-        );
+        assert!(names.iter().any(|n| n.starts_with("jump:")), "{:?}", names);
     }
 
     #[test]

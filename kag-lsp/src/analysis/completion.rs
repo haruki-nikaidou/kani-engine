@@ -39,9 +39,9 @@ pub fn completions(
     if in_param_value {
         // Only offer label names when completing `target=` / `storage=`.
         if matches!(param_key, Some("target") | Some("storage")) {
-        for label_name in doc.index.labels.keys() {
-            items.push(CompletionItem {
-                label: label_name.as_str().to_owned(),
+            for label_name in doc.index.labels.keys() {
+                items.push(CompletionItem {
+                    label: label_name.as_str().to_owned(),
                     kind: Some(CompletionItemKind::REFERENCE),
                     detail: Some("label".into()),
                     ..Default::default()

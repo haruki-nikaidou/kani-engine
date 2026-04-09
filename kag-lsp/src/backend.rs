@@ -116,10 +116,13 @@ impl LanguageServer for Backend {
         let uri = &params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
 
-        Ok(self.store.with(uri, |doc| {
-            let offset = position_to_offset(&doc.source, pos);
-            hover::hover(doc, offset)
-        }).flatten())
+        Ok(self
+            .store
+            .with(uri, |doc| {
+                let offset = position_to_offset(&doc.source, pos);
+                hover::hover(doc, offset)
+            })
+            .flatten())
     }
 
     // ── Completion ───────────────────────────────────────────────────────────
@@ -157,8 +160,7 @@ impl LanguageServer for Backend {
             .store
             .with(uri, |doc| {
                 let offset = position_to_offset(&doc.source, pos);
-                goto_def::goto_definition(doc, uri, offset)
-                    .map(GotoDefinitionResponse::Scalar)
+                goto_def::goto_definition(doc, uri, offset).map(GotoDefinitionResponse::Scalar)
             })
             .flatten())
     }
@@ -212,10 +214,7 @@ fn param_context(source: &str, offset: usize) -> (bool, Option<String>) {
     let prefix = &source[..offset.min(source.len())];
 
     // Find the start of the current line, handling \n, \r\n, and bare \r.
-    let line_start = prefix
-        .rfind(['\n', '\r'])
-        .map(|i| i + 1)
-        .unwrap_or(0);
+    let line_start = prefix.rfind(['\n', '\r']).map(|i| i + 1).unwrap_or(0);
     // For \r\n the rfind lands on the \n; back up one more if a \r precedes it.
     let line = &prefix[line_start..];
 

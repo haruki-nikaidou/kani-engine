@@ -144,8 +144,7 @@ impl<'src> Parser<'src> {
     /// Open a new composite node of `kind`.  Must be matched by
     /// [`finish_node`](Self::finish_node).
     pub(crate) fn start_node(&mut self, kind: SyntaxKind) {
-        self.builder
-            .start_node(KagLanguage::kind_to_raw(kind));
+        self.builder.start_node(KagLanguage::kind_to_raw(kind));
     }
 
     /// Close the most recently opened composite node.
@@ -169,8 +168,7 @@ impl<'src> Parser<'src> {
     /// natural kind.  Used to reinterpret tokens during error recovery.
     pub(crate) fn bump_as(&mut self, kind: SyntaxKind) {
         let slice = self.tokens[self.pos].slice;
-        self.builder
-            .token(KagLanguage::kind_to_raw(kind), slice);
+        self.builder.token(KagLanguage::kind_to_raw(kind), slice);
         self.pos += 1;
     }
 
@@ -225,15 +223,10 @@ impl<'src> Parser<'src> {
 
     /// Emit an ERROR node wrapping tokens until (but not including) the first
     /// token in `until` or a `NEWLINE`.
-    pub(crate) fn error_recover_until(
-        &mut self,
-        message: impl Into<String>,
-        until: &[SyntaxKind],
-    ) {
+    pub(crate) fn error_recover_until(&mut self, message: impl Into<String>, until: &[SyntaxKind]) {
         self.push_error(message);
         self.start_node(SyntaxKind::ERROR);
-        while !self.at_end() && !self.at(SyntaxKind::NEWLINE) && !until.contains(&self.current())
-        {
+        while !self.at_end() && !self.at(SyntaxKind::NEWLINE) && !until.contains(&self.current()) {
             self.bump();
         }
         self.finish_node();
@@ -308,9 +301,10 @@ pub fn parse_cst(source: &str, _source_name: &str) -> Parse<Root> {
 
     // Surface lex errors as diagnostics (don't abort).
     for e in &lex_errors {
-        parser
-            .errors
-            .push(ParseDiagnostic::error("unexpected character", (e.start, e.len()).into()));
+        parser.errors.push(ParseDiagnostic::error(
+            "unexpected character",
+            (e.start, e.len()).into(),
+        ));
     }
 
     line::parse_root(&mut parser);
