@@ -4,25 +4,25 @@ overview: "Add a new `kani-pak` crate that defines a custom binary package forma
 todos:
   - id: workspace
     content: Add kani-pak to workspace Cargo.toml members and workspace.dependencies (memmap2, zstd, bytemuck, rustc-hash, bevy_asset optional, futures-lite optional)
-    status: in_progress
+    status: completed
   - id: scaffold
     content: Create kani-pak/Cargo.toml and src/lib.rs skeleton with feature flags (bevy, write)
-    status: pending
+    status: completed
   - id: format
     content: "Implement src/format.rs: Header and IndexEntry as bytemuck::Pod structs, magic/version constants"
-    status: pending
+    status: completed
   - id: error
     content: "Implement src/error.rs: PakError variants (NotFound, BadMagic, VersionMismatch, DecompressError, Io)"
-    status: pending
+    status: completed
   - id: reader
     content: "Implement src/reader.rs: PakReader with memmap2 open, binary-search lookup by FxHash, read() / read_raw() / contains() / paths()"
-    status: pending
+    status: completed
   - id: writer
     content: "Implement src/writer.rs (write feature): PakWriter with add(), finish(), write_to(); sorts entries by path_hash before serialising"
-    status: pending
+    status: completed
   - id: asset-reader
     content: "Implement src/asset_reader.rs (bevy feature): PakAssetReader wrapping Arc<PakReader>, full AssetReader impl including read_directory and is_directory"
-    status: pending
+    status: completed
 isProject: false
 ---
 
