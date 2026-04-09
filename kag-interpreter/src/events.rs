@@ -43,6 +43,10 @@ pub enum KagEvent {
     /// Clear the current message window (`[cm]` or page-break after `[p]`).
     ClearMessage,
 
+    /// Clear only the text content of the current message layer, without
+    /// resetting the layer's font/style settings (`[er]`).
+    ClearCurrentMessage,
+
     // ── Input waits ──────────────────────────────────────────────────────────
     /// Pause until the player clicks/taps.
     /// `clear_after = false` → `[l]` (keep text), `true` → `[p]` (clear on advance).
@@ -54,6 +58,41 @@ pub enum KagEvent {
     /// Hard stop — the interpreter will not advance without an explicit
     /// `HostEvent::Resume` (`[s]` tag).
     Stop,
+
+    /// Pause until the host signals that an asynchronous operation has
+    /// finished.  Emitted by `[wa]`, `[wm]`, `[wt]`, `[wq]`, `[wb]`, `[wf]`,
+    /// `[wl]`, `[ws]`, `[wv]`, `[wp]` — the host can distinguish them by
+    /// inspecting `tag`.  `canskip` mirrors the KAG `canskip=` attribute; when
+    /// `true` the host may resolve the wait early on click.
+    WaitForCompletion {
+        /// Original tag name, e.g. `"wa"`, `"wt"`, `"wb"`, …
+        tag: String,
+        /// All resolved parameters from the tag (e.g. `canskip`, `buf`, `slot`).
+        params: Vec<(String, String)>,
+    },
+
+    /// Pause until the next raw click, like `[waitclick]`.
+    /// Unlike `[l]` / `[p]` this cannot be dismissed by skip mode.
+    WaitForRawClick,
+
+    /// Ask the host to display a text-input dialog and wait for the result.
+    /// Emitted by `[input]`.  The host responds with `HostEvent::InputResult`.
+    /// The interpreter sets the named variable once the result arrives.
+    InputRequested {
+        /// Variable to store the result in, e.g. `"f.username"`.
+        name: String,
+        /// Prompt string shown in the dialog (may be empty).
+        prompt: String,
+        /// Dialog title (may be empty).
+        title: String,
+    },
+
+    /// Pause until the host fires a named trigger.  Emitted by `[waittrig]`.
+    /// The host responds with `HostEvent::TriggerFired`.
+    WaitForTrigger {
+        /// Trigger name to wait for.
+        name: String,
+    },
 
     // ── Navigation ───────────────────────────────────────────────────────────
     /// Jump to a label (and optionally a different scenario file).
@@ -125,6 +164,9 @@ pub enum HostEvent {
     /// A `WaitMs` timer has elapsed.
     TimerElapsed,
 
+    /// The player scrolled the mouse wheel (fires the `[wheel]` handler at `[s]`).
+    WheelScrolled,
+
     /// The player selected choice at the given index from a `BeginChoices`.
     ChoiceSelected(usize),
 
@@ -156,6 +198,18 @@ pub enum HostEvent {
     /// wait point (`WaitForClick`, `WaitMs`, or `Stop`); sending it at other
     /// times is silently ignored.
     TakeSnapshot,
+
+    /// Signals that the asynchronous operation the interpreter is blocked on
+    /// has finished.  Unblocks `KagEvent::WaitForCompletion`.
+    CompletionSignal,
+
+    /// Delivers the player's text-input result for `KagEvent::InputRequested`.
+    /// Passing an empty string is valid and means the player cancelled.
+    InputResult(String),
+
+    /// Fires a named trigger, unblocking any `KagEvent::WaitForTrigger` that
+    /// is waiting for this name.
+    TriggerFired { name: String },
 }
 
 // ─── Variable snapshot ────────────────────────────────────────────────────────

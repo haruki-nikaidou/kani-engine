@@ -76,6 +76,15 @@ pub struct InterpreterSnapshot {
     pub log_enabled: bool,
     /// Macro names deleted at runtime via `[erasemacro]`.
     pub erased_macros: Vec<String>,
+
+    // ── Input-handling flags ──────────────────────────────────────────────
+    /// Whether click-skip is enabled (controlled by `[clickskip]`).
+    pub clickskip_enabled: bool,
+    /// Whether auto-character-wait is active (`[autowc enabled=…]`).
+    pub autowc_enabled: bool,
+    /// Per-character wait overrides set by `[autowc]`.
+    /// Each element is `(character_string, delay_ms)`.
+    pub autowc_map: Vec<(String, u64)>,
 }
 
 /// A serialisable `[call]` stack frame.

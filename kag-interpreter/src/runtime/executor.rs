@@ -11,7 +11,7 @@ use crate::ast::{Op, ParamValue, Script, Tag, TextPart};
 use crate::error::KagError;
 use crate::events::{ChoiceOption, KagEvent};
 
-use super::context::RuntimeContext;
+use super::context::{JumpTarget, RuntimeContext, TimeoutHandler};
 
 // ─── Core tag name constants ──────────────────────────────────────────────────
 
@@ -53,6 +53,37 @@ const TAG_CONFIGDELAY: &str = "configdelay";
 const TAG_NOLOG: &str = "nolog";
 const TAG_ENDNOLOG: &str = "endnolog";
 const TAG_PUSHLOG: &str = "pushlog";
+
+// ── Blocking wait tags ────────────────────────────────────────────────────────
+const TAG_WA: &str = "wa";
+const TAG_WM: &str = "wm";
+const TAG_WT: &str = "wt";
+const TAG_WQ: &str = "wq";
+const TAG_WB: &str = "wb";
+const TAG_WF: &str = "wf";
+const TAG_WL: &str = "wl";
+const TAG_WS: &str = "ws";
+const TAG_WV: &str = "wv";
+const TAG_WP: &str = "wp";
+const TAG_WAITCLICK: &str = "waitclick";
+const TAG_INPUT: &str = "input";
+const TAG_WAITTRIG: &str = "waittrig";
+
+// ── State-change tags ─────────────────────────────────────────────────────────
+const TAG_CT: &str = "ct";
+const TAG_ER: &str = "er";
+const TAG_CH: &str = "ch";
+const TAG_HCH: &str = "hch";
+const TAG_AUTOWC: &str = "autowc";
+const TAG_WC: &str = "wc";
+const TAG_CLICKSKIP: &str = "clickskip";
+const TAG_RESETWAIT: &str = "resetwait";
+const TAG_CLICK: &str = "click";
+const TAG_CCLICK: &str = "cclick";
+const TAG_TIMEOUT: &str = "timeout";
+const TAG_CTIMEOUT: &str = "ctimeout";
+const TAG_WHEEL: &str = "wheel";
+const TAG_CWHEEL: &str = "cwheel";
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
@@ -294,7 +325,24 @@ fn execute_tag<'s>(
         // ── Timed wait ─────────────────────────────────────────────────────
         TAG_WAIT => {
             let ms = resolve_u64(ctx, tag, "time").unwrap_or(0);
-            Ok(vec![KagEvent::WaitMs(ms)])
+            let mode = tag.param_str("mode").unwrap_or("normal");
+            if mode == "until" {
+                // mode=until: wait until `time` ms have elapsed *since the
+                // last [resetwait]*.  If the baseline is already past or was
+                // never set, emit a zero-duration wait (no-op).
+                let elapsed = ctx
+                    .wait_base_time
+                    .map(|t| t.elapsed().as_millis() as u64)
+                    .unwrap_or(ms);
+                let remaining = ms.saturating_sub(elapsed);
+                if remaining == 0 {
+                    Ok(vec![])
+                } else {
+                    Ok(vec![KagEvent::WaitMs(remaining)])
+                }
+            } else {
+                Ok(vec![KagEvent::WaitMs(ms)])
+            }
         }
 
         // ── Navigation ────────────────────────────────────────────────────
@@ -502,6 +550,163 @@ fn execute_tag<'s>(
             Ok(vec![KagEvent::PushBacklog { text, join }])
         }
 
+        // ── Message-layer clear variants ──────────────────────────────────
+        // [ct] resets the message layer position (like [cm] but with
+        // context-target semantics in the original KAG). Emit ClearMessage
+        // plus a generic Tag so the host can distinguish it from [cm].
+        TAG_CT => Ok(vec![KagEvent::ClearMessage, build_generic_event(ctx, tag)]),
+
+        // [er] clears only the text of the current layer, leaving font /
+        // style state intact.
+        TAG_ER => Ok(vec![KagEvent::ClearCurrentMessage]),
+
+        // ── Single-character display ──────────────────────────────────────
+        TAG_CH => {
+            let text = resolved_str_owned(ctx, tag, "text").unwrap_or_default();
+            if text.is_empty() {
+                Ok(vec![])
+            } else {
+                Ok(vec![KagEvent::DisplayText {
+                    text,
+                    speaker: ctx.current_speaker.clone(),
+                    speed: ctx.text_speed,
+                    log: ctx.log_enabled,
+                }])
+            }
+        }
+
+        // [hch] is the vertical equivalent of [ch]; forward to host for
+        // rendering, but also emit a DisplayText event so the backlog works.
+        TAG_HCH => {
+            let text = resolved_str_owned(ctx, tag, "text").unwrap_or_default();
+            let mut events = vec![build_generic_event(ctx, tag)];
+            if !text.is_empty() {
+                events.push(KagEvent::DisplayText {
+                    text,
+                    speaker: ctx.current_speaker.clone(),
+                    speed: ctx.text_speed,
+                    log: ctx.log_enabled,
+                });
+            }
+            Ok(events)
+        }
+
+        // ── [autowc] — configure automatic per-character waits ────────────
+        TAG_AUTOWC => {
+            let enabled = tag.param_str("enabled").unwrap_or("true");
+            ctx.autowc_enabled = enabled != "false";
+            if ctx.autowc_enabled {
+                let ch_str = tag.param_str("ch").unwrap_or("").to_owned();
+                let time_str = tag.param_str("time").unwrap_or("").to_owned();
+                if !ch_str.is_empty() {
+                    let chars: Vec<&str> = ch_str.split(',').collect();
+                    let times: Vec<u64> = time_str
+                        .split(',')
+                        .filter_map(|s| s.trim().parse().ok())
+                        .collect();
+                    ctx.autowc_map.clear();
+                    for (i, ch) in chars.iter().enumerate() {
+                        let delay = times.get(i).or_else(|| times.last()).copied().unwrap_or(0);
+                        ctx.autowc_map.push((ch.to_string(), delay));
+                    }
+                }
+            } else {
+                ctx.autowc_map.clear();
+            }
+            Ok(vec![])
+        }
+
+        // ── [wc] — wait for N characters of display time ──────────────────
+        TAG_WC => {
+            let time_ms = resolve_u64(ctx, tag, "time").unwrap_or(0);
+            Ok(vec![KagEvent::WaitMs(time_ms)])
+        }
+
+        // ── [clickskip] — toggle click-skip mode ─────────────────────────
+        TAG_CLICKSKIP => {
+            let enabled = resolved_str(ctx, tag, "enabled").unwrap_or_default();
+            ctx.clickskip_enabled = enabled != "false";
+            Ok(vec![build_generic_event(ctx, tag)])
+        }
+
+        // ── [resetwait] — set wait baseline for mode=until ───────────────
+        TAG_RESETWAIT => {
+            ctx.wait_base_time = Some(std::time::Instant::now());
+            Ok(vec![])
+        }
+
+        // ── [click]/[cclick] — register/clear click handler at [s] ──────
+        TAG_CLICK => {
+            let storage = resolved_str(ctx, tag, "storage");
+            let target = resolved_str(ctx, tag, "target");
+            let exp = tag.param_str("exp").map(str::to_owned);
+            ctx.pending_click = Some(JumpTarget { storage, target, exp });
+            Ok(vec![])
+        }
+        TAG_CCLICK => {
+            ctx.pending_click = None;
+            Ok(vec![])
+        }
+
+        // ── [timeout]/[ctimeout] — register/clear timeout handler ────────
+        TAG_TIMEOUT => {
+            let time_ms = resolve_u64(ctx, tag, "time").unwrap_or(0);
+            let storage = resolved_str(ctx, tag, "storage");
+            let target = resolved_str(ctx, tag, "target");
+            let exp = tag.param_str("exp").map(str::to_owned);
+            ctx.pending_timeout = Some(TimeoutHandler { time_ms, storage, target, exp });
+            Ok(vec![])
+        }
+        TAG_CTIMEOUT => {
+            ctx.pending_timeout = None;
+            Ok(vec![])
+        }
+
+        // ── [wheel]/[cwheel] — register/clear wheel handler ──────────────
+        TAG_WHEEL => {
+            let storage = resolved_str(ctx, tag, "storage");
+            let target = resolved_str(ctx, tag, "target");
+            let exp = tag.param_str("exp").map(str::to_owned);
+            ctx.pending_wheel = Some(JumpTarget { storage, target, exp });
+            Ok(vec![])
+        }
+        TAG_CWHEEL => {
+            ctx.pending_wheel = None;
+            Ok(vec![])
+        }
+
+        // ── Blocking wait tags ────────────────────────────────────────────
+        // All w* completion-wait tags emit WaitForCompletion with their
+        // resolved params so the host bridge can identify what to wait on.
+        TAG_WA | TAG_WM | TAG_WT | TAG_WQ | TAG_WB | TAG_WF | TAG_WL
+        | TAG_WS | TAG_WV | TAG_WP => {
+            let params = build_resolved_params(ctx, tag);
+            Ok(vec![KagEvent::WaitForCompletion {
+                tag: name.to_owned(),
+                params,
+            }])
+        }
+
+        TAG_WAITCLICK => Ok(vec![KagEvent::WaitForRawClick]),
+
+        // ── [input] — text-input dialog ───────────────────────────────────
+        TAG_INPUT => {
+            let var_name = resolved_str_owned(ctx, tag, "name").unwrap_or_default();
+            let prompt = resolved_str_owned(ctx, tag, "prompt").unwrap_or_default();
+            let title = resolved_str_owned(ctx, tag, "title").unwrap_or_default();
+            Ok(vec![KagEvent::InputRequested {
+                name: var_name,
+                prompt,
+                title,
+            }])
+        }
+
+        // ── [waittrig] — wait for a named trigger ─────────────────────────
+        TAG_WAITTRIG => {
+            let trig_name = resolved_str_owned(ctx, tag, "name").unwrap_or_default();
+            Ok(vec![KagEvent::WaitForTrigger { name: trig_name }])
+        }
+
         // ── All other tags forwarded to host ──────────────────────────────
         _ => Ok(vec![build_generic_event(ctx, tag)]),
     }
@@ -685,6 +890,31 @@ fn resolve_u64(ctx: &mut RuntimeContext, tag: &Tag<'_>, key: &str) -> Option<u64
         .and_then(|s| s.parse().ok())
 }
 
+/// Resolve all tag parameters to a `Vec<(String, String)>` without wrapping
+/// them in a `KagEvent`.  Used by the `WaitForCompletion` emitter.
+fn build_resolved_params(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> Vec<(String, String)> {
+    tag.params
+        .iter()
+        .filter_map(|p| {
+            p.key.as_deref().map(|k| {
+                let val = match &p.value {
+                    ParamValue::Literal(s) => ctx.resolve_value(s.as_ref()),
+                    ParamValue::Entity(expr) => ctx.script_engine.resolve_entity(expr),
+                    ParamValue::MacroParam { key, default } => {
+                        let mp = ctx.script_engine.mp();
+                        mp.get(key.as_ref())
+                            .map(|v| v.to_string())
+                            .or_else(|| default.as_deref().map(str::to_owned))
+                            .unwrap_or_default()
+                    }
+                    ParamValue::MacroSplat => String::new(),
+                };
+                (k.to_owned(), val)
+            })
+        })
+        .collect()
+}
+
 /// Build a generic `KagEvent::Tag` from any tag, resolving all param values.
 fn build_generic_event(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> KagEvent {
     let params: Vec<(String, String)> = tag
@@ -744,9 +974,14 @@ mod tests {
                 KagEvent::DisplayText { text, .. } => format!("text:{}", text),
                 KagEvent::InsertLineBreak => "br".to_string(),
                 KagEvent::ClearMessage => "cm".to_string(),
+                KagEvent::ClearCurrentMessage => "clear_current".to_string(),
                 KagEvent::WaitForClick { clear_after } => format!("wait_click:{}", clear_after),
                 KagEvent::WaitMs(n) => format!("wait_ms:{}", n),
                 KagEvent::Stop => "stop".to_string(),
+                KagEvent::WaitForCompletion { tag, .. } => format!("wait_completion:{}", tag),
+                KagEvent::WaitForRawClick => "wait_raw_click".to_string(),
+                KagEvent::InputRequested { name, .. } => format!("input:{}", name),
+                KagEvent::WaitForTrigger { name } => format!("wait_trig:{}", name),
                 KagEvent::Jump { target, .. } => {
                     format!("jump:{}", target.as_deref().unwrap_or(""))
                 }
@@ -1362,5 +1597,198 @@ mod tests {
         assert_eq!(choices.len(), 1);
         assert_eq!(choices[0].text, "Only option");
         assert_eq!(choices[0].target.as_deref(), Some("*a"));
+    }
+
+    // ── New tag coverage tests ────────────────────────────────────────────────
+
+    #[test]
+    fn test_ct_emits_clear_message_and_generic() {
+        let (events, _) = run_script("@ct\n");
+        let names = event_names(&events);
+        assert!(names.contains(&"cm".to_string()), "ct must emit ClearMessage: {:?}", names);
+        assert!(names.iter().any(|n| n == "tag:ct"), "ct must also emit generic tag: {:?}", names);
+    }
+
+    #[test]
+    fn test_er_emits_clear_current_message() {
+        let (events, _) = run_script("@er\n");
+        assert!(
+            events.iter().any(|e| matches!(e, KagEvent::ClearCurrentMessage)),
+            "er must emit ClearCurrentMessage: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_ch_emits_display_text() {
+        let (events, _) = run_script("[ch text=A]\n");
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text == "A")),
+            "ch must emit DisplayText with the character: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_waitclick_emits_wait_for_raw_click() {
+        let (events, _) = run_script("@waitclick\n");
+        assert!(
+            events.iter().any(|e| matches!(e, KagEvent::WaitForRawClick)),
+            "waitclick must emit WaitForRawClick: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_wa_emits_wait_for_completion() {
+        let (events, _) = run_script("[wa layer=0 seg=1]\n");
+        assert!(
+            events.iter().any(|e| matches!(e, KagEvent::WaitForCompletion { tag, .. } if tag == "wa")),
+            "wa must emit WaitForCompletion: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_wt_emits_wait_for_completion() {
+        let (events, _) = run_script("@wt\n");
+        assert!(
+            events.iter().any(|e| matches!(e, KagEvent::WaitForCompletion { tag, .. } if tag == "wt")),
+            "wt must emit WaitForCompletion: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_input_emits_input_requested() {
+        let (events, _) = run_script("[input name=f.user prompt=Enter title=Name]\n");
+        assert!(
+            events.iter().any(|e| matches!(e, KagEvent::InputRequested { name, .. } if name == "f.user")),
+            "input must emit InputRequested: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_waittrig_emits_wait_for_trigger() {
+        let (events, _) = run_script("[waittrig name=myevent]\n");
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::WaitForTrigger { name } if name == "myevent")),
+            "waittrig must emit WaitForTrigger: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_autowc_sets_ctx_state() {
+        let src = "[autowc enabled=true ch=A,B time=3,5]\n";
+        let (_, ctx) = run_script(src);
+        assert!(ctx.autowc_enabled, "autowc_enabled should be true");
+        assert_eq!(ctx.autowc_map.len(), 2);
+        assert_eq!(ctx.autowc_map[0], ("A".to_string(), 3));
+        assert_eq!(ctx.autowc_map[1], ("B".to_string(), 5));
+    }
+
+    #[test]
+    fn test_autowc_disabled_clears_map() {
+        let src = "[autowc enabled=true ch=X time=10]\n[autowc enabled=false]\n";
+        let (_, ctx) = run_script(src);
+        assert!(!ctx.autowc_enabled, "autowc_enabled should be false after disabling");
+        assert!(ctx.autowc_map.is_empty(), "autowc_map should be cleared");
+    }
+
+    #[test]
+    fn test_clickskip_sets_ctx_state() {
+        let src = "[clickskip enabled=false]\n";
+        let (_, ctx) = run_script(src);
+        assert!(!ctx.clickskip_enabled, "clickskip_enabled should be false");
+    }
+
+    #[test]
+    fn test_click_sets_pending_click() {
+        let src = "@click target=*dest\n";
+        let (_, ctx) = run_script(src);
+        assert!(ctx.pending_click.is_some(), "pending_click should be set");
+        assert_eq!(ctx.pending_click.unwrap().target.as_deref(), Some("*dest"));
+    }
+
+    #[test]
+    fn test_cclick_clears_pending_click() {
+        let src = "@click target=*dest\n@cclick\n";
+        let (_, ctx) = run_script(src);
+        assert!(ctx.pending_click.is_none(), "pending_click should be cleared by cclick");
+    }
+
+    #[test]
+    fn test_timeout_sets_pending_timeout() {
+        let src = "@timeout time=2000 target=*done\n";
+        let (_, ctx) = run_script(src);
+        let t = ctx.pending_timeout.expect("pending_timeout should be set");
+        assert_eq!(t.time_ms, 2000);
+        assert_eq!(t.target.as_deref(), Some("*done"));
+    }
+
+    #[test]
+    fn test_ctimeout_clears_pending_timeout() {
+        let src = "@timeout time=1000 target=*x\n@ctimeout\n";
+        let (_, ctx) = run_script(src);
+        assert!(ctx.pending_timeout.is_none(), "pending_timeout should be cleared by ctimeout");
+    }
+
+    #[test]
+    fn test_wheel_sets_pending_wheel() {
+        let src = "@wheel target=*scroll\n";
+        let (_, ctx) = run_script(src);
+        assert!(ctx.pending_wheel.is_some());
+        assert_eq!(ctx.pending_wheel.unwrap().target.as_deref(), Some("*scroll"));
+    }
+
+    #[test]
+    fn test_cwheel_clears_pending_wheel() {
+        let src = "@wheel target=*scroll\n@cwheel\n";
+        let (_, ctx) = run_script(src);
+        assert!(ctx.pending_wheel.is_none(), "cwheel should clear pending_wheel");
+    }
+
+    #[test]
+    fn test_resetwait_sets_base_time() {
+        let src = "@resetwait\n";
+        let (_, ctx) = run_script(src);
+        assert!(ctx.wait_base_time.is_some(), "resetwait should set wait_base_time");
+    }
+
+    #[test]
+    fn test_wc_emits_wait_ms() {
+        let (events, _) = run_script("@wc time=200\n");
+        assert!(
+            events.iter().any(|e| matches!(e, KagEvent::WaitMs(200))),
+            "wc should emit WaitMs with the specified time: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_wait_mode_normal() {
+        let (events, _) = run_script("@wait time=300\n");
+        assert!(
+            events.iter().any(|e| matches!(e, KagEvent::WaitMs(300))),
+            "wait mode=normal should emit WaitMs(300): {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_wait_mode_until_no_baseline_emits_nothing() {
+        // With no [resetwait] baseline, elapsed >= time → no WaitMs emitted.
+        let (events, _) = run_script("@wait time=0 mode=until\n");
+        assert!(
+            !events.iter().any(|e| matches!(e, KagEvent::WaitMs(_))),
+            "wait mode=until with zero time should not emit WaitMs: {:?}",
+            events
+        );
     }
 }

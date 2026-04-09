@@ -75,6 +75,11 @@ pub use runtime::KagInterpreter;
 /// All event types used across the public API.
 pub use events::{ChoiceOption, HostEvent, KagEvent, VarScope, VariableSnapshot};
 
+/// Jump-target registered by `[click]` or `[wheel]` before `[s]`.
+pub use runtime::context::JumpTarget;
+/// Timed jump registered by `[timeout]` before `[s]`.
+pub use runtime::context::TimeoutHandler;
+
 /// The parsed scenario representation.
 pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 

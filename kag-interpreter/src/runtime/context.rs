@@ -4,6 +4,7 @@
 //! current speaker name, and the link-choice accumulator.
 
 use std::collections::HashSet;
+use std::time::Instant;
 
 use rhai::Map;
 
@@ -100,12 +101,58 @@ pub struct RuntimeContext {
 
     /// Set of macro names that have been deleted at runtime via `[erasemacro]`.
     pub erased_macros: HashSet<String>,
+
+    // ── [s]-wait handler system ───────────────────────────────────────────────
+    /// Jump registered by `[click]` — fires when player clicks while at `[s]`.
+    pub pending_click: Option<JumpTarget>,
+
+    /// Jump registered by `[timeout]` — fires after `time_ms` at `[s]`.
+    pub pending_timeout: Option<TimeoutHandler>,
+
+    /// Jump registered by `[wheel]` — fires on mouse-wheel while at `[s]`.
+    pub pending_wheel: Option<JumpTarget>,
+
+    // ── [clickskip] state ─────────────────────────────────────────────────────
+    /// Whether click-skip mode is enabled (controlled by `[clickskip]`).
+    /// When `true` the host may use clicks to skip transitions/animations.
+    pub clickskip_enabled: bool,
+
+    // ── [autowc] state ────────────────────────────────────────────────────────
+    /// Whether auto-character-wait is active (set by `[autowc enabled=true]`).
+    pub autowc_enabled: bool,
+
+    /// Per-character wait overrides.  Each entry maps a character string (may
+    /// be multi-byte) to a delay in milliseconds.  Set by `[autowc ch=… time=…]`.
+    pub autowc_map: Vec<(String, u64)>,
+
+    // ── [resetwait] / [wait mode=until] ──────────────────────────────────────
+    /// Baseline instant set by `[resetwait]`; used to compute elapsed time for
+    /// `[wait mode=until time=N]`.  `None` means "not yet set".
+    /// Not serialisable — resets to `None` on every interpreter start / restore.
+    pub wait_base_time: Option<Instant>,
 }
 
 /// A choice being accumulated between `[link]` and `[endlink]`.
 #[derive(Debug, Clone)]
 pub struct PendingChoice {
     pub text: String,
+    pub storage: Option<String>,
+    pub target: Option<String>,
+    pub exp: Option<String>,
+}
+
+/// A jump target registered by `[click]`, `[wheel]`, or `[timeout]`.
+#[derive(Debug, Clone)]
+pub struct JumpTarget {
+    pub storage: Option<String>,
+    pub target: Option<String>,
+    pub exp: Option<String>,
+}
+
+/// A timed jump registered by `[timeout]`.
+#[derive(Debug, Clone)]
+pub struct TimeoutHandler {
+    pub time_ms: u64,
     pub storage: Option<String>,
     pub target: Option<String>,
     pub exp: Option<String>,
@@ -127,6 +174,13 @@ impl RuntimeContext {
             text_speed: None,
             log_enabled: true,
             erased_macros: HashSet::new(),
+            pending_click: None,
+            pending_timeout: None,
+            pending_wheel: None,
+            clickskip_enabled: true,
+            autowc_enabled: false,
+            autowc_map: Vec::new(),
+            wait_base_time: None,
         }
     }
 
@@ -347,6 +401,9 @@ impl RuntimeContext {
             text_speed: self.text_speed,
             log_enabled: self.log_enabled,
             erased_macros,
+            clickskip_enabled: self.clickskip_enabled,
+            autowc_enabled: self.autowc_enabled,
+            autowc_map: self.autowc_map.clone(),
         })
     }
 
@@ -404,6 +461,14 @@ impl RuntimeContext {
         self.text_speed = snap.text_speed;
         self.log_enabled = snap.log_enabled;
         self.erased_macros = snap.erased_macros.iter().cloned().collect();
+        self.clickskip_enabled = snap.clickskip_enabled;
+        self.autowc_enabled = snap.autowc_enabled;
+        self.autowc_map = snap.autowc_map.clone();
+        // Transient runtime-only state — reset on restore
+        self.pending_click = None;
+        self.pending_timeout = None;
+        self.pending_wheel = None;
+        self.wait_base_time = None;
 
         Ok(())
     }
