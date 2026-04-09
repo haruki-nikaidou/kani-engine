@@ -120,8 +120,8 @@ fn execute_text<'s>(
     let mut text_buf = String::new();
 
     let speaker = ctx.current_speaker.take();
-    let speed = ctx.text_speed;
-    let log = ctx.log_enabled;
+    let mut current_speed = ctx.text_speed;
+    let mut current_log = ctx.log_enabled;
 
     for part in parts {
         match part {
@@ -133,18 +133,22 @@ fn execute_text<'s>(
                 text_buf.push_str(&val);
             }
             TextPart::InlineTag(tag) => {
-                // Flush accumulated text before the inline tag
+                // Flush accumulated text before the inline tag using the state
+                // that was active when those characters were produced.
                 if !text_buf.is_empty() {
                     events.push(KagEvent::DisplayText {
                         text: std::mem::take(&mut text_buf),
                         speaker: speaker.clone(),
-                        speed,
-                        log,
+                        speed: current_speed,
+                        log: current_log,
                     });
                 }
-                // Execute the inline tag
+                // Execute the inline tag (may mutate ctx.text_speed / ctx.log_enabled)
                 let mut inline_events = execute_inline_tag(ctx, tag)?;
                 events.append(&mut inline_events);
+                // Sync so subsequent segments see any speed/log change.
+                current_speed = ctx.text_speed;
+                current_log = ctx.log_enabled;
             }
         }
     }
@@ -154,8 +158,8 @@ fn execute_text<'s>(
         events.push(KagEvent::DisplayText {
             text: text_buf,
             speaker,
-            speed,
-            log,
+            speed: current_speed,
+            log: current_log,
         });
     }
 
@@ -206,6 +210,22 @@ fn execute_inline_tag(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> Result<Vec<Kag
                 .eval_to_string(&exp_owned)
                 .unwrap_or_default();
             Ok(vec![KagEvent::EmbedText(result)])
+        }
+        TAG_DELAY | TAG_CONFIGDELAY => {
+            ctx.text_speed = Some(resolve_u64(ctx, tag, "speed").unwrap_or(0));
+            Ok(vec![])
+        }
+        TAG_RESETDELAY => {
+            ctx.text_speed = None;
+            Ok(vec![])
+        }
+        TAG_NOLOG => {
+            ctx.log_enabled = false;
+            Ok(vec![])
+        }
+        TAG_ENDNOLOG => {
+            ctx.log_enabled = true;
+            Ok(vec![])
         }
         _ => Ok(vec![build_generic_event(ctx, tag)]),
     }
