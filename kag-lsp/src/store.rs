@@ -2,8 +2,8 @@
 
 use dashmap::DashMap;
 use kag_syntax::cst::Root;
-use kag_syntax::parser::Parse;
 use kag_syntax::parse_cst;
+use kag_syntax::parser::Parse;
 use tower_lsp::lsp_types::Url;
 
 use crate::analysis::Index;
@@ -26,7 +26,11 @@ impl ParsedDoc {
         let source_name = uri.path();
         let parse = parse_cst(&source, source_name);
         let index = Index::build(&parse, &source);
-        Self { source, parse, index }
+        Self {
+            source,
+            parse,
+            index,
+        }
     }
 }
 
@@ -43,7 +47,7 @@ impl DocumentStore {
         Self::default()
     }
 
-    /// Insert or replace a document, returning the new [`ParsedDoc`].
+    /// Insert or replace a document.
     pub fn update(&self, uri: Url, source: String) {
         let doc = ParsedDoc::new(source, &uri);
         self.docs.insert(uri, doc);
