@@ -103,6 +103,37 @@ impl ScriptEngine {
         set_map_in_scope(&mut self.scope, "tf", map);
     }
 
+    // ── Variable clearing ─────────────────────────────────────────────────────
+
+    /// Clear all `f` (game flags) variables.
+    pub fn clear_f(&mut self) {
+        set_map_in_scope(&mut self.scope, "f", Map::new());
+    }
+
+    /// Clear all `sf` (system flags) variables.
+    pub fn clear_sf(&mut self) {
+        set_map_in_scope(&mut self.scope, "sf", Map::new());
+    }
+
+    /// Clear all `tf` (transient flags) variables.
+    pub fn clear_tf(&mut self) {
+        set_map_in_scope(&mut self.scope, "tf", Map::new());
+    }
+
+    /// Remove a single key from a named variable scope (`"f"`, `"sf"`, or `"tf"`).
+    ///
+    /// Silently does nothing if the key or scope does not exist.
+    pub fn remove_key(&mut self, scope_name: &str, key: &str) {
+        let mut map = match scope_name {
+            "f" => self.f(),
+            "sf" => self.sf(),
+            "tf" => self.tf(),
+            _ => return,
+        };
+        map.remove(key);
+        set_map_in_scope(&mut self.scope, scope_name, map);
+    }
+
     // ── Evaluation API ────────────────────────────────────────────────────────
 
     /// Evaluate an arbitrary Rhai expression or statement block.

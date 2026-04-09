@@ -40,6 +40,21 @@ const TAG_GLINK: &str = "glink";
 const TAG_CHARA_PTEXT: &str = "chara_ptext";
 const TAG_WARNING: &str = "_warning";
 
+// ── Internal-state tags ───────────────────────────────────────────────────────
+const TAG_CLEARVAR: &str = "clearvar";
+const TAG_CLEARSYSVAR: &str = "clearsysvar";
+const TAG_CLEARSTACK: &str = "clearstack";
+const TAG_ERASEMACRO: &str = "erasemacro";
+const TAG_TRACE: &str = "trace";
+const TAG_NOWAIT: &str = "nowait";
+const TAG_ENDNOWAIT: &str = "endnowait";
+const TAG_DELAY: &str = "delay";
+const TAG_RESETDELAY: &str = "resetdelay";
+const TAG_CONFIGDELAY: &str = "configdelay";
+const TAG_NOLOG: &str = "nolog";
+const TAG_ENDNOLOG: &str = "endnolog";
+const TAG_PUSHLOG: &str = "pushlog";
+
 // ─── Public entry point ───────────────────────────────────────────────────────
 
 /// Execute one op at `ctx.pc`.
@@ -105,6 +120,8 @@ fn execute_text<'s>(
     let mut text_buf = String::new();
 
     let speaker = ctx.current_speaker.take();
+    let speed = ctx.text_speed;
+    let log = ctx.log_enabled;
 
     for part in parts {
         match part {
@@ -121,6 +138,8 @@ fn execute_text<'s>(
                     events.push(KagEvent::DisplayText {
                         text: std::mem::take(&mut text_buf),
                         speaker: speaker.clone(),
+                        speed,
+                        log,
                     });
                 }
                 // Execute the inline tag
@@ -135,6 +154,8 @@ fn execute_text<'s>(
         events.push(KagEvent::DisplayText {
             text: text_buf,
             speaker,
+            speed,
+            log,
         });
     }
 
@@ -155,8 +176,20 @@ fn execute_inline_tag(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> Result<Vec<Kag
 
     match tag.name.as_ref() {
         TAG_R => Ok(vec![KagEvent::InsertLineBreak]),
-        TAG_L => Ok(vec![KagEvent::WaitForClick { clear_after: false }]),
-        TAG_P => Ok(vec![KagEvent::WaitForClick { clear_after: true }]),
+        TAG_L => {
+            if ctx.nowait {
+                Ok(vec![])
+            } else {
+                Ok(vec![KagEvent::WaitForClick { clear_after: false }])
+            }
+        }
+        TAG_P => {
+            if ctx.nowait {
+                Ok(vec![])
+            } else {
+                Ok(vec![KagEvent::WaitForClick { clear_after: true }])
+            }
+        }
         TAG_S => Ok(vec![KagEvent::Stop]),
         TAG_WAIT => {
             let ms = resolve_u64(ctx, tag, "time").unwrap_or(0);
@@ -202,7 +235,8 @@ fn execute_tag<'s>(
     let name = tag.name.as_ref();
 
     // ── Check if this is a macro invocation ────────────────────────────────
-    if script.macro_map.contains_key(name) {
+    // A macro that has been erased at runtime via [erasemacro] must not be invoked.
+    if script.macro_map.contains_key(name) && !ctx.erased_macros.contains(name) {
         return invoke_macro(script, ctx, tag);
     }
 
@@ -210,8 +244,20 @@ fn execute_tag<'s>(
 
     match name {
         // ── Text flow ──────────────────────────────────────────────────────
-        TAG_L => Ok(vec![KagEvent::WaitForClick { clear_after: false }]),
-        TAG_P => Ok(vec![KagEvent::WaitForClick { clear_after: true }]),
+        TAG_L => {
+            if ctx.nowait {
+                Ok(vec![])
+            } else {
+                Ok(vec![KagEvent::WaitForClick { clear_after: false }])
+            }
+        }
+        TAG_P => {
+            if ctx.nowait {
+                Ok(vec![])
+            } else {
+                Ok(vec![KagEvent::WaitForClick { clear_after: true }])
+            }
+        }
         TAG_R => Ok(vec![KagEvent::InsertLineBreak]),
         TAG_S => Ok(vec![KagEvent::Stop]),
         TAG_CM => Ok(vec![KagEvent::ClearMessage]),
@@ -360,6 +406,86 @@ fn execute_tag<'s>(
             Ok(vec![KagEvent::Warning(msg)])
         }
 
+        // ── Variable clearing ─────────────────────────────────────────────
+        TAG_CLEARVAR => {
+            let exp = tag.param_str("exp").unwrap_or("").trim().to_owned();
+            if exp.is_empty() {
+                // Clear all game (f) and transient (tf) variables
+                ctx.script_engine.clear_f();
+                ctx.script_engine.clear_tf();
+            } else {
+                // Remove a specific variable: "f.key", "sf.key", or "tf.key"
+                remove_var_by_expr(ctx, &exp);
+            }
+            Ok(vec![])
+        }
+
+        TAG_CLEARSYSVAR => {
+            ctx.script_engine.clear_sf();
+            Ok(vec![])
+        }
+
+        // ── Stack clearing ────────────────────────────────────────────────
+        TAG_CLEARSTACK => {
+            let which = tag.param_str("stack").unwrap_or("").trim().to_owned();
+            ctx.clear_stack(&which);
+            Ok(vec![])
+        }
+
+        // ── Macro deletion ────────────────────────────────────────────────
+        TAG_ERASEMACRO => {
+            let name = tag.param_str("name").unwrap_or("").to_owned();
+            if !name.is_empty() {
+                ctx.erased_macros.insert(name);
+            }
+            Ok(vec![])
+        }
+
+        // ── Debug trace ───────────────────────────────────────────────────
+        TAG_TRACE => {
+            let exp = tag.param_str("exp").unwrap_or("").to_owned();
+            let result = ctx.script_engine.eval_to_string(&exp).unwrap_or_default();
+            Ok(vec![KagEvent::Trace(result)])
+        }
+
+        // ── Nowait mode ───────────────────────────────────────────────────
+        TAG_NOWAIT => {
+            ctx.nowait = true;
+            Ok(vec![])
+        }
+        TAG_ENDNOWAIT => {
+            ctx.nowait = false;
+            Ok(vec![])
+        }
+
+        // ── Text display speed ────────────────────────────────────────────
+        TAG_DELAY | TAG_CONFIGDELAY => {
+            // `delay speed=N` sets per-character ms; default to 0 (instant)
+            if let Some(ms) = resolve_u64(ctx, tag, "speed") {
+                ctx.text_speed = Some(ms);
+            }
+            Ok(vec![])
+        }
+        TAG_RESETDELAY => {
+            ctx.text_speed = None;
+            Ok(vec![])
+        }
+
+        // ── Backlog control ───────────────────────────────────────────────
+        TAG_NOLOG => {
+            ctx.log_enabled = false;
+            Ok(vec![])
+        }
+        TAG_ENDNOLOG => {
+            ctx.log_enabled = true;
+            Ok(vec![])
+        }
+        TAG_PUSHLOG => {
+            let text = resolved_str_owned(ctx, tag, "text").unwrap_or_default();
+            let join = tag.param_str("join").unwrap_or("false") == "true";
+            Ok(vec![KagEvent::PushBacklog { text, join }])
+        }
+
         // ── All other tags forwarded to host ──────────────────────────────
         _ => Ok(vec![build_generic_event(ctx, tag)]),
     }
@@ -494,6 +620,24 @@ fn invoke_macro<'s>(
     Ok(vec![])
 }
 
+// ─── Variable removal helper ──────────────────────────────────────────────────
+
+/// Parse a `clearvar exp=` expression like `"f.key"` or `"sf.count"` and remove
+/// the named key from the appropriate variable scope.
+///
+/// Only dot-notation with a known scope prefix is supported; anything else is
+/// silently ignored.
+fn remove_var_by_expr(ctx: &mut RuntimeContext, expr: &str) {
+    let expr = expr.trim().trim_matches('"');
+    if let Some(rest) = expr.strip_prefix("f.") {
+        ctx.script_engine.remove_key("f", rest);
+    } else if let Some(rest) = expr.strip_prefix("sf.") {
+        ctx.script_engine.remove_key("sf", rest);
+    } else if let Some(rest) = expr.strip_prefix("tf.") {
+        ctx.script_engine.remove_key("tf", rest);
+    }
+}
+
 // ─── Param resolution helpers ─────────────────────────────────────────────────
 
 /// Resolve a named tag parameter to a `String`, evaluating entities / macro refs.
@@ -598,6 +742,10 @@ mod tests {
                 KagEvent::Error(e) => format!("err:{}", e),
                 KagEvent::VariableChanged { .. } => "var_changed".to_string(),
                 KagEvent::Return { storage } => format!("return:{}", storage),
+                KagEvent::Trace(s) => format!("trace:{}", s),
+                KagEvent::PushBacklog { text, join } => {
+                    format!("pushlog:{}:{}", if *join { "join" } else { "add" }, text)
+                }
             })
             .collect()
     }
@@ -855,5 +1003,214 @@ mod tests {
         let (_, ctx) = run_script(src);
         let val = ctx.script_engine.get_f("from_script");
         assert!(val.is_some(), "iscript variable should be set");
+    }
+
+    // ── New internal-state tag tests ──────────────────────────────────────────
+
+    #[test]
+    fn test_clearvar_clears_all_f() {
+        let src = "[eval exp=\"f.a = 1; f.b = 2;\"]\n[clearvar]\n";
+        let (_, ctx) = run_script(src);
+        assert!(
+            ctx.script_engine.f().is_empty(),
+            "f should be empty after clearvar: {:?}",
+            ctx.script_engine.f()
+        );
+    }
+
+    #[test]
+    fn test_clearvar_removes_specific_key() {
+        let src = "[eval exp=\"f.keep = 1; f.remove = 2;\"]\n[clearvar exp=\"f.remove\"]\n";
+        let (_, ctx) = run_script(src);
+        let f = ctx.script_engine.f();
+        assert!(f.contains_key("keep"), "f.keep should remain");
+        assert!(!f.contains_key("remove"), "f.remove should be deleted");
+    }
+
+    #[test]
+    fn test_clearsysvar_clears_sf() {
+        let src = "[eval exp=\"sf.x = 99;\"]\n[clearsysvar]\n";
+        let (_, ctx) = run_script(src);
+        assert!(
+            ctx.script_engine.sf().is_empty(),
+            "sf should be empty after clearsysvar"
+        );
+    }
+
+    #[test]
+    fn test_clearstack_clears_call_stack() {
+        // Build a context with a non-empty call stack, then run [clearstack stack=call]
+        // and verify the stack is empty.
+        let src = "@clearstack stack=call\n";
+        let (script, _) = parse_script(src, "test.ks");
+        let mut ctx = RuntimeContext::new("test.ks");
+
+        // Manually push a fake call frame so there is something to clear
+        ctx.push_call(42);
+        assert_eq!(ctx.call_stack.len(), 1, "should have one frame before clearstack");
+
+        let _ = execute_op(&script, &mut ctx).expect("execute");
+
+        assert!(
+            ctx.call_stack.is_empty(),
+            "call stack should be empty after [clearstack stack=call]: {:?}",
+            ctx.call_stack
+        );
+    }
+
+    #[test]
+    fn test_clearstack_clears_all_stacks() {
+        let src = "@clearstack\n";
+        let (script, _) = parse_script(src, "test.ks");
+        let mut ctx = RuntimeContext::new("test.ks");
+
+        ctx.push_call(1);
+        ctx.push_if(true);
+        assert!(!ctx.call_stack.is_empty());
+        assert!(!ctx.if_stack.is_empty());
+
+        let _ = execute_op(&script, &mut ctx).expect("execute");
+
+        assert!(ctx.call_stack.is_empty(), "call stack cleared");
+        assert!(ctx.if_stack.is_empty(), "if stack cleared");
+    }
+
+    #[test]
+    fn test_erasemacro_prevents_invocation() {
+        // The macro body (hello) lives in ops[0] and runs on the interpreter's first
+        // iteration. After [erasemacro], a second [greet] call should be forwarded as
+        // a generic tag (not re-enter the body). We verify `tag:greet` is emitted and
+        // that the number of `text:hello` occurrences is exactly 1 (from body startup).
+        let src = "[macro name=greet]\nhello\n[endmacro]\n[erasemacro name=greet]\n[greet]\n";
+        let (events, _) = run_script(src);
+        let names = event_names(&events);
+        let hello_count = names.iter().filter(|n| n.as_str() == "text:hello").count();
+        assert_eq!(
+            hello_count, 1,
+            "body should run exactly once (initial body pass), not again after erasemacro: {:?}",
+            names
+        );
+        assert!(
+            names.iter().any(|n| n == "tag:greet"),
+            "erased macro should be forwarded as generic tag: {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn test_trace_emits_trace_event() {
+        let src = "[eval exp=\"f.val = 42;\"]\n[trace exp=\"f.val\"]\n";
+        let (events, _) = run_script(src);
+        assert!(
+            events.iter().any(|e| matches!(e, KagEvent::Trace(s) if s.contains("42"))),
+            "trace should emit Trace event with value: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_nowait_suppresses_l_wait() {
+        let src = "[nowait]\n@l\nafter\n";
+        let (events, _) = run_script(src);
+        // With nowait active, [l] should not emit WaitForClick
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, KagEvent::WaitForClick { .. })),
+            "WaitForClick should be suppressed by nowait: {:?}",
+            events
+        );
+        assert!(
+            events.iter().any(
+                |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))
+            ),
+            "text after [l] should still appear: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_endnowait_restores_l_wait() {
+        let src = "[nowait]\n[endnowait]\n@l\n";
+        let (events, _) = run_script(src);
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::WaitForClick { clear_after: false })),
+            "WaitForClick should be restored after endnowait: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_delay_sets_text_speed() {
+        let src = "[delay speed=50]\nhello\n";
+        let (events, _) = run_script(src);
+        assert!(
+            events.iter().any(
+                |e| matches!(e, KagEvent::DisplayText { text, speed: Some(50), .. } if text.contains("hello"))
+            ),
+            "DisplayText should carry speed=50: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_resetdelay_clears_speed() {
+        let src = "[delay speed=50]\n[resetdelay]\nhello\n";
+        let (events, _) = run_script(src);
+        assert!(
+            events.iter().any(
+                |e| matches!(e, KagEvent::DisplayText { text, speed: None, .. } if text.contains("hello"))
+            ),
+            "DisplayText should have speed=None after resetdelay: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_nolog_sets_log_false() {
+        let src = "[nolog]\nhidden\n[endnolog]\nvisible\n";
+        let (events, _) = run_script(src);
+        assert!(
+            events.iter().any(
+                |e| matches!(e, KagEvent::DisplayText { text, log: false, .. } if text.contains("hidden"))
+            ),
+            "text inside nolog should have log=false: {:?}",
+            events
+        );
+        assert!(
+            events.iter().any(
+                |e| matches!(e, KagEvent::DisplayText { text, log: true, .. } if text.contains("visible"))
+            ),
+            "text after endnolog should have log=true: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_pushlog_emits_event() {
+        let src = "[pushlog text=\"hello log\" join=false]\n";
+        let (events, _) = run_script(src);
+        assert!(
+            events.iter().any(
+                |e| matches!(e, KagEvent::PushBacklog { text, join: false } if text.contains("hello log"))
+            ),
+            "PushBacklog event expected: {:?}",
+            events
+        );
+    }
+
+    #[test]
+    fn test_pushlog_join_true() {
+        let src = "[pushlog text=\"appended\" join=true]\n";
+        let (events, _) = run_script(src);
+        assert!(
+            events.iter().any(
+                |e| matches!(e, KagEvent::PushBacklog { text: _, join: true })
+            ),
+            "PushBacklog with join=true expected: {:?}",
+            events
+        );
     }
 }

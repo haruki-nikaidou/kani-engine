@@ -20,12 +20,12 @@
 //! Hello, world![l]
 //! @jump target=*start
 //! "#;
-//!     let (mut interp, _task) =
+//!     let (mut interp, _task, _diags) =
 //!         KagInterpreter::spawn_from_source(source, "demo.ks").unwrap();
 //!
 //!     loop {
 //!         match interp.recv().await {
-//!             Some(KagEvent::DisplayText { text, speaker }) => {
+//!             Some(KagEvent::DisplayText { text, speaker, .. }) => {
 //!                 if let Some(spk) = speaker { print!("{spk}: "); }
 //!                 println!("{text}");
 //!             }

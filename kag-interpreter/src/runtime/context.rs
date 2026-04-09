@@ -3,6 +3,8 @@
 //! Holds the program counter, all three stacks (call / if / macro), the
 //! current speaker name, and the link-choice accumulator.
 
+use std::collections::HashSet;
+
 use rhai::Map;
 
 use super::script_engine::ScriptEngine;
@@ -79,6 +81,21 @@ pub struct RuntimeContext {
 
     /// True while inside a `[link]` block accumulating choice text.
     pub in_link: bool,
+
+    // ── Display mode flags ────────────────────────────────────────────────────
+    /// When `true`, `[l]` and `[p]` do not emit `WaitForClick` (set by `[nowait]`).
+    pub nowait: bool,
+
+    /// Per-character display speed in ms, if overridden by `[delay]`.
+    /// `None` means use the host/config default.
+    pub text_speed: Option<u64>,
+
+    /// When `false`, `DisplayText` events should not be recorded in the backlog
+    /// (controlled by `[nolog]` / `[endnolog]`).
+    pub log_enabled: bool,
+
+    /// Set of macro names that have been deleted at runtime via `[erasemacro]`.
+    pub erased_macros: HashSet<String>,
 }
 
 /// A choice being accumulated between `[link]` and `[endlink]`.
@@ -102,6 +119,38 @@ impl RuntimeContext {
             current_speaker: None,
             pending_choices: Vec::new(),
             in_link: false,
+            nowait: false,
+            text_speed: None,
+            log_enabled: true,
+            erased_macros: HashSet::new(),
+        }
+    }
+
+    // ── Stack clearing ────────────────────────────────────────────────────────
+
+    /// Clear a specific stack by name (`"call"`, `"if"`, or `"macro"`), or all
+    /// three if `which` is empty / unrecognised.
+    pub fn clear_stack(&mut self, which: &str) {
+        match which {
+            "call" => self.call_stack.clear(),
+            "if" => self.if_stack.clear(),
+            "macro" => {
+                // Restore the outermost mp before discarding macro frames
+                if let Some(frame) = self.macro_stack.first() {
+                    self.script_engine.set_mp(frame.saved_mp.clone());
+                }
+                self.macro_stack.clear();
+            }
+            _ => {
+                self.call_stack.clear();
+                self.if_stack.clear();
+                if !self.macro_stack.is_empty() {
+                    if let Some(frame) = self.macro_stack.first() {
+                        self.script_engine.set_mp(frame.saved_mp.clone());
+                    }
+                    self.macro_stack.clear();
+                }
+            }
         }
     }
 

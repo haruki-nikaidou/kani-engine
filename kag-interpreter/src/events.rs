@@ -24,9 +24,15 @@ pub enum KagEvent {
     // ── Text output ──────────────────────────────────────────────────────────
     /// Display a chunk of text in the current message window.
     /// `speaker` is set when a preceding `#name` shorthand was encountered.
+    /// `speed` is the per-character delay in ms (`None` = host default).
+    /// `log` indicates whether this text should be recorded in the backlog.
     DisplayText {
         text: String,
         speaker: Option<String>,
+        /// Per-character display delay in ms set by `[delay]`, or `None` for default.
+        speed: Option<u64>,
+        /// `false` while inside a `[nolog]` … `[endnolog]` block.
+        log: bool,
     },
 
     /// Insert a line break (`[r]`) inside the message window.
@@ -77,6 +83,16 @@ pub enum KagEvent {
     // ── Embedded expression output ───────────────────────────────────────────
     /// The result of an `[emb exp=…]` tag — display this string inline.
     EmbedText(String),
+
+    // ── Debug output ─────────────────────────────────────────────────────────
+    /// Result of a `[trace exp=…]` tag — the host may log this value.
+    Trace(String),
+
+    // ── Backlog control ───────────────────────────────────────────────────────
+    /// Inject an arbitrary string into the backlog (`[pushlog text=… join=…]`).
+    /// `join = true` means append to the previous log entry rather than creating
+    /// a new one.
+    PushBacklog { text: String, join: bool },
 
     // ── Passthrough for non-core tags ────────────────────────────────────────
     /// Any tag the interpreter does not handle internally is forwarded here.
