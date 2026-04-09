@@ -97,7 +97,7 @@ pub(crate) fn is_target_param_node(param: &kag_syntax::SyntaxNode) -> bool {
 
 /// Extract the key-name text from a `PARAM` node, using the same PARAM_KEY
 /// descent as [`is_target_param_node`].
-fn param_key_name(param: &kag_syntax::SyntaxNode) -> Option<String> {
+pub(crate) fn param_key_name(param: &kag_syntax::SyntaxNode) -> Option<String> {
     param
         .children()
         .find(|n| n.kind() == SyntaxKind::PARAM_KEY)
