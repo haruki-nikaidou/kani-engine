@@ -65,6 +65,7 @@ pub use kag_syntax::parser;
 
 pub mod events;
 pub mod runtime;
+pub mod snapshot;
 
 // ─── Primary public re-exports ────────────────────────────────────────────────
 
@@ -79,6 +80,9 @@ pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 
 /// Rich error type with source-code attribution.
 pub use error::KagError;
+
+/// Serialisable interpreter snapshot for save / load support.
+pub use snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSnap};
 
 /// Parse a `.ks` source string into a `Script` together with any diagnostics.
 /// Returns `(Script<'static>, Vec<ParseDiagnostic>)`.

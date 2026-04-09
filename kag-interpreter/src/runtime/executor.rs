@@ -749,6 +749,7 @@ mod tests {
                 KagEvent::PushBacklog { text, join } => {
                     format!("pushlog:{}:{}", if *join { "join" } else { "add" }, text)
                 }
+                KagEvent::Snapshot(_) => "snapshot".to_string(),
             })
             .collect()
     }

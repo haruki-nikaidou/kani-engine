@@ -7,6 +7,10 @@ use std::collections::HashSet;
 
 use rhai::Map;
 
+use crate::error::KagError;
+use crate::snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSnap};
+
+
 use super::script_engine::ScriptEngine;
 
 // ─── Stack frames ─────────────────────────────────────────────────────────────
@@ -281,5 +285,126 @@ impl RuntimeContext {
             None => true,
             Some(expr) => self.script_engine.eval_bool(expr).unwrap_or(true),
         }
+    }
+
+    // ── Snapshot ──────────────────────────────────────────────────────────────
+
+    /// Serialise the full runtime state into an [`InterpreterSnapshot`].
+    ///
+    /// This captures `pc`, all variable maps (`f`, `sf`, `mp`), all three
+    /// execution stacks, and the display-mode flags.  Transient variables
+    /// (`tf`) are intentionally excluded.
+    pub fn to_snapshot(&self) -> Result<InterpreterSnapshot, KagError> {
+        let f = self.script_engine.map_to_json("f")?;
+        let sf = self.script_engine.map_to_json("sf")?;
+        let mp = self.script_engine.map_to_json("mp")?;
+
+        let call_stack = self
+            .call_stack
+            .iter()
+            .map(|fr| CallFrameSnap {
+                return_pc: fr.return_pc,
+                return_storage: fr.return_storage.clone(),
+            })
+            .collect();
+
+        let if_stack = self
+            .if_stack
+            .iter()
+            .map(|fr| IfFrameSnap {
+                depth: fr.depth,
+                executing: fr.executing,
+                branch_taken: fr.branch_taken,
+            })
+            .collect();
+
+        let macro_stack = self
+            .macro_stack
+            .iter()
+            .map(|fr| {
+                let saved_mp = serde_json::to_value(&fr.saved_mp)
+                    .map_err(|e| KagError::SerializationError(e.to_string()))?;
+                Ok(MacroFrameSnap {
+                    macro_name: fr.macro_name.clone(),
+                    return_pc: fr.return_pc,
+                    saved_mp,
+                })
+            })
+            .collect::<Result<Vec<_>, KagError>>()?;
+
+        let erased_macros = self.erased_macros.iter().cloned().collect();
+
+        Ok(InterpreterSnapshot {
+            pc: self.pc,
+            storage: self.current_storage.clone(),
+            f,
+            sf,
+            mp,
+            call_stack,
+            if_stack,
+            macro_stack,
+            nowait: self.nowait,
+            text_speed: self.text_speed,
+            log_enabled: self.log_enabled,
+            erased_macros,
+        })
+    }
+
+    /// Restore all runtime state from an [`InterpreterSnapshot`].
+    ///
+    /// The caller is responsible for re-parsing the correct scenario source
+    /// and pointing the interpreter task at the restored `pc`.
+    /// Transient variables (`tf`) are reset to empty.
+    pub fn restore_from_snapshot(&mut self, snap: &InterpreterSnapshot) -> Result<(), KagError> {
+        self.pc = snap.pc;
+        self.current_storage = snap.storage.clone();
+
+        self.script_engine.restore_map("f", &snap.f)?;
+        self.script_engine.restore_map("sf", &snap.sf)?;
+        self.script_engine.restore_map("mp", &snap.mp)?;
+        self.script_engine.clear_tf();
+
+        self.call_stack = snap
+            .call_stack
+            .iter()
+            .map(|fr| CallFrame {
+                return_pc: fr.return_pc,
+                return_storage: fr.return_storage.clone(),
+            })
+            .collect();
+
+        self.if_stack = snap
+            .if_stack
+            .iter()
+            .map(|fr| IfFrame {
+                depth: fr.depth,
+                executing: fr.executing,
+                branch_taken: fr.branch_taken,
+            })
+            .collect();
+
+        self.macro_stack = snap
+            .macro_stack
+            .iter()
+            .map(|fr| {
+                let saved_mp: Map = serde_json::from_value(fr.saved_mp.clone())
+                    .map_err(|e| KagError::SerializationError(e.to_string()))?;
+                Ok(MacroFrame {
+                    macro_name: fr.macro_name.clone(),
+                    return_pc: fr.return_pc,
+                    saved_mp,
+                })
+            })
+            .collect::<Result<Vec<_>, KagError>>()?;
+
+        self.current_speaker = None;
+        self.pending_choices.clear();
+        self.in_link = false;
+        self.nowait = snap.nowait;
+        self.text_speed = snap.text_speed;
+        self.log_enabled = snap.log_enabled;
+        self.erased_macros = snap.erased_macros.iter().cloned().collect();
+
+        Ok(())
     }
 }

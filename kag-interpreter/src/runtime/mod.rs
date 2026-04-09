@@ -21,6 +21,7 @@ use crate::ast::Script;
 use crate::error::{KagError, ParseDiagnostic};
 use crate::events::{HostEvent, KagEvent};
 use crate::parser::parse_script;
+use crate::snapshot::InterpreterSnapshot;
 
 use context::RuntimeContext;
 use executor::execute_op;
@@ -92,6 +93,37 @@ impl KagInterpreter {
         Ok((handle, task, diags))
     }
 
+    /// Restore a previously saved interpreter from a snapshot and spawn it.
+    ///
+    /// `source` must be the `.ks` source text of `snapshot.storage` (the
+    /// scenario file that was active at save time).  The script is re-parsed
+    /// from that source so that op indices are stable — **the source must not
+    /// have changed since the snapshot was taken**.
+    ///
+    /// If the call stack contains cross-file frames (a `[call]` that jumped
+    /// into a different file), those files do not need to be supplied here;
+    /// they will be requested via the normal `KagEvent::Return` /
+    /// `HostEvent::ScenarioLoaded` mechanism when `[return]` is encountered.
+    ///
+    /// Any parse diagnostics are returned alongside the handle.
+    pub fn spawn_from_snapshot(
+        snapshot: InterpreterSnapshot,
+        source: &str,
+    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<ParseDiagnostic>), KagError> {
+        let source_name = snapshot.storage.clone();
+        let (script, diags) = parse_script(source, &source_name);
+
+        let (event_tx, event_rx) = mpsc::channel(EVENT_CHANNEL_CAP);
+        let (input_tx, input_rx) = mpsc::channel(INPUT_CHANNEL_CAP);
+
+        let task = tokio::task::spawn_local(interpreter_task_from_snapshot(
+            script, snapshot, event_tx, input_rx,
+        ));
+
+        let handle = Self { input_tx, event_rx };
+        Ok((handle, task, diags))
+    }
+
     // ── Channel convenience ───────────────────────────────────────────────────
 
     /// Receive the next `KagEvent` from the interpreter, blocking asynchronously.
@@ -110,6 +142,42 @@ impl KagInterpreter {
 
 // ─── Interpreter task ─────────────────────────────────────────────────────────
 
+// ─── Snapshot helper ──────────────────────────────────────────────────────────
+
+/// Emit a snapshot event if `ctx.to_snapshot()` succeeds, or an error event.
+async fn emit_snapshot(ctx: &RuntimeContext, event_tx: &mpsc::Sender<KagEvent>) {
+    match ctx.to_snapshot() {
+        Ok(snap) => {
+            let _ = event_tx.send(KagEvent::Snapshot(Box::new(snap))).await;
+        }
+        Err(e) => {
+            let _ = event_tx
+                .send(KagEvent::Error(format!("snapshot error: {e}")))
+                .await;
+        }
+    }
+}
+
+// ─── Interpreter tasks ────────────────────────────────────────────────────────
+
+/// Spawn variant: restore an interpreter from a saved snapshot.
+async fn interpreter_task_from_snapshot(
+    script: Script<'static>,
+    snapshot: InterpreterSnapshot,
+    event_tx: mpsc::Sender<KagEvent>,
+    input_rx: mpsc::Receiver<HostEvent>,
+) {
+    let storage = snapshot.storage.clone();
+    let mut ctx = RuntimeContext::new(storage);
+    if let Err(e) = ctx.restore_from_snapshot(&snapshot) {
+        let _ = event_tx
+            .send(KagEvent::Error(format!("restore error: {e}")))
+            .await;
+        return;
+    }
+    run_interpreter(script, ctx, event_tx, input_rx).await;
+}
+
 /// The async task that runs the KAG scenario.
 ///
 /// Scenario execution is a simple loop:
@@ -118,12 +186,22 @@ impl KagInterpreter {
 ///  3. If the op requires a host response, await the appropriate `HostEvent`.
 ///  4. Handle scenario-loading when a `Jump`/`Call` targets a different file.
 async fn interpreter_task(
-    mut script: Script<'static>,
+    script: Script<'static>,
     storage: String,
+    event_tx: mpsc::Sender<KagEvent>,
+    input_rx: mpsc::Receiver<HostEvent>,
+) {
+    let ctx = RuntimeContext::new(storage);
+    run_interpreter(script, ctx, event_tx, input_rx).await;
+}
+
+/// Core interpreter loop shared by the normal and snapshot-restore paths.
+async fn run_interpreter(
+    mut script: Script<'static>,
+    mut ctx: RuntimeContext,
     event_tx: mpsc::Sender<KagEvent>,
     mut input_rx: mpsc::Receiver<HostEvent>,
 ) {
-    let mut ctx = RuntimeContext::new(storage);
 
     loop {
         // ── Execute the next op ───────────────────────────────────────────
@@ -155,6 +233,9 @@ async fn interpreter_task(
                     loop {
                         match input_rx.recv().await {
                             Some(HostEvent::Clicked) | Some(HostEvent::Resume) => break,
+                            Some(HostEvent::TakeSnapshot) => {
+                                emit_snapshot(&ctx, &event_tx).await;
+                            }
                             None => return, // channel closed
                             _ => {}         // ignore unrelated events
                         }
@@ -167,6 +248,9 @@ async fn interpreter_task(
                     loop {
                         match input_rx.recv().await {
                             Some(HostEvent::Clicked) => break,
+                            Some(HostEvent::TakeSnapshot) => {
+                                emit_snapshot(&ctx, &event_tx).await;
+                            }
                             None => return,
                             _ => {}
                         }
@@ -182,6 +266,9 @@ async fn interpreter_task(
                     loop {
                         match input_rx.recv().await {
                             Some(HostEvent::TimerElapsed) | Some(HostEvent::Clicked) => break,
+                            Some(HostEvent::TakeSnapshot) => {
+                                emit_snapshot(&ctx, &event_tx).await;
+                            }
                             None => return,
                             _ => {}
                         }
@@ -297,6 +384,9 @@ async fn interpreter_task(
                                 ctx.script_engine
                                     .set_f("_last_choice", rhai::Dynamic::from(idx as i64));
                                 break;
+                            }
+                            Some(HostEvent::TakeSnapshot) => {
+                                emit_snapshot(&ctx, &event_tx).await;
                             }
                             None => return,
                             _ => {}
@@ -552,6 +642,104 @@ mod tests {
                 "{:?}",
                 post
             );
+        })
+        .await;
+    }
+
+    // ── Snapshot tests ────────────────────────────────────────────────────────
+
+    /// Save state at `[l]`, restore from the snapshot, and verify that the
+    /// script resumes and completes from the correct position.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_snapshot_round_trip() {
+        with_local(|| async {
+            // Script: set a variable, display "before", wait for click, display "after".
+            let src = "[eval exp=\"f.x = 99;\"]\nbefore\n@l\nafter\n";
+
+            // ── Phase 1: run until the click wait, then snapshot ───────────
+            let (mut h1, _t1, _) =
+                KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
+
+            // Collect events up to and including WaitForClick
+            loop {
+                match h1.recv().await {
+                    Some(KagEvent::WaitForClick { .. }) | None => break,
+                    _ => {}
+                }
+            }
+
+            // Request a snapshot while paused
+            h1.send(HostEvent::TakeSnapshot).await.unwrap();
+            let snap = loop {
+                match h1.recv().await {
+                    Some(KagEvent::Snapshot(s)) => break *s,
+                    None => panic!("channel closed before snapshot"),
+                    _ => {}
+                }
+            };
+
+            // Verify the snapshot captured f.x = 99
+            assert_eq!(snap.f.get("x").and_then(|v| v.as_i64()), Some(99));
+
+            // ── Phase 2: restore and continue ────────────────────────────────
+            let (mut h2, _t2, _) =
+                KagInterpreter::spawn_from_snapshot(snap, src).unwrap();
+
+            // Resume by clicking
+            h2.send(HostEvent::Clicked).await.unwrap();
+
+            let mut got_after = false;
+            loop {
+                match h2.recv().await {
+                    Some(KagEvent::DisplayText { text, .. }) if text.contains("after") => {
+                        got_after = true;
+                    }
+                    Some(KagEvent::End) | None => break,
+                    _ => {}
+                }
+            }
+            assert!(got_after, "expected 'after' text after snapshot restore");
+        })
+        .await;
+    }
+
+    /// Snapshot/restore preserves the `sf` (system) and `f` (game) variable
+    /// maps across the round-trip.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_snapshot_variables_preserved() {
+        with_local(|| async {
+            let src = "[eval exp=\"f.score = 42; sf.unlocked = true;\"]\n@l\n";
+
+            let (mut h, _t, _) = KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
+
+            loop {
+                match h.recv().await {
+                    Some(KagEvent::WaitForClick { .. }) | None => break,
+                    _ => {}
+                }
+            }
+
+            h.send(HostEvent::TakeSnapshot).await.unwrap();
+            let snap = loop {
+                match h.recv().await {
+                    Some(KagEvent::Snapshot(s)) => break *s,
+                    None => panic!("no snapshot"),
+                    _ => {}
+                }
+            };
+
+            assert_eq!(snap.f.get("score").and_then(|v| v.as_i64()), Some(42));
+            assert_eq!(
+                snap.sf.get("unlocked").and_then(|v| v.as_bool()),
+                Some(true)
+            );
+
+            // Round-trip through JSON
+            let json = serde_json::to_string(&snap).expect("serialize");
+            let snap2: crate::snapshot::InterpreterSnapshot =
+                serde_json::from_str(&json).expect("deserialize");
+
+            assert_eq!(snap2.f.get("score").and_then(|v| v.as_i64()), Some(42));
         })
         .await;
     }

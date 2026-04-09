@@ -194,6 +194,31 @@ impl ScriptEngine {
             .unwrap_or(Dynamic::UNIT)
     }
 
+    // ── Snapshot helpers ──────────────────────────────────────────────────────
+
+    /// Serialise a named variable map (`"f"`, `"sf"`, or `"mp"`) to a
+    /// `serde_json::Value`.  Returns `Value::Object({})` on any error.
+    pub fn map_to_json(&self, name: &str) -> Result<serde_json::Value, KagError> {
+        let map = match name {
+            "f" => self.f(),
+            "sf" => self.sf(),
+            "tf" => self.tf(),
+            "mp" => self.mp(),
+            _ => Map::new(),
+        };
+        serde_json::to_value(&map)
+            .map_err(|e| KagError::SerializationError(e.to_string()))
+    }
+
+    /// Deserialise a `serde_json::Value` back into a named scope map.
+    /// Existing scope entries are replaced.
+    pub fn restore_map(&mut self, name: &str, json: &serde_json::Value) -> Result<(), KagError> {
+        let map: Map = serde_json::from_value(json.clone())
+            .map_err(|e| KagError::SerializationError(e.to_string()))?;
+        set_map_in_scope(&mut self.scope, name, map);
+        Ok(())
+    }
+
     /// Resolve a parameter value string that may start with `&` (entity
     /// expression) or `%key|default` (macro param reference).
     ///

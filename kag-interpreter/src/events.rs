@@ -1,3 +1,5 @@
+use crate::snapshot::InterpreterSnapshot;
+
 /// The variable-scope identifiers used in KAG scripts.
 ///
 /// - `F`  — per-play game flags (`f.flag_name`)
@@ -111,6 +113,14 @@ pub enum KagEvent {
 
     /// A fatal interpreter error.  The runtime will stop after emitting this.
     Error(String),
+
+    /// A complete snapshot of the current interpreter state, emitted in
+    /// response to `HostEvent::TakeSnapshot`.
+    ///
+    /// The host should serialise this to JSON (via `serde_json::to_string`) and
+    /// write it to disk as a save file.  Restore with
+    /// `KagInterpreter::spawn_from_snapshot`.
+    Snapshot(Box<InterpreterSnapshot>),
 }
 
 // ─── Events sent from the host to the interpreter ────────────────────────────
@@ -134,6 +144,14 @@ pub enum HostEvent {
 
     /// Explicit signal to resume from a `Stop` state.
     Resume,
+
+    /// Request an [`InterpreterSnapshot`] of the current runtime state.
+    ///
+    /// The interpreter will respond with `KagEvent::Snapshot(…)` on the event
+    /// channel.  This may only be sent while the interpreter is paused at a
+    /// wait point (`WaitForClick`, `WaitMs`, or `Stop`); sending it at other
+    /// times is silently ignored.
+    TakeSnapshot,
 }
 
 // ─── Supporting types ─────────────────────────────────────────────────────────
