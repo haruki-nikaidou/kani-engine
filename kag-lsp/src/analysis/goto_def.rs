@@ -20,7 +20,11 @@ pub fn goto_definition(doc: &ParsedDoc, uri: &Url, offset: usize) -> Option<Loca
         TokenAtOffset::None => return None,
         TokenAtOffset::Single(t) => t,
         TokenAtOffset::Between(left, right) => {
-            if left.kind() == SyntaxKind::WHITESPACE { right } else { left }
+            if left.kind() == SyntaxKind::WHITESPACE {
+                right
+            } else {
+                left
+            }
         }
     };
 
@@ -36,7 +40,10 @@ pub fn goto_definition(doc: &ParsedDoc, uri: &Url, offset: usize) -> Option<Loca
             // Macro call → jump to macro definition tag.
             let target_range = *doc.index.macros.get(text)?;
             let lsp_range = text_range_to_lsp_range(&doc.source, target_range);
-            Some(Location { uri: uri.clone(), range: lsp_range })
+            Some(Location {
+                uri: uri.clone(),
+                range: lsp_range,
+            })
         }
         SyntaxKind::PARAM_VALUE_LITERAL => {
             // Could be `target=labelname` or `storage=filename`.
@@ -44,7 +51,10 @@ pub fn goto_definition(doc: &ParsedDoc, uri: &Url, offset: usize) -> Option<Loca
             if grandparent.kind() == SyntaxKind::PARAM && is_target_param_node(&grandparent) {
                 let target_range = *doc.index.labels.get(text)?;
                 let lsp_range = text_range_to_lsp_range(&doc.source, target_range);
-                Some(Location { uri: uri.clone(), range: lsp_range })
+                Some(Location {
+                    uri: uri.clone(),
+                    range: lsp_range,
+                })
             } else {
                 None
             }
@@ -54,10 +64,20 @@ pub fn goto_definition(doc: &ParsedDoc, uri: &Url, offset: usize) -> Option<Loca
 }
 
 fn is_target_param_node(param: &kag_syntax::SyntaxNode) -> bool {
+    // The parser wraps the key IDENT inside a PARAM_KEY child *node*, so it is
+    // never a direct token child of PARAM.  We must descend into PARAM_KEY to
+    // read the parameter name; only then check whether it is "target" or
+    // "storage".  Iterating direct token children (as the old code did) always
+    // yielded only the EQ token and therefore always returned false.
     param
-        .children_with_tokens()
-        .filter_map(|e| e.into_token())
-        .any(|t: kag_syntax::SyntaxToken| {
-            t.kind() == SyntaxKind::IDENT && matches!(t.text(), "target" | "storage")
+        .children()
+        .find(|n| n.kind() == SyntaxKind::PARAM_KEY)
+        .and_then(|key_node| {
+            key_node
+                .children_with_tokens()
+                .filter_map(|e| e.into_token())
+                .find(|t| t.kind() == SyntaxKind::IDENT)
         })
+        .map(|t| matches!(t.text(), "target" | "storage"))
+        .unwrap_or(false)
 }
