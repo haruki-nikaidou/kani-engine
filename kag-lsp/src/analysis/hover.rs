@@ -1,6 +1,7 @@
 //! Hover provider — returns Markdown documentation for the token under cursor.
 
 use kag_syntax::SyntaxKind;
+use kag_syntax::cst::{self, AstNode as _};
 use rowan::{TextSize, TokenAtOffset};
 use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind};
 
@@ -72,6 +73,15 @@ pub fn hover(doc: &ParsedDoc, offset: usize) -> Option<Hover> {
             }
         }
         SyntaxKind::LABEL_DEF => {
+            // Only show the hover when the hovered token is the exact name
+            // token of the label (the IDENT immediately after the `*`).
+            // Title tokens (after `|`) and any other IDENT children of the
+            // LABEL_DEF node must not trigger this arm.
+            let label_def = cst::LabelDef::cast(parent.clone())?;
+            let name_token = label_def.name_token()?;
+            if name_token.text_range() != token.text_range() {
+                return None;
+            }
             format!("**label definition** `*{text}`")
         }
         SyntaxKind::PARAM_VALUE_LITERAL | SyntaxKind::PARAM_VALUE_MACRO => {
