@@ -4,19 +4,19 @@ overview: "Fix three interconnected bugs in the `[link]`/`[endlink]` choice syst
 todos:
   - id: fix1-text-accum
     content: "executor.rs: in execute_text, redirect text flushing into pending_choices.last_mut().text when ctx.in_link is true"
-    status: pending
+    status: completed
   - id: fix2-single-choice
     content: "executor.rs: lower the TAG_ENDLINK threshold from >= 2 to >= 1"
-    status: pending
+    status: completed
   - id: fix3-extract-jump
     content: "mod.rs: extract the Jump arm's inlined logic into a perform_jump async fn"
-    status: pending
+    status: completed
   - id: fix3-choice-nav
     content: "mod.rs: rewrite the BeginChoices arm to clone choices, evaluate exp, and call perform_jump after ChoiceSelected"
-    status: pending
+    status: completed
   - id: tests
     content: Add unit/integration tests for link text capture, single-choice, and post-choice navigation
-    status: pending
+    status: completed
 isProject: false
 ---
 

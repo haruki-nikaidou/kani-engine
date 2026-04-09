@@ -142,12 +142,19 @@ fn execute_text<'s>(
                 // Flush accumulated text before the inline tag using the state
                 // that was active when those characters were produced.
                 if !text_buf.is_empty() {
-                    events.push(KagEvent::DisplayText {
-                        text: std::mem::take(&mut text_buf),
-                        speaker: speaker.clone(),
-                        speed: current_speed,
-                        log: current_log,
-                    });
+                    if ctx.in_link {
+                        if let Some(c) = ctx.pending_choices.last_mut() {
+                            c.text.push_str(&text_buf);
+                        }
+                        text_buf.clear();
+                    } else {
+                        events.push(KagEvent::DisplayText {
+                            text: std::mem::take(&mut text_buf),
+                            speaker: speaker.clone(),
+                            speed: current_speed,
+                            log: current_log,
+                        });
+                    }
                 }
                 // Execute the inline tag (may mutate ctx.text_speed / ctx.log_enabled)
                 let mut inline_events = execute_inline_tag(ctx, tag)?;
@@ -161,12 +168,18 @@ fn execute_text<'s>(
 
     // Flush any remaining text
     if !text_buf.is_empty() {
-        events.push(KagEvent::DisplayText {
-            text: text_buf,
-            speaker,
-            speed: current_speed,
-            log: current_log,
-        });
+        if ctx.in_link {
+            if let Some(c) = ctx.pending_choices.last_mut() {
+                c.text.push_str(&text_buf);
+            }
+        } else {
+            events.push(KagEvent::DisplayText {
+                text: text_buf,
+                speaker,
+                speed: current_speed,
+                log: current_log,
+            });
+        }
     }
 
     ctx.advance();
@@ -357,7 +370,7 @@ fn execute_tag<'s>(
 
         TAG_ENDLINK => {
             ctx.in_link = false;
-            if ctx.pending_choices.len() >= 2 {
+            if ctx.pending_choices.len() >= 1 {
                 // Emit all accumulated choices as a choice prompt
                 let choices: Vec<ChoiceOption> = ctx
                     .pending_choices
@@ -1296,5 +1309,59 @@ mod tests {
             "PushBacklog with join=true expected: {:?}",
             events
         );
+    }
+
+    // ── Choice-system fix tests ───────────────────────────────────────────────
+
+    /// Fix 1: text between [link] and [endlink] must be captured in the
+    /// `ChoiceOption.text` field, not emitted as `DisplayText`.
+    ///
+    /// The KAG convention is to place each `@link` on its own line and close
+    /// the entire group with a single `@endlink` at the end.
+    #[test]
+    fn test_link_text_captured_in_choice() {
+        let src = "@link target=*a\nGo left\n@link target=*b\nGo right\n@endlink\n";
+        let (events, _) = run_script(src);
+
+        // No DisplayText events should appear for link labels
+        assert!(
+            !events.iter().any(
+                |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("Go left") || text.contains("Go right"))
+            ),
+            "link text must not be emitted as DisplayText: {:?}",
+            events
+        );
+
+        // The BeginChoices event must carry the correct text
+        let choices_event = events.iter().find_map(|e| {
+            if let KagEvent::BeginChoices(c) = e {
+                Some(c.clone())
+            } else {
+                None
+            }
+        });
+        let choices = choices_event.expect("BeginChoices expected");
+        assert_eq!(choices.len(), 2, "expected 2 choices: {:?}", choices);
+        assert_eq!(choices[0].text, "Go left");
+        assert_eq!(choices[1].text, "Go right");
+    }
+
+    /// Fix 2: a single [link]…[endlink] pair must emit BeginChoices.
+    #[test]
+    fn test_single_link_emits_begin_choices() {
+        let src = "@link target=*a\nOnly option\n@endlink\n";
+        let (events, _) = run_script(src);
+
+        let choices_event = events.iter().find_map(|e| {
+            if let KagEvent::BeginChoices(c) = e {
+                Some(c.clone())
+            } else {
+                None
+            }
+        });
+        let choices = choices_event.expect("BeginChoices expected for single link");
+        assert_eq!(choices.len(), 1);
+        assert_eq!(choices[0].text, "Only option");
+        assert_eq!(choices[0].target.as_deref(), Some("*a"));
     }
 }

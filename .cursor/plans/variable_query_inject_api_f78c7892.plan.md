@@ -4,16 +4,16 @@ overview: "Add two-way variable access to `KagInterpreter` without shared state:
 todos:
   - id: events-types
     content: Add `VariableSnapshot` struct and two new `HostEvent` variants (`SetVariable`, `QueryVariables`) to events.rs
-    status: pending
+    status: completed
   - id: side-band-helper
     content: Add `try_side_band()` helper function in mod.rs above `interpreter_task`
-    status: pending
+    status: completed
   - id: patch-loops
     content: Patch all five blocking `loop` bodies in `interpreter_task` to route events through `try_side_band` before the loop-specific match arms
-    status: pending
+    status: completed
   - id: public-api
     content: Add `set_variable()` and `snapshot()` async methods to the `KagInterpreter` impl block
-    status: pending
+    status: completed
 isProject: false
 ---
 

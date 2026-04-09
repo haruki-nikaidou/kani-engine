@@ -73,7 +73,7 @@ pub mod snapshot;
 pub use runtime::KagInterpreter;
 
 /// All event types used across the public API.
-pub use events::{ChoiceOption, HostEvent, KagEvent, VarScope};
+pub use events::{ChoiceOption, HostEvent, KagEvent, VarScope, VariableSnapshot};
 
 /// The parsed scenario representation.
 pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};

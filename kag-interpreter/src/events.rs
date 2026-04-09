@@ -126,7 +126,7 @@ pub enum KagEvent {
 // ─── Events sent from the host to the interpreter ────────────────────────────
 
 /// Events that the host sends to the interpreter to drive forward execution.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum HostEvent {
     /// The player clicked / tapped (advances past `[l]`, `[p]`, `Stop`).
     Clicked,
@@ -145,6 +145,19 @@ pub enum HostEvent {
     /// Explicit signal to resume from a `Stop` state.
     Resume,
 
+    /// Set a single variable. `value_expr` is evaluated as a Rhai expression
+    /// (e.g. `"42"`, `"true"`, `"\"Alice\""`).
+    SetVariable {
+        scope: VarScope,
+        key: String,
+        value_expr: String,
+    },
+
+    /// Request a point-in-time snapshot of all variable scopes.
+    /// The reply arrives through the oneshot channel — valid to call
+    /// whenever the interpreter is blocked at any pause point.
+    QueryVariables(tokio::sync::oneshot::Sender<VariableSnapshot>),
+
     /// Request an [`InterpreterSnapshot`] of the current runtime state.
     ///
     /// The interpreter will respond with `KagEvent::Snapshot(…)` on the event
@@ -152,6 +165,20 @@ pub enum HostEvent {
     /// wait point (`WaitForClick`, `WaitMs`, or `Stop`); sending it at other
     /// times is silently ignored.
     TakeSnapshot,
+}
+
+// ─── Variable snapshot ────────────────────────────────────────────────────────
+
+/// A point-in-time copy of all three variable scopes, with every value
+/// stringified for uniform handling by the host.
+#[derive(Debug, Clone)]
+pub struct VariableSnapshot {
+    /// Per-play game flags (`f.*`).
+    pub f: std::collections::HashMap<String, String>,
+    /// Persistent system flags (`sf.*`).
+    pub sf: std::collections::HashMap<String, String>,
+    /// Transient flags (`tf.*`).
+    pub tf: std::collections::HashMap<String, String>,
 }
 
 // ─── Supporting types ─────────────────────────────────────────────────────────
