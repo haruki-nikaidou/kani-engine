@@ -183,13 +183,8 @@ fn execute_inline_tag(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> Result<Vec<Kag
                 Ok(vec![KagEvent::WaitForClick { clear_after: false }])
             }
         }
-        TAG_P => {
-            if ctx.nowait {
-                Ok(vec![])
-            } else {
-                Ok(vec![KagEvent::WaitForClick { clear_after: true }])
-            }
-        }
+        // Always emit the clear signal; the host auto-advances when nowait is set.
+        TAG_P => Ok(vec![KagEvent::WaitForClick { clear_after: true }]),
         TAG_S => Ok(vec![KagEvent::Stop]),
         TAG_WAIT => {
             let ms = resolve_u64(ctx, tag, "time").unwrap_or(0);
@@ -251,13 +246,8 @@ fn execute_tag<'s>(
                 Ok(vec![KagEvent::WaitForClick { clear_after: false }])
             }
         }
-        TAG_P => {
-            if ctx.nowait {
-                Ok(vec![])
-            } else {
-                Ok(vec![KagEvent::WaitForClick { clear_after: true }])
-            }
-        }
+        // Always emit the clear signal; the host auto-advances when nowait is set.
+        TAG_P => Ok(vec![KagEvent::WaitForClick { clear_after: true }]),
         TAG_R => Ok(vec![KagEvent::InsertLineBreak]),
         TAG_S => Ok(vec![KagEvent::Stop]),
         TAG_CM => Ok(vec![KagEvent::ClearMessage]),
@@ -1140,6 +1130,36 @@ mod tests {
             "WaitForClick should be restored after endnowait: {:?}",
             events
         );
+    }
+
+    /// Regression test: [p] must always emit `WaitForClick { clear_after: true }` so
+    /// the host knows to clear the message window, even when nowait is active.
+    ///
+    /// Old code returned `Ok(vec![])` for [p] inside [nowait], silently dropping
+    /// the clear signal.  New code always emits the event and relies on the host
+    /// to auto-advance without blocking for real input.
+    #[test]
+    fn test_nowait_preserves_p_clear_signal() {
+        // Both the bracketed and @-line forms of [p] should be covered.
+        for src in &["[nowait]\n@p\nafter\n", "[nowait]\n[p]\nafter\n"] {
+            let (events, _) = run_script(src);
+
+            assert!(
+                events
+                    .iter()
+                    .any(|e| matches!(e, KagEvent::WaitForClick { clear_after: true })),
+                "[p] inside [nowait] must still emit WaitForClick{{clear_after:true}}: {:?}",
+                events
+            );
+
+            assert!(
+                events.iter().any(
+                    |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))
+                ),
+                "text after [p] should still appear when nowait is active: {:?}",
+                events
+            );
+        }
     }
 
     #[test]
