@@ -46,25 +46,29 @@ pub fn offset_to_position(source: &str, offset: usize) -> Position {
 pub fn position_to_offset(source: &str, pos: Position) -> usize {
     let mut line = 0u32;
     let mut col_utf16 = 0u32;
-    let mut prev_was_cr = false;
+    let mut chars = source.char_indices().peekable();
 
-    for (idx, ch) in source.char_indices() {
+    while let Some((idx, ch)) = chars.next() {
         if line == pos.line && col_utf16 == pos.character {
             return idx;
         }
-        if ch == '\r' {
-            line += 1;
-            col_utf16 = 0;
-            prev_was_cr = true;
-        } else if ch == '\n' {
-            if !prev_was_cr {
+        match ch {
+            '\r' => {
+                // Treat \r\n as a single line terminator so that a position
+                // at (next_line, 0) resolves to the byte *after* the full pair.
+                if chars.peek().map(|(_, c)| *c) == Some('\n') {
+                    chars.next();
+                }
                 line += 1;
                 col_utf16 = 0;
             }
-            prev_was_cr = false;
-        } else {
-            col_utf16 += ch.len_utf16() as u32;
-            prev_was_cr = false;
+            '\n' => {
+                line += 1;
+                col_utf16 = 0;
+            }
+            _ => {
+                col_utf16 += ch.len_utf16() as u32;
+            }
         }
 
         if line > pos.line {
