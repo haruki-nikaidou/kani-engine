@@ -8,19 +8,19 @@ thiserror = "2"
 anyhow = "1"
 
 # Interpreter
-winnow = "1.0"
-logos = "0.16"
-miette = { version = "7", features = ["fancy"] }
 rhai = "1.24"
 
 # Async
-tokio = { version = "1", features = ["sync", "rt", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["full"] }
 
 # Serialize
-serde = "1"
+serde = { version = "1", features = ["derive"] }
 
 # Syntax trees
 rowan = "0.16.1"
+winnow = "1.0"
+logos = "0.16"
+miette = { version = "7", features = ["fancy"] }
 
 # LSP
 tower-lsp = "0.20"
