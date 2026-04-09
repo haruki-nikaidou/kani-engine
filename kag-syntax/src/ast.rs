@@ -263,7 +263,11 @@ impl<'src> Op<'src> {
             Self::Tag(tag) => Op::Tag(tag.into_owned()),
             Self::Label(def) => Op::Label(def.into_owned()),
             Self::ScriptBlock { content, span } => Op::ScriptBlock { content, span },
-            Self::MacroDef { name, skip_to, span } => Op::MacroDef {
+            Self::MacroDef {
+                name,
+                skip_to,
+                span,
+            } => Op::MacroDef {
                 name: Cow::Owned(name.into_owned()),
                 skip_to,
                 span,
