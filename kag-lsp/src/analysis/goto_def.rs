@@ -49,12 +49,25 @@ pub fn goto_definition(doc: &ParsedDoc, uri: &Url, offset: usize) -> Option<Loca
             // Could be `target=labelname` or `storage=filename`.
             let grandparent = parent.parent()?;
             if grandparent.kind() == SyntaxKind::PARAM && is_target_param_node(&grandparent) {
-                let target_range = *doc.index.labels.get(text)?;
-                let lsp_range = text_range_to_lsp_range(&doc.source, target_range);
-                Some(Location {
-                    uri: uri.clone(),
-                    range: lsp_range,
-                })
+                // Distinguish the specific key: `target=<label>` resolves via
+                // the current document's label map, but `storage=<file>` holds
+                // a filename — looking it up in doc.index.labels would
+                // incorrectly match any label that happens to share the file
+                // name.  When no external ParsedDoc for the storage file is
+                // supplied, fall back to doc.index.labels only for `target`.
+                let key = param_key_name(&grandparent)?;
+                if key == "target" {
+                    let target_range = *doc.index.labels.get(text)?;
+                    let lsp_range = text_range_to_lsp_range(&doc.source, target_range);
+                    Some(Location {
+                        uri: uri.clone(),
+                        range: lsp_range,
+                    })
+                } else {
+                    // `storage=<file>`: cross-document label resolution requires
+                    // the storage ParsedDoc, which is not provided here.
+                    None
+                }
             } else {
                 None
             }
@@ -80,4 +93,19 @@ pub(crate) fn is_target_param_node(param: &kag_syntax::SyntaxNode) -> bool {
         })
         .map(|t| matches!(t.text(), "target" | "storage"))
         .unwrap_or(false)
+}
+
+/// Extract the key-name text from a `PARAM` node, using the same PARAM_KEY
+/// descent as [`is_target_param_node`].
+fn param_key_name(param: &kag_syntax::SyntaxNode) -> Option<String> {
+    param
+        .children()
+        .find(|n| n.kind() == SyntaxKind::PARAM_KEY)
+        .and_then(|key_node| {
+            key_node
+                .children_with_tokens()
+                .filter_map(|e| e.into_token())
+                .find(|t| t.kind() == SyntaxKind::IDENT)
+        })
+        .map(|t| t.text().to_owned())
 }
