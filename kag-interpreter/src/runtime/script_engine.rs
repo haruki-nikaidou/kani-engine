@@ -196,8 +196,10 @@ impl ScriptEngine {
 
     // ── Snapshot helpers ──────────────────────────────────────────────────────
 
-    /// Serialise a named variable map (`"f"`, `"sf"`, or `"mp"`) to a
-    /// `serde_json::Value`.  Returns `Value::Object({})` on any error.
+    /// Serialise a named variable map (`"f"`, `"sf"`, `"tf"`, or `"mp"`) to a
+    /// `serde_json::Value`.
+    ///
+    /// Returns `KagError::SerializationError` on serialisation failure.
     pub fn map_to_json(&self, name: &str) -> Result<serde_json::Value, KagError> {
         let map = match name {
             "f" => self.f(),
