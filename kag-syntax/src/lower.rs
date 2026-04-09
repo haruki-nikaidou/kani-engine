@@ -135,11 +135,6 @@ impl LowerCtx {
                         }
                         "macro" => {
                             if let Some(Item::MacroDef(def)) = items.get(i + 1) {
-                                // Treat as if the inline tag were an @macro.
-                                // We need an AtTag-like accessor; reuse the InlineTag data.
-                                let ast_tag =
-                                    self.lower_tag_node(tag.name(), tag.params(), tag.span());
-                                let _ = ast_tag; // macro tags don't emit an op
                                 self.lower_macro_def_from_inline(tag, def);
                                 i += 2;
                                 continue;
@@ -421,7 +416,6 @@ impl LowerCtx {
             self.push_error("macro definition is missing a `name` parameter", def.span());
             return;
         }
-        let body_start = self.ops.len();
         let name_cow: Cow<'static, str> = Cow::Owned(name.clone());
 
         // duplicate macro warning
@@ -429,7 +423,16 @@ impl LowerCtx {
             self.push_warning(format!("duplicate macro: {name}"), def.span());
         }
 
-        // Push a placeholder so body_start is recorded before lower_items advances ops.
+        // Emit [macro name=...] so the TAG_MACRO handler can jump past the body
+        // at runtime instead of falling through into it.
+        self.emit(Op::Tag(Tag {
+            name: Cow::Borrowed("macro"),
+            params: vec![Param::synthetic("name", name.clone())],
+            span: def.span(),
+        }));
+
+        let body_start = self.ops.len();
+
         self.macro_stack.push(name_cow.clone());
         self.macro_map.insert(
             name_cow.clone(),
@@ -442,10 +445,19 @@ impl LowerCtx {
         // Lower the body.
         self.lower_items(def.items());
 
+        // body_end is the index of the [endmacro] op that we are about to emit.
+        // TAG_MACRO jumps to body_end + 1 (past [endmacro]); TAG_ENDMACRO pops
+        // the macro frame and returns to the call site.
         let body_end = self.ops.len();
         if let Some(entry) = self.macro_map.get_mut(&name_cow) {
             entry.body_end = body_end;
         }
         self.macro_stack.pop();
+
+        self.emit(Op::Tag(Tag {
+            name: Cow::Borrowed("endmacro"),
+            params: vec![],
+            span: def.span(),
+        }));
     }
 }

@@ -1076,8 +1076,8 @@ mod tests {
         let names = event_names(&events);
         let hello_count = names.iter().filter(|n| n.as_str() == "text:hello").count();
         assert_eq!(
-            hello_count, 1,
-            "body should run exactly once (initial body pass), not again after erasemacro: {:?}",
+            hello_count, 0,
+            "macro body is skipped at definition time, so 'hello' should never be emitted: {:?}",
             names
         );
         assert!(
