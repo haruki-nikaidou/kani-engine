@@ -63,7 +63,7 @@ pub fn goto_definition(doc: &ParsedDoc, uri: &Url, offset: usize) -> Option<Loca
     }
 }
 
-fn is_target_param_node(param: &kag_syntax::SyntaxNode) -> bool {
+pub(crate) fn is_target_param_node(param: &kag_syntax::SyntaxNode) -> bool {
     // The parser wraps the key IDENT inside a PARAM_KEY child *node*, so it is
     // never a direct token child of PARAM.  We must descend into PARAM_KEY to
     // read the parameter name; only then check whether it is "target" or
