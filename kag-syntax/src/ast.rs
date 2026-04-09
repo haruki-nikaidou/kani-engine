@@ -194,15 +194,17 @@ impl<'src> LabelDef<'src> {
 
 // ─── Macro definition ─────────────────────────────────────────────────────────
 
-/// The body range of a `[macro name=foo]` … `[endmacro]` block.
-/// Stores the inclusive op-list index range for the macro's body.
+/// The invocation target of a `[macro name=foo]` … `[endmacro]` block.
+///
+/// Only `body_start` is needed at runtime: it is the jump target when the
+/// macro is *called*. The skip-past-body target is encoded directly on
+/// [`Op::MacroDef`] so that duplicate definitions each carry their own
+/// concrete skip address.
 #[derive(Debug, Clone)]
 pub struct MacroDef {
     /// Index into `Script::ops` where the body starts (one past the
-    /// `[macro]` tag itself).
+    /// `[macro]` header op itself).
     pub body_start: usize,
-    /// Index into `Script::ops` one past the final op before `[endmacro]`.
-    pub body_end: usize,
 }
 
 // ─── Op stream ────────────────────────────────────────────────────────────────
@@ -226,6 +228,18 @@ pub enum Op<'src> {
         /// Byte span of the entire `[iscript]…[endscript]` block.
         span: Span,
     },
+    /// The header of a `[macro name=…]` … `[endmacro]` definition block.
+    ///
+    /// At runtime the interpreter must skip the entire body by jumping to
+    /// `skip_to` (the op index immediately after `[endmacro]`).  The target
+    /// is encoded here rather than resolved through `macro_map` so that
+    /// duplicate macro definitions each carry their own correct skip address.
+    MacroDef {
+        name: Cow<'src, str>,
+        /// Op index of the first instruction *after* the matching `[endmacro]`.
+        skip_to: usize,
+        span: Span,
+    },
 }
 
 impl<'src> Op<'src> {
@@ -236,6 +250,7 @@ impl<'src> Op<'src> {
             Self::Tag(t) => t.span,
             Self::Label(l) => l.span,
             Self::ScriptBlock { span, .. } => *span,
+            Self::MacroDef { span, .. } => *span,
         }
     }
 
@@ -248,6 +263,11 @@ impl<'src> Op<'src> {
             Self::Tag(tag) => Op::Tag(tag.into_owned()),
             Self::Label(def) => Op::Label(def.into_owned()),
             Self::ScriptBlock { content, span } => Op::ScriptBlock { content, span },
+            Self::MacroDef { name, skip_to, span } => Op::MacroDef {
+                name: Cow::Owned(name.into_owned()),
+                skip_to,
+                span,
+            },
         }
     }
 }

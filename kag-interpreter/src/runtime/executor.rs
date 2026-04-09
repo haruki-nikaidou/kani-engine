@@ -30,7 +30,6 @@ const TAG_ELSE: &str = "else";
 const TAG_ENDIF: &str = "endif";
 const TAG_IGNORE: &str = "ignore";
 const TAG_ENDIGNORE: &str = "endignore";
-const TAG_MACRO: &str = "macro";
 const TAG_ENDMACRO: &str = "endmacro";
 const TAG_EVAL: &str = "eval";
 const TAG_EMB: &str = "emb";
@@ -106,6 +105,13 @@ pub fn execute_op<'s>(
                 .exec(&script_text)
                 .map(|_| vec![])
                 .or_else(|e| Ok(vec![KagEvent::Error(e.to_string())]))
+        }
+        // Skip past the macro body to the op after [endmacro].  skip_to was
+        // encoded at compile time for *this specific definition*, so duplicate
+        // macro names each jump to their own correct target.
+        Op::MacroDef { skip_to, .. } => {
+            ctx.jump_to(*skip_to);
+            Ok(vec![])
         }
     }
 }
@@ -389,17 +395,6 @@ fn execute_tag<'s>(
             }
             // Also forward as a generic event for the host's character system
             Ok(vec![build_generic_event(ctx, tag)])
-        }
-
-        // ── Macro skeleton (body already registered at parse time) ────────
-        TAG_MACRO => {
-            // At runtime, skip past the macro body.  body_end is the index of
-            // [endmacro]; jump to body_end + 1.
-            let macro_name = tag.param_str("name").unwrap_or("").to_owned();
-            if let Some(def) = script.macro_map.get(macro_name.as_str()) {
-                ctx.jump_to(def.body_end + 1);
-            }
-            Ok(vec![])
         }
 
         TAG_ENDMACRO => {
@@ -1242,6 +1237,46 @@ mod tests {
             ),
             "PushBacklog event expected: {:?}",
             events
+        );
+    }
+
+    /// Regression: when a macro is defined twice, each `[macro]` header op must
+    /// jump to *its own* `skip_to`, not the last definition's.  Before the fix
+    /// the first `[macro]` header resolved the jump target by looking up the
+    /// macro name in `macro_map`, which always returned the last definition's
+    /// `body_end`, causing ops between the two definitions to be silently
+    /// skipped.
+    #[test]
+    fn test_duplicate_macro_skip_target() {
+        // Script layout:
+        //   [macro name=greet] / v1 body / [endmacro]   <- first definition
+        //   between                                       <- must NOT be skipped
+        //   [macro name=greet] / v2 body / [endmacro]   <- second definition
+        //   after                                         <- must appear
+        let src = concat!(
+            "[macro name=greet]\nv1\n[endmacro]\n",
+            "between\n",
+            "[macro name=greet]\nv2\n[endmacro]\n",
+            "after\n",
+        );
+        let (events, _) = run_script(src);
+        let names = event_names(&events);
+
+        assert!(
+            names.iter().any(|n| n.contains("between")),
+            "ops between duplicate macro definitions must not be skipped: {:?}",
+            names
+        );
+        assert!(
+            names.iter().any(|n| n.contains("after")),
+            "ops after the second definition must execute: {:?}",
+            names
+        );
+        // Neither macro body should have been entered during definition skipping.
+        assert!(
+            !names.iter().any(|n| n.contains("v1") || n.contains("v2")),
+            "macro bodies must not execute during definition: {:?}",
+            names
         );
     }
 

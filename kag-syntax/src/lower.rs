@@ -418,40 +418,28 @@ impl LowerCtx {
         }
         let name_cow: Cow<'static, str> = Cow::Owned(name.clone());
 
-        // duplicate macro warning
         if self.macro_map.contains_key(&name_cow) {
             self.push_warning(format!("duplicate macro: {name}"), def.span());
         }
 
-        // Emit [macro name=...] so the TAG_MACRO handler can jump past the body
-        // at runtime instead of falling through into it.
-        self.emit(Op::Tag(Tag {
-            name: Cow::Borrowed("macro"),
-            params: vec![Param::synthetic("name", name.clone())],
+        // Emit the macro header op.  skip_to is not yet known; we backpatch it
+        // below once the body and [endmacro] have been emitted.
+        let header_idx = self.ops.len();
+        self.emit(Op::MacroDef {
+            name: name_cow.clone(),
+            skip_to: 0, // placeholder — backpatched after [endmacro]
             span: def.span(),
-        }));
+        });
 
         let body_start = self.ops.len();
 
         self.macro_stack.push(name_cow.clone());
-        self.macro_map.insert(
-            name_cow.clone(),
-            MacroDef {
-                body_start,
-                body_end: body_start,
-            },
-        );
+        self.macro_map
+            .insert(name_cow.clone(), MacroDef { body_start });
 
         // Lower the body.
         self.lower_items(def.items());
 
-        // body_end is the index of the [endmacro] op that we are about to emit.
-        // TAG_MACRO jumps to body_end + 1 (past [endmacro]); TAG_ENDMACRO pops
-        // the macro frame and returns to the call site.
-        let body_end = self.ops.len();
-        if let Some(entry) = self.macro_map.get_mut(&name_cow) {
-            entry.body_end = body_end;
-        }
         self.macro_stack.pop();
 
         self.emit(Op::Tag(Tag {
@@ -459,5 +447,15 @@ impl LowerCtx {
             params: vec![],
             span: def.span(),
         }));
+
+        // skip_to is the op immediately after [endmacro].
+        let skip_to = self.ops.len();
+        if let Op::MacroDef {
+            skip_to: ref mut slot,
+            ..
+        } = self.ops[header_idx]
+        {
+            *slot = skip_to;
+        }
     }
 }
