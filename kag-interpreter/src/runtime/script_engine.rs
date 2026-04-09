@@ -103,6 +103,37 @@ impl ScriptEngine {
         set_map_in_scope(&mut self.scope, "tf", map);
     }
 
+    // ── Variable clearing ─────────────────────────────────────────────────────
+
+    /// Clear all `f` (game flags) variables.
+    pub fn clear_f(&mut self) {
+        set_map_in_scope(&mut self.scope, "f", Map::new());
+    }
+
+    /// Clear all `sf` (system flags) variables.
+    pub fn clear_sf(&mut self) {
+        set_map_in_scope(&mut self.scope, "sf", Map::new());
+    }
+
+    /// Clear all `tf` (transient flags) variables.
+    pub fn clear_tf(&mut self) {
+        set_map_in_scope(&mut self.scope, "tf", Map::new());
+    }
+
+    /// Remove a single key from a named variable scope (`"f"`, `"sf"`, or `"tf"`).
+    ///
+    /// Silently does nothing if the key or scope does not exist.
+    pub fn remove_key(&mut self, scope_name: &str, key: &str) {
+        let mut map = match scope_name {
+            "f" => self.f(),
+            "sf" => self.sf(),
+            "tf" => self.tf(),
+            _ => return,
+        };
+        map.remove(key);
+        set_map_in_scope(&mut self.scope, scope_name, map);
+    }
+
     // ── Evaluation API ────────────────────────────────────────────────────────
 
     /// Evaluate an arbitrary Rhai expression or statement block.
@@ -161,6 +192,33 @@ impl ScriptEngine {
         self.engine
             .eval_with_scope::<Dynamic>(&mut self.scope, &wrapped)
             .unwrap_or(Dynamic::UNIT)
+    }
+
+    // ── Snapshot helpers ──────────────────────────────────────────────────────
+
+    /// Serialise a named variable map (`"f"`, `"sf"`, `"tf"`, or `"mp"`) to a
+    /// `serde_json::Value`.
+    ///
+    /// Returns `KagError::SerializationError` on serialisation failure.
+    pub fn map_to_json(&self, name: &str) -> Result<serde_json::Value, KagError> {
+        let map = match name {
+            "f" => self.f(),
+            "sf" => self.sf(),
+            "tf" => self.tf(),
+            "mp" => self.mp(),
+            _ => Map::new(),
+        };
+        serde_json::to_value(&map)
+            .map_err(|e| KagError::SerializationError(e.to_string()))
+    }
+
+    /// Deserialise a `serde_json::Value` back into a named scope map.
+    /// Existing scope entries are replaced.
+    pub fn restore_map(&mut self, name: &str, json: &serde_json::Value) -> Result<(), KagError> {
+        let map: Map = serde_json::from_value(json.clone())
+            .map_err(|e| KagError::SerializationError(e.to_string()))?;
+        set_map_in_scope(&mut self.scope, name, map);
+        Ok(())
     }
 
     /// Resolve a parameter value string that may start with `&` (entity

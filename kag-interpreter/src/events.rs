@@ -1,3 +1,5 @@
+use crate::snapshot::InterpreterSnapshot;
+
 /// The variable-scope identifiers used in KAG scripts.
 ///
 /// - `F`  — per-play game flags (`f.flag_name`)
@@ -24,9 +26,15 @@ pub enum KagEvent {
     // ── Text output ──────────────────────────────────────────────────────────
     /// Display a chunk of text in the current message window.
     /// `speaker` is set when a preceding `#name` shorthand was encountered.
+    /// `speed` is the per-character delay in ms (`None` = host default).
+    /// `log` indicates whether this text should be recorded in the backlog.
     DisplayText {
         text: String,
         speaker: Option<String>,
+        /// Per-character display delay in ms set by `[delay]`, or `None` for default.
+        speed: Option<u64>,
+        /// `false` while inside a `[nolog]` … `[endnolog]` block.
+        log: bool,
     },
 
     /// Insert a line break (`[r]`) inside the message window.
@@ -34,6 +42,10 @@ pub enum KagEvent {
 
     /// Clear the current message window (`[cm]` or page-break after `[p]`).
     ClearMessage,
+
+    /// Clear only the text content of the current message layer, without
+    /// resetting the layer's font/style settings (`[er]`).
+    ClearCurrentMessage,
 
     // ── Input waits ──────────────────────────────────────────────────────────
     /// Pause until the player clicks/taps.
@@ -46,6 +58,41 @@ pub enum KagEvent {
     /// Hard stop — the interpreter will not advance without an explicit
     /// `HostEvent::Resume` (`[s]` tag).
     Stop,
+
+    /// Pause until the host signals that an asynchronous operation has
+    /// finished.  Emitted by `[wa]`, `[wm]`, `[wt]`, `[wq]`, `[wb]`, `[wf]`,
+    /// `[wl]`, `[ws]`, `[wv]`, `[wp]` — the host can distinguish them by
+    /// inspecting `tag`.  `canskip` mirrors the KAG `canskip=` attribute; when
+    /// `true` the host may resolve the wait early on click.
+    WaitForCompletion {
+        /// Original tag name, e.g. `"wa"`, `"wt"`, `"wb"`, …
+        tag: String,
+        /// All resolved parameters from the tag (e.g. `canskip`, `buf`, `slot`).
+        params: Vec<(String, String)>,
+    },
+
+    /// Pause until the next raw click, like `[waitclick]`.
+    /// Unlike `[l]` / `[p]` this cannot be dismissed by skip mode.
+    WaitForRawClick,
+
+    /// Ask the host to display a text-input dialog and wait for the result.
+    /// Emitted by `[input]`.  The host responds with `HostEvent::InputResult`.
+    /// The interpreter sets the named variable once the result arrives.
+    InputRequested {
+        /// Variable to store the result in, e.g. `"f.username"`.
+        name: String,
+        /// Prompt string shown in the dialog (may be empty).
+        prompt: String,
+        /// Dialog title (may be empty).
+        title: String,
+    },
+
+    /// Pause until the host fires a named trigger.  Emitted by `[waittrig]`.
+    /// The host responds with `HostEvent::TriggerFired`.
+    WaitForTrigger {
+        /// Trigger name to wait for.
+        name: String,
+    },
 
     // ── Navigation ───────────────────────────────────────────────────────────
     /// Jump to a label (and optionally a different scenario file).
@@ -65,18 +112,19 @@ pub enum KagEvent {
     /// `HostEvent::ChoiceSelected(index)`.
     BeginChoices(Vec<ChoiceOption>),
 
-    // ── Variable mutations ───────────────────────────────────────────────────
-    /// Notifies the host that a variable was changed by the script.
-    VariableChanged {
-        scope: VarScope,
-        key: String,
-        /// JSON-compatible value serialised as a string for simplicity.
-        value: String,
-    },
-
     // ── Embedded expression output ───────────────────────────────────────────
     /// The result of an `[emb exp=…]` tag — display this string inline.
     EmbedText(String),
+
+    // ── Debug output ─────────────────────────────────────────────────────────
+    /// Result of a `[trace exp=…]` tag — the host may log this value.
+    Trace(String),
+
+    // ── Backlog control ───────────────────────────────────────────────────────
+    /// Inject an arbitrary string into the backlog (`[pushlog text=… join=…]`).
+    /// `join = true` means append to the previous log entry rather than creating
+    /// a new one.
+    PushBacklog { text: String, join: bool },
 
     // ── Passthrough for non-core tags ────────────────────────────────────────
     /// Any tag the interpreter does not handle internally is forwarded here.
@@ -95,18 +143,29 @@ pub enum KagEvent {
 
     /// A fatal interpreter error.  The runtime will stop after emitting this.
     Error(String),
+
+    /// A complete snapshot of the current interpreter state, emitted in
+    /// response to `HostEvent::TakeSnapshot`.
+    ///
+    /// The host should serialise this to JSON (via `serde_json::to_string`) and
+    /// write it to disk as a save file.  Restore with
+    /// `KagInterpreter::spawn_from_snapshot`.
+    Snapshot(Box<InterpreterSnapshot>),
 }
 
 // ─── Events sent from the host to the interpreter ────────────────────────────
 
 /// Events that the host sends to the interpreter to drive forward execution.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum HostEvent {
     /// The player clicked / tapped (advances past `[l]`, `[p]`, `Stop`).
     Clicked,
 
     /// A `WaitMs` timer has elapsed.
     TimerElapsed,
+
+    /// The player scrolled the mouse wheel (fires the `[wheel]` handler at `[s]`).
+    WheelScrolled,
 
     /// The player selected choice at the given index from a `BeginChoices`.
     ChoiceSelected(usize),
@@ -118,6 +177,53 @@ pub enum HostEvent {
 
     /// Explicit signal to resume from a `Stop` state.
     Resume,
+
+    /// Set a single variable. `value_expr` is evaluated as a Rhai expression
+    /// (e.g. `"42"`, `"true"`, `"\"Alice\""`).
+    SetVariable {
+        scope: VarScope,
+        key: String,
+        value_expr: String,
+    },
+
+    /// Request a point-in-time snapshot of all variable scopes.
+    /// The reply arrives through the oneshot channel — valid to call
+    /// whenever the interpreter is blocked at any pause point.
+    QueryVariables(tokio::sync::oneshot::Sender<VariableSnapshot>),
+
+    /// Request an [`InterpreterSnapshot`] of the current runtime state.
+    ///
+    /// The interpreter will respond with `KagEvent::Snapshot(…)` on the event
+    /// channel.  This may only be sent while the interpreter is paused at a
+    /// wait point (`WaitForClick`, `WaitMs`, or `Stop`); sending it at other
+    /// times is silently ignored.
+    TakeSnapshot,
+
+    /// Signals that the asynchronous operation the interpreter is blocked on
+    /// has finished.  Unblocks `KagEvent::WaitForCompletion`.
+    CompletionSignal,
+
+    /// Delivers the player's text-input result for `KagEvent::InputRequested`.
+    /// Passing an empty string is valid and means the player cancelled.
+    InputResult(String),
+
+    /// Fires a named trigger, unblocking any `KagEvent::WaitForTrigger` that
+    /// is waiting for this name.
+    TriggerFired { name: String },
+}
+
+// ─── Variable snapshot ────────────────────────────────────────────────────────
+
+/// A point-in-time copy of all three variable scopes, with every value
+/// stringified for uniform handling by the host.
+#[derive(Debug, Clone)]
+pub struct VariableSnapshot {
+    /// Per-play game flags (`f.*`).
+    pub f: std::collections::HashMap<String, String>,
+    /// Persistent system flags (`sf.*`).
+    pub sf: std::collections::HashMap<String, String>,
+    /// Transient flags (`tf.*`).
+    pub tf: std::collections::HashMap<String, String>,
 }
 
 // ─── Supporting types ─────────────────────────────────────────────────────────

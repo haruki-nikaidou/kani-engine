@@ -3,7 +3,14 @@
 //! Holds the program counter, all three stacks (call / if / macro), the
 //! current speaker name, and the link-choice accumulator.
 
+use std::collections::HashSet;
+use std::time::Instant;
+
 use rhai::Map;
+
+use crate::error::KagError;
+use crate::snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSnap};
+
 
 use super::script_engine::ScriptEngine;
 
@@ -79,12 +86,73 @@ pub struct RuntimeContext {
 
     /// True while inside a `[link]` block accumulating choice text.
     pub in_link: bool,
+
+    // ── Display mode flags ────────────────────────────────────────────────────
+    /// When `true`, `[l]` and `[p]` do not emit `WaitForClick` (set by `[nowait]`).
+    pub nowait: bool,
+
+    /// Per-character display speed in ms, if overridden by `[delay]`.
+    /// `None` means use the host/config default.
+    pub text_speed: Option<u64>,
+
+    /// When `false`, `DisplayText` events should not be recorded in the backlog
+    /// (controlled by `[nolog]` / `[endnolog]`).
+    pub log_enabled: bool,
+
+    /// Set of macro names that have been deleted at runtime via `[erasemacro]`.
+    pub erased_macros: HashSet<String>,
+
+    // ── [s]-wait handler system ───────────────────────────────────────────────
+    /// Jump registered by `[click]` — fires when player clicks while at `[s]`.
+    pub pending_click: Option<JumpTarget>,
+
+    /// Jump registered by `[timeout]` — fires after `time_ms` at `[s]`.
+    pub pending_timeout: Option<TimeoutHandler>,
+
+    /// Jump registered by `[wheel]` — fires on mouse-wheel while at `[s]`.
+    pub pending_wheel: Option<JumpTarget>,
+
+    // ── [clickskip] state ─────────────────────────────────────────────────────
+    /// Whether click-skip mode is enabled (controlled by `[clickskip]`).
+    /// When `true` the host may use clicks to skip transitions/animations.
+    pub clickskip_enabled: bool,
+
+    // ── [autowc] state ────────────────────────────────────────────────────────
+    /// Whether auto-character-wait is active (set by `[autowc enabled=true]`).
+    pub autowc_enabled: bool,
+
+    /// Per-character wait overrides.  Each entry maps a character string (may
+    /// be multi-byte) to a delay in milliseconds.  Set by `[autowc ch=… time=…]`.
+    pub autowc_map: Vec<(String, u64)>,
+
+    // ── [resetwait] / [wait mode=until] ──────────────────────────────────────
+    /// Baseline instant set by `[resetwait]`; used to compute elapsed time for
+    /// `[wait mode=until time=N]`.  `None` means "not yet set".
+    /// Not serialisable — resets to `None` on every interpreter start / restore.
+    pub wait_base_time: Option<Instant>,
 }
 
 /// A choice being accumulated between `[link]` and `[endlink]`.
 #[derive(Debug, Clone)]
 pub struct PendingChoice {
     pub text: String,
+    pub storage: Option<String>,
+    pub target: Option<String>,
+    pub exp: Option<String>,
+}
+
+/// A jump target registered by `[click]`, `[wheel]`, or `[timeout]`.
+#[derive(Debug, Clone)]
+pub struct JumpTarget {
+    pub storage: Option<String>,
+    pub target: Option<String>,
+    pub exp: Option<String>,
+}
+
+/// A timed jump registered by `[timeout]`.
+#[derive(Debug, Clone)]
+pub struct TimeoutHandler {
+    pub time_ms: u64,
     pub storage: Option<String>,
     pub target: Option<String>,
     pub exp: Option<String>,
@@ -102,6 +170,45 @@ impl RuntimeContext {
             current_speaker: None,
             pending_choices: Vec::new(),
             in_link: false,
+            nowait: false,
+            text_speed: None,
+            log_enabled: true,
+            erased_macros: HashSet::new(),
+            pending_click: None,
+            pending_timeout: None,
+            pending_wheel: None,
+            clickskip_enabled: true,
+            autowc_enabled: false,
+            autowc_map: Vec::new(),
+            wait_base_time: None,
+        }
+    }
+
+    // ── Stack clearing ────────────────────────────────────────────────────────
+
+    /// Clear a specific stack by name (`"call"`, `"if"`, or `"macro"`), or all
+    /// three if `which` is empty / unrecognised.
+    pub fn clear_stack(&mut self, which: &str) {
+        match which {
+            "call" => self.call_stack.clear(),
+            "if" => self.if_stack.clear(),
+            "macro" => {
+                // Restore the outermost mp before discarding macro frames
+                if let Some(frame) = self.macro_stack.first() {
+                    self.script_engine.set_mp(frame.saved_mp.clone());
+                }
+                self.macro_stack.clear();
+            }
+            _ => {
+                self.call_stack.clear();
+                self.if_stack.clear();
+                if !self.macro_stack.is_empty() {
+                    if let Some(frame) = self.macro_stack.first() {
+                        self.script_engine.set_mp(frame.saved_mp.clone());
+                    }
+                    self.macro_stack.clear();
+                }
+            }
         }
     }
 
@@ -232,5 +339,137 @@ impl RuntimeContext {
             None => true,
             Some(expr) => self.script_engine.eval_bool(expr).unwrap_or(true),
         }
+    }
+
+    // ── Snapshot ──────────────────────────────────────────────────────────────
+
+    /// Serialise the full runtime state into an [`InterpreterSnapshot`].
+    ///
+    /// This captures `pc`, all variable maps (`f`, `sf`, `mp`), all three
+    /// execution stacks, and the display-mode flags.  Transient variables
+    /// (`tf`) are intentionally excluded.
+    pub fn to_snapshot(&self) -> Result<InterpreterSnapshot, KagError> {
+        let f = self.script_engine.map_to_json("f")?;
+        let sf = self.script_engine.map_to_json("sf")?;
+        let mp = self.script_engine.map_to_json("mp")?;
+
+        let call_stack = self
+            .call_stack
+            .iter()
+            .map(|fr| CallFrameSnap {
+                return_pc: fr.return_pc,
+                return_storage: fr.return_storage.clone(),
+            })
+            .collect();
+
+        let if_stack = self
+            .if_stack
+            .iter()
+            .map(|fr| IfFrameSnap {
+                depth: fr.depth,
+                executing: fr.executing,
+                branch_taken: fr.branch_taken,
+            })
+            .collect();
+
+        let macro_stack = self
+            .macro_stack
+            .iter()
+            .map(|fr| {
+                let saved_mp = serde_json::to_value(&fr.saved_mp)
+                    .map_err(|e| KagError::SerializationError(e.to_string()))?;
+                Ok(MacroFrameSnap {
+                    macro_name: fr.macro_name.clone(),
+                    return_pc: fr.return_pc,
+                    saved_mp,
+                })
+            })
+            .collect::<Result<Vec<_>, KagError>>()?;
+
+        let erased_macros = self.erased_macros.iter().cloned().collect();
+
+        Ok(InterpreterSnapshot {
+            pc: self.pc,
+            storage: self.current_storage.clone(),
+            f,
+            sf,
+            mp,
+            call_stack,
+            if_stack,
+            macro_stack,
+            nowait: self.nowait,
+            text_speed: self.text_speed,
+            log_enabled: self.log_enabled,
+            erased_macros,
+            clickskip_enabled: self.clickskip_enabled,
+            autowc_enabled: self.autowc_enabled,
+            autowc_map: self.autowc_map.clone(),
+        })
+    }
+
+    /// Restore all runtime state from an [`InterpreterSnapshot`].
+    ///
+    /// The caller is responsible for re-parsing the correct scenario source
+    /// and pointing the interpreter task at the restored `pc`.
+    /// Transient variables (`tf`) are reset to empty.
+    pub fn restore_from_snapshot(&mut self, snap: &InterpreterSnapshot) -> Result<(), KagError> {
+        self.pc = snap.pc;
+        self.current_storage = snap.storage.clone();
+
+        self.script_engine.restore_map("f", &snap.f)?;
+        self.script_engine.restore_map("sf", &snap.sf)?;
+        self.script_engine.restore_map("mp", &snap.mp)?;
+        self.script_engine.clear_tf();
+
+        self.call_stack = snap
+            .call_stack
+            .iter()
+            .map(|fr| CallFrame {
+                return_pc: fr.return_pc,
+                return_storage: fr.return_storage.clone(),
+            })
+            .collect();
+
+        self.if_stack = snap
+            .if_stack
+            .iter()
+            .map(|fr| IfFrame {
+                depth: fr.depth,
+                executing: fr.executing,
+                branch_taken: fr.branch_taken,
+            })
+            .collect();
+
+        self.macro_stack = snap
+            .macro_stack
+            .iter()
+            .map(|fr| {
+                let saved_mp: Map = serde_json::from_value(fr.saved_mp.clone())
+                    .map_err(|e| KagError::SerializationError(e.to_string()))?;
+                Ok(MacroFrame {
+                    macro_name: fr.macro_name.clone(),
+                    return_pc: fr.return_pc,
+                    saved_mp,
+                })
+            })
+            .collect::<Result<Vec<_>, KagError>>()?;
+
+        self.current_speaker = None;
+        self.pending_choices.clear();
+        self.in_link = false;
+        self.nowait = snap.nowait;
+        self.text_speed = snap.text_speed;
+        self.log_enabled = snap.log_enabled;
+        self.erased_macros = snap.erased_macros.iter().cloned().collect();
+        self.clickskip_enabled = snap.clickskip_enabled;
+        self.autowc_enabled = snap.autowc_enabled;
+        self.autowc_map = snap.autowc_map.clone();
+        // Transient runtime-only state — reset on restore
+        self.pending_click = None;
+        self.pending_timeout = None;
+        self.pending_wheel = None;
+        self.wait_base_time = None;
+
+        Ok(())
     }
 }

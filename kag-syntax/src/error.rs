@@ -101,6 +101,10 @@ pub enum KagError {
     #[error("channel closed unexpectedly")]
     #[diagnostic(code(kag::channel_closed))]
     ChannelClosed,
+
+    #[error("serialization error: {0}")]
+    #[diagnostic(code(kag::serialization_error))]
+    SerializationError(String),
 }
 
 impl KagError {

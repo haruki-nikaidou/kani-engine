@@ -20,12 +20,12 @@
 //! Hello, world![l]
 //! @jump target=*start
 //! "#;
-//!     let (mut interp, _task) =
+//!     let (mut interp, _task, _diags) =
 //!         KagInterpreter::spawn_from_source(source, "demo.ks").unwrap();
 //!
 //!     loop {
 //!         match interp.recv().await {
-//!             Some(KagEvent::DisplayText { text, speaker }) => {
+//!             Some(KagEvent::DisplayText { text, speaker, .. }) => {
 //!                 if let Some(spk) = speaker { print!("{spk}: "); }
 //!                 println!("{text}");
 //!             }
@@ -65,6 +65,7 @@ pub use kag_syntax::parser;
 
 pub mod events;
 pub mod runtime;
+pub mod snapshot;
 
 // ─── Primary public re-exports ────────────────────────────────────────────────
 
@@ -72,13 +73,21 @@ pub mod runtime;
 pub use runtime::KagInterpreter;
 
 /// All event types used across the public API.
-pub use events::{ChoiceOption, HostEvent, KagEvent, VarScope};
+pub use events::{ChoiceOption, HostEvent, KagEvent, VarScope, VariableSnapshot};
+
+/// Jump-target registered by `[click]` or `[wheel]` before `[s]`.
+pub use runtime::context::JumpTarget;
+/// Timed jump registered by `[timeout]` before `[s]`.
+pub use runtime::context::TimeoutHandler;
 
 /// The parsed scenario representation.
 pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 
 /// Rich error type with source-code attribution.
 pub use error::KagError;
+
+/// Serialisable interpreter snapshot for save / load support.
+pub use snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSnap};
 
 /// Parse a `.ks` source string into a `Script` together with any diagnostics.
 /// Returns `(Script<'static>, Vec<ParseDiagnostic>)`.
