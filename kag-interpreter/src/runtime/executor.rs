@@ -450,10 +450,8 @@ fn execute_tag<'s>(
 
         // ── Text display speed ────────────────────────────────────────────
         TAG_DELAY | TAG_CONFIGDELAY => {
-            // `delay speed=N` sets per-character ms; default to 0 (instant)
-            if let Some(ms) = resolve_u64(ctx, tag, "speed") {
-                ctx.text_speed = Some(ms);
-            }
+            // `delay speed=N` sets per-character ms; bare `[delay]` resets to 0 (instant)
+            ctx.text_speed = Some(resolve_u64(ctx, tag, "speed").unwrap_or(0));
             Ok(vec![])
         }
         TAG_RESETDELAY => {
