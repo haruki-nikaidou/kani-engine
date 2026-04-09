@@ -16,7 +16,6 @@ use rowan::Language;
 #[allow(clippy::manual_non_exhaustive)]
 pub enum SyntaxKind {
     // ── Tokens (must stay in sync with `lexer::Token`) ────────────────────
-
     /// `\n` or `\r\n`
     NEWLINE = 0,
     /// `;…` or `//…` (to end of line)
@@ -77,7 +76,6 @@ pub enum SyntaxKind {
     ERROR,
 
     // ── Nodes ─────────────────────────────────────────────────────────────
-
     /// The root node — wraps the entire `.ks` file.
     ROOT,
 

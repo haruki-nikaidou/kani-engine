@@ -72,7 +72,10 @@ pub enum KagError {
     },
 
     #[error("undefined tag: [{name}]")]
-    #[diagnostic(code(kag::undefined_tag), help("Check spelling or define a macro named '{name}'"))]
+    #[diagnostic(
+        code(kag::undefined_tag),
+        help("Check spelling or define a macro named '{name}'")
+    )]
     UndefinedTag { name: String },
 
     #[error("script evaluation error: {0}")]

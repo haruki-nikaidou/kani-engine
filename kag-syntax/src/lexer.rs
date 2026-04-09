@@ -8,7 +8,6 @@ use miette::SourceSpan;
 #[derive(Logos, Debug, Clone, PartialEq)]
 pub enum Token<'src> {
     // ── Line structure ────────────────────────────────────────────────────
-
     /// A Unix or Windows newline.
     #[token("\n")]
     #[token("\r\n")]
@@ -27,7 +26,6 @@ pub enum Token<'src> {
     BlockCommentClose,
 
     // ── Line-type sigils ─────────────────────────────────────────────────
-
     /// `@` starts a line-level tag.
     #[token("@")]
     At,
@@ -41,7 +39,6 @@ pub enum Token<'src> {
     Star,
 
     // ── Tag delimiters ───────────────────────────────────────────────────
-
     /// `[` opens an inline tag.
     #[token("[")]
     LBracket,
@@ -51,7 +48,6 @@ pub enum Token<'src> {
     RBracket,
 
     // ── Parameter syntax ─────────────────────────────────────────────────
-
     /// `=` separates a parameter key from its value.
     #[token("=")]
     Eq,
@@ -74,7 +70,6 @@ pub enum Token<'src> {
     Colon,
 
     // ── Literals ─────────────────────────────────────────────────────────
-
     /// A double-quoted string value (includes the quotes).
     #[regex(r#""(?:[^"\\]|\\.)*""#)]
     DoubleQuoted(&'src str),
@@ -240,7 +235,9 @@ mod tests {
     #[test]
     fn test_quoted_string_parameter() {
         let (tokens, _) = tokenize(r#"[bg storage="forest.png"]"#);
-        let quoted = tokens.iter().find(|t| matches!(t.token, Token::DoubleQuoted(_)));
+        let quoted = tokens
+            .iter()
+            .find(|t| matches!(t.token, Token::DoubleQuoted(_)));
         assert!(quoted.is_some());
         assert_eq!(quoted.unwrap().slice, r#""forest.png""#);
     }

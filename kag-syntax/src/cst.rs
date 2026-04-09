@@ -128,8 +128,7 @@ ast_node!(LineCommentNode, LINE_COMMENT_NODE);
 impl LineCommentNode {
     /// The raw comment text including the `;` or `//` prefix.
     pub fn text(&self) -> Option<String> {
-        token_of_kind(&self.0, SyntaxKind::LINE_COMMENT)
-            .map(|t| t.text().to_owned())
+        token_of_kind(&self.0, SyntaxKind::LINE_COMMENT).map(|t| t.text().to_owned())
     }
 }
 
@@ -192,11 +191,17 @@ impl LabelDef {
                 if t.kind() == SyntaxKind::PIPE {
                     found_pipe = true;
                     false
-                } else { found_pipe && !matches!(t.kind(), SyntaxKind::NEWLINE) }
+                } else {
+                    found_pipe && !matches!(t.kind(), SyntaxKind::NEWLINE)
+                }
             })
             .map(|t| t.text().to_owned())
             .collect();
-        if parts.is_empty() { None } else { Some(parts.concat()) }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.concat())
+        }
     }
 
     pub fn span(&self) -> miette::SourceSpan {
@@ -292,8 +297,7 @@ ast_node!(Param, PARAM);
 impl Param {
     /// The key of a named parameter, or `None` for positional parameters.
     pub fn key(&self) -> Option<String> {
-        child_node::<ParamKey>(&self.0)
-            .and_then(|k| text_of_token(k.syntax(), SyntaxKind::IDENT))
+        child_node::<ParamKey>(&self.0).and_then(|k| text_of_token(k.syntax(), SyntaxKind::IDENT))
     }
 
     /// The value node (one of the PARAM_VALUE_* variants).
@@ -362,7 +366,9 @@ impl ParamValueLiteral {
             raw
         }
     }
-    pub fn span(&self) -> miette::SourceSpan { node_span(&self.0) }
+    pub fn span(&self) -> miette::SourceSpan {
+        node_span(&self.0)
+    }
 }
 
 ast_node!(ParamValueEntity, PARAM_VALUE_ENTITY);
@@ -376,7 +382,9 @@ impl ParamValueEntity {
             .map(|t| t.text().to_owned())
             .collect()
     }
-    pub fn span(&self) -> miette::SourceSpan { node_span(&self.0) }
+    pub fn span(&self) -> miette::SourceSpan {
+        node_span(&self.0)
+    }
 }
 
 ast_node!(ParamValueMacro, PARAM_VALUE_MACRO);
@@ -403,14 +411,22 @@ impl ParamValueMacro {
             })
             .map(|t| t.text().to_owned())
             .collect();
-        if parts.is_empty() { None } else { Some(parts.concat()) }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.concat())
+        }
     }
-    pub fn span(&self) -> miette::SourceSpan { node_span(&self.0) }
+    pub fn span(&self) -> miette::SourceSpan {
+        node_span(&self.0)
+    }
 }
 
 ast_node!(ParamValueSplat, PARAM_VALUE_SPLAT);
 impl ParamValueSplat {
-    pub fn span(&self) -> miette::SourceSpan { node_span(&self.0) }
+    pub fn span(&self) -> miette::SourceSpan {
+        node_span(&self.0)
+    }
 }
 
 // ─── TextLine ─────────────────────────────────────────────────────────────────
@@ -464,7 +480,9 @@ impl TextLiteral {
             .map(|t| t.text().to_owned())
             .collect()
     }
-    pub fn span(&self) -> miette::SourceSpan { node_span(&self.0) }
+    pub fn span(&self) -> miette::SourceSpan {
+        node_span(&self.0)
+    }
 }
 
 ast_node!(TextEntity, TEXT_ENTITY);
@@ -477,7 +495,9 @@ impl TextEntity {
             .map(|t| t.text().to_owned())
             .collect()
     }
-    pub fn span(&self) -> miette::SourceSpan { node_span(&self.0) }
+    pub fn span(&self) -> miette::SourceSpan {
+        node_span(&self.0)
+    }
 }
 
 // ─── CharaLine ────────────────────────────────────────────────────────────────

@@ -54,30 +54,22 @@ impl ScriptEngine {
 
     /// Return a clone of the `f` (game flags) map.
     pub fn f(&self) -> Map {
-        self.scope
-            .get_value::<Map>("f")
-            .unwrap_or_default()
+        self.scope.get_value::<Map>("f").unwrap_or_default()
     }
 
     /// Return a clone of the `sf` (system flags) map.
     pub fn sf(&self) -> Map {
-        self.scope
-            .get_value::<Map>("sf")
-            .unwrap_or_default()
+        self.scope.get_value::<Map>("sf").unwrap_or_default()
     }
 
     /// Return a clone of the `tf` (transient flags) map.
     pub fn tf(&self) -> Map {
-        self.scope
-            .get_value::<Map>("tf")
-            .unwrap_or_default()
+        self.scope.get_value::<Map>("tf").unwrap_or_default()
     }
 
     /// Return a clone of the `mp` (macro params) map.
     pub fn mp(&self) -> Map {
-        self.scope
-            .get_value::<Map>("mp")
-            .unwrap_or_default()
+        self.scope.get_value::<Map>("mp").unwrap_or_default()
     }
 
     /// Replace the entire `mp` map (called at macro entry).
