@@ -71,12 +71,17 @@ pub enum Token<'src> {
 
     // ── Literals ─────────────────────────────────────────────────────────
     /// A double-quoted string value (includes the quotes).
-    #[regex(r#""(?:[^"\\]|\\.)*""#)]
+    #[regex(r#""(?:[^"\\\n]|\\.)*""#)]
     DoubleQuoted(&'src str),
 
     /// A single-quoted string value (includes the quotes).
-    #[regex(r"'(?:[^'\\]|\\.)*'")]
+    #[regex(r"'(?:[^'\\\n]|\\.)*'")]
     SingleQuoted(&'src str),
+
+    /// A bare apostrophe that didn't form a valid quoted pair.
+    /// Treated as plain text to prevent Logos from skipping the rest of the line.
+    #[token("'")]
+    Apostrophe,
 
     /// An identifier: starts with a letter or `_`, followed by alphanumerics,
     /// `_`, `-`, or `.`.  Used for tag names, parameter keys, and bare values.

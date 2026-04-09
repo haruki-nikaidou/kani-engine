@@ -284,6 +284,7 @@ pub(crate) fn token_to_kind(tok: &Token<'_>) -> SyntaxKind {
         Token::Slash => SyntaxKind::SLASH,
         Token::Lt => SyntaxKind::LT,
         Token::Gt => SyntaxKind::GT,
+        Token::Apostrophe => SyntaxKind::TEXT,
     }
 }
 
