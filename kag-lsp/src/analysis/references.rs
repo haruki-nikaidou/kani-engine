@@ -270,6 +270,13 @@ fn collect_param_value_refs(
                         Item::InlineTag(tag) => {
                             scan_params(tag.params(), name, keys, doc, uri, out)
                         }
+                        Item::TextLine(line) => {
+                            for part in line.parts() {
+                                if let TextPart::InlineTag(tag) = part {
+                                    scan_params(tag.params(), name, keys, doc, uri, out);
+                                }
+                            }
+                        }
                         _ => {}
                     }
                 }
