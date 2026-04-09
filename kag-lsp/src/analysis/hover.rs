@@ -125,10 +125,18 @@ fn is_target_param(node: &Option<kag_syntax::SyntaxNode>) -> bool {
     if param.kind() != SyntaxKind::PARAM {
         return false;
     }
+    // The key IDENT is wrapped inside a PARAM_KEY child *node*, so it is never
+    // a direct token child of PARAM.  Descend into PARAM_KEY first, then
+    // locate the IDENT token inside it — identical to the approach used by
+    // `is_target_param_node` in goto_def.rs.
     param
-        .children_with_tokens()
-        .filter_map(|e| e.into_token())
-        .any(|t: kag_syntax::SyntaxToken| {
-            t.kind() == SyntaxKind::IDENT && matches!(t.text(), "target" | "storage")
+        .children()
+        .find(|n| n.kind() == SyntaxKind::PARAM_KEY)
+        .and_then(|key_node| {
+            key_node
+                .children_with_tokens()
+                .filter_map(|e| e.into_token())
+                .find(|t| t.kind() == SyntaxKind::IDENT)
         })
+        .map_or(false, |t| matches!(t.text(), "target" | "storage"))
 }
