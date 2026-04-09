@@ -1055,7 +1055,11 @@ mod tests {
 
         // Manually push a fake call frame so there is something to clear
         ctx.push_call(42);
-        assert_eq!(ctx.call_stack.len(), 1, "should have one frame before clearstack");
+        assert_eq!(
+            ctx.call_stack.len(),
+            1,
+            "should have one frame before clearstack"
+        );
 
         let _ = execute_op(&script, &mut ctx).expect("execute");
 
@@ -1110,7 +1114,9 @@ mod tests {
         let src = "[eval exp=\"f.val = 42;\"]\n[trace exp=\"f.val\"]\n";
         let (events, _) = run_script(src);
         assert!(
-            events.iter().any(|e| matches!(e, KagEvent::Trace(s) if s.contains("42"))),
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::Trace(s) if s.contains("42"))),
             "trace should emit Trace event with value: {:?}",
             events
         );
@@ -1129,9 +1135,9 @@ mod tests {
             events
         );
         assert!(
-            events.iter().any(
-                |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))
-            ),
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))),
             "text after [l] should still appear: {:?}",
             events
         );
@@ -1244,9 +1250,13 @@ mod tests {
         let src = "[pushlog text=\"appended\" join=true]\n";
         let (events, _) = run_script(src);
         assert!(
-            events.iter().any(
-                |e| matches!(e, KagEvent::PushBacklog { text: _, join: true })
-            ),
+            events.iter().any(|e| matches!(
+                e,
+                KagEvent::PushBacklog {
+                    text: _,
+                    join: true
+                }
+            )),
             "PushBacklog with join=true expected: {:?}",
             events
         );
