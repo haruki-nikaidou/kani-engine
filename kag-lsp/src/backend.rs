@@ -210,19 +210,46 @@ impl LanguageServer for Backend {
 /// a parameter value position, and if so, what the key name is.
 ///
 /// Returns `(in_value, key)`.
+///
+/// The search is bounded to the innermost open tag so that `=` signs in
+/// earlier closed tags or in surrounding plain text are never mistaken for the
+/// current parameter assignment.
 fn param_context(source: &str, offset: usize) -> (bool, Option<String>) {
     let prefix = &source[..offset.min(source.len())];
 
     // Find the start of the current line, handling \n, \r\n, and bare \r.
     let line_start = prefix.rfind(['\n', '\r']).map(|i| i + 1).unwrap_or(0);
-    // For \r\n the rfind lands on the \n; back up one more if a \r precedes it.
     let line = &prefix[line_start..];
 
-    // If there's an `=` after the last word boundary, we're in a value.
-    if let Some(eq_pos) = line.rfind('=') {
-        let after_eq = &line[..eq_pos];
+    // Determine the slice that covers the current tag only.
+    //
+    // Inline tag `[tag param=value`:
+    //   Find the last `[` on the line prefix.  If there is a `]` between that
+    //   `[` and the cursor the tag is already closed, so we are in plain text.
+    //
+    // Line-level tag `@tag param=value`:
+    //   The `@` must be the first meaningful token on the line.  There are no
+    //   closing brackets, so the whole line prefix is the tag range.
+    //
+    // Anything else: the cursor is in plain text — return no value context.
+    let tag_slice: &str = if let Some(bracket_pos) = line.rfind('[') {
+        // A `]` after the last `[` means the tag is closed; we are outside it.
+        if line[bracket_pos..].contains(']') {
+            return (false, None);
+        }
+        &line[bracket_pos..]
+    } else if line.trim_start().starts_with('@') {
+        // At-tag: the entire line prefix is the tag content.
+        line
+    } else {
+        return (false, None);
+    };
+
+    // Within the bounded tag slice, look for the last `=`.
+    if let Some(eq_pos) = tag_slice.rfind('=') {
+        let before_eq = &tag_slice[..eq_pos];
         // The key is the identifier immediately before the `=`.
-        let key = after_eq
+        let key = before_eq
             .trim_end()
             .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
             .next_back()
@@ -232,4 +259,107 @@ fn param_context(source: &str, offset: usize) -> (bool, Option<String>) {
     }
 
     (false, None)
+}
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::param_context;
+
+    fn ctx(src: &str) -> (bool, Option<String>) {
+        param_context(src, src.len())
+    }
+
+    // ── Inside an open inline tag ────────────────────────────────────────────
+
+    #[test]
+    fn inline_tag_value_simple() {
+        // Cursor right after `=`; should report the key.
+        assert_eq!(ctx("[jump target="), (true, Some("target".into())));
+    }
+
+    #[test]
+    fn inline_tag_value_partial() {
+        // Cursor mid-value; still in value context.
+        assert_eq!(ctx("[jump target=*lab"), (true, Some("target".into())));
+    }
+
+    #[test]
+    fn inline_tag_no_eq() {
+        // Cursor after the tag name, no `=` yet — not in a value.
+        assert_eq!(ctx("[jump "), (false, None));
+    }
+
+    #[test]
+    fn inline_tag_second_param() {
+        // Second parameter on the same tag; only that `=` should matter.
+        assert_eq!(
+            ctx("[jump target=*a storage="),
+            (true, Some("storage".into()))
+        );
+    }
+
+    // ── Closed tag followed by plain text ────────────────────────────────────
+
+    #[test]
+    fn after_closed_tag_plain_text() {
+        // The tag is closed; cursor is in plain text — must NOT report in_value.
+        assert_eq!(ctx("[jump target=*a] "), (false, None));
+    }
+
+    #[test]
+    fn after_closed_tag_no_trailing_space() {
+        assert_eq!(ctx("[jump target=*a]"), (false, None));
+    }
+
+    // ── Multiple tags on the same line ───────────────────────────────────────
+
+    #[test]
+    fn second_open_tag_after_closed_first() {
+        // First tag closed, second tag open; key must come from second tag.
+        assert_eq!(
+            ctx("[jump target=*a] [call storage="),
+            (true, Some("storage".into()))
+        );
+    }
+
+    #[test]
+    fn eq_in_plain_text_before_open_tag() {
+        // An `=` in the plain-text region must not bleed into the open tag.
+        assert_eq!(ctx("x=1 [jump "), (false, None));
+    }
+
+    // ── Line-level @-tag ─────────────────────────────────────────────────────
+
+    #[test]
+    fn at_tag_value() {
+        assert_eq!(ctx("@jump target="), (true, Some("target".into())));
+    }
+
+    #[test]
+    fn at_tag_no_eq() {
+        assert_eq!(ctx("@jump "), (false, None));
+    }
+
+    #[test]
+    fn at_tag_with_leading_whitespace() {
+        // KAG allows leading whitespace before `@`.
+        assert_eq!(ctx("  @jump target="), (true, Some("target".into())));
+    }
+
+    // ── Multi-line source: only the current line is considered ───────────────
+
+    #[test]
+    fn previous_line_eq_does_not_bleed() {
+        // An `=` on a previous line must not affect the current line.
+        let src = "[jump target=*a]\n[call ";
+        assert_eq!(ctx(src), (false, None));
+    }
+
+    #[test]
+    fn previous_line_eq_current_line_has_value() {
+        let src = "[jump target=*a]\n[call storage=";
+        assert_eq!(ctx(src), (true, Some("storage".into())));
+    }
 }
