@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["kag-syntax", "kag-interpreter", "kag-lsp", "kani-pak"]
+members = ["kag-syntax", "kag-interpreter", "kag-lsp", "kani-pak", "kani-runtime"]
 
 [workspace.dependencies]
 # Error handling
@@ -8,12 +8,12 @@ thiserror = "2"
 anyhow = "1"
 
 # kani-pak
-bevy = "0.18.1"
+bevy = { version = "0.18.1", default-features = false, features = ["default_app", "bevy_asset", "x11"] }
+bevy_asset = "0.18.1"
 memmap2 = "0.9.10"
 zstd = "0.13.3"
 bytemuck = { version = "1.25.0", features = ["derive"] }
 rustc-hash = "2.1.2"
-bevy_asset = "0.18.1"
 futures-core = "0.3"
 
 # Interpreter

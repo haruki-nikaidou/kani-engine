@@ -1,0 +1,13 @@
+[package]
+name = "kani-runtime"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+bevy.workspace = true
+bevy_asset.workspace = true
+kag-interpreter = { path = "../kag-interpreter" }
+kani-pak = { path = "../kani-pak", features = ["bevy"] }
