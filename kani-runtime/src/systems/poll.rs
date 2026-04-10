@@ -7,7 +7,7 @@ use crate::asset::AssetBackend;
 use crate::bridge::{BridgeState, InterpreterBridge};
 use crate::events::*;
 use crate::systems::scenario::load_and_send_scenario;
-use crate::systems::tags::route_tag;
+use crate::systems::tags::{TagWriters, route_tag};
 
 #[derive(SystemParam)]
 pub struct BridgeMessages<'w> {
@@ -110,17 +110,16 @@ pub fn poll_interpreter(
                 msgs.ev_push_backlog.write(EvPushBacklog { text, join });
             }
             KagEvent::Tag { name, params } => {
-                route_tag(
-                    name,
-                    params,
-                    &mut msgs.ev_image,
-                    &mut msgs.ev_audio,
-                    &mut msgs.ev_transition,
-                    &mut msgs.ev_effect,
-                    &mut msgs.ev_message,
-                    &mut msgs.ev_chara,
-                    &mut msgs.ev_unknown,
-                );
+                let mut tag_writers = TagWriters {
+                    ev_image: &mut msgs.ev_image,
+                    ev_audio: &mut msgs.ev_audio,
+                    ev_transition: &mut msgs.ev_transition,
+                    ev_effect: &mut msgs.ev_effect,
+                    ev_message: &mut msgs.ev_message,
+                    ev_chara: &mut msgs.ev_chara,
+                    ev_unknown: &mut msgs.ev_unknown,
+                };
+                route_tag(name, params, &mut tag_writers);
             }
             KagEvent::End => bridge.state = BridgeState::Ended,
             KagEvent::Warning(message) => warn!("kag warning: {message}"),

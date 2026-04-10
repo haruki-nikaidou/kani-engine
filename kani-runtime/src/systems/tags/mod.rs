@@ -42,7 +42,16 @@ enum RuntimeTag {
     CharaMod,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TagWriters<'a, 'w> {
+    pub ev_image: &'a mut MessageWriter<'w, EvImageTag>,
+    pub ev_audio: &'a mut MessageWriter<'w, EvAudioTag>,
+    pub ev_transition: &'a mut MessageWriter<'w, EvTransitionTag>,
+    pub ev_effect: &'a mut MessageWriter<'w, EvEffectTag>,
+    pub ev_message: &'a mut MessageWriter<'w, EvMessageTag>,
+    pub ev_chara: &'a mut MessageWriter<'w, EvCharaTag>,
+    pub ev_unknown: &'a mut MessageWriter<'w, EvUnknownTag>,
+}
+
 enum TagCategory {
     Image,
     Audio,
@@ -123,38 +132,30 @@ impl RuntimeTag {
     }
 }
 
-pub fn route_tag(
-    name: String,
-    params: Vec<(String, String)>,
-    ev_image: &mut MessageWriter<EvImageTag>,
-    ev_audio: &mut MessageWriter<EvAudioTag>,
-    ev_transition: &mut MessageWriter<EvTransitionTag>,
-    ev_effect: &mut MessageWriter<EvEffectTag>,
-    ev_message: &mut MessageWriter<EvMessageTag>,
-    ev_chara: &mut MessageWriter<EvCharaTag>,
-    ev_unknown: &mut MessageWriter<EvUnknownTag>,
-) {
+pub fn route_tag(name: String, params: Vec<(String, String)>, writers: &mut TagWriters<'_, '_>) {
     match RuntimeTag::parse(&name).map(RuntimeTag::category) {
         Some(TagCategory::Image) => {
-            ev_image.write(EvImageTag { name, params });
+            writers.ev_image.write(EvImageTag { name, params });
         }
         Some(TagCategory::Audio) => {
-            ev_audio.write(EvAudioTag { name, params });
+            writers.ev_audio.write(EvAudioTag { name, params });
         }
         Some(TagCategory::Transition) => {
-            ev_transition.write(EvTransitionTag { name, params });
+            writers
+                .ev_transition
+                .write(EvTransitionTag { name, params });
         }
         Some(TagCategory::Effect) => {
-            ev_effect.write(EvEffectTag { name, params });
+            writers.ev_effect.write(EvEffectTag { name, params });
         }
         Some(TagCategory::Message) => {
-            ev_message.write(EvMessageTag { name, params });
+            writers.ev_message.write(EvMessageTag { name, params });
         }
         Some(TagCategory::Chara) => {
-            ev_chara.write(EvCharaTag { name, params });
+            writers.ev_chara.write(EvCharaTag { name, params });
         }
         None => {
-            ev_unknown.write(EvUnknownTag { name, params });
+            writers.ev_unknown.write(EvUnknownTag { name, params });
         }
     }
 }
