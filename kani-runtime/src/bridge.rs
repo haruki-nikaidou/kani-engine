@@ -59,10 +59,13 @@ fn interpreter_thread_main(
     event_tx: mpsc::Sender<KagEvent>,
     input_rx: mpsc::Receiver<HostEvent>,
 ) {
-    let rt = Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("failed to build runtime");
+    let rt = match Builder::new_current_thread().enable_all().build() {
+        Ok(rt) => rt,
+        Err(err) => {
+            eprintln!("failed to build tokio runtime for interpreter thread: {err}");
+            return;
+        }
+    };
     let local = LocalSet::new();
 
     rt.block_on(local.run_until(run_interpreter_loop(
@@ -132,8 +135,8 @@ async fn run_interpreter_loop(
 
 impl BridgeState {
     pub fn set_wait_ms(&mut self, ms: u64) {
-        *self = BridgeState::WaitingMs {
-            deadline: Instant::now() + Duration::from_millis(ms),
-        };
+        let now = Instant::now();
+        let deadline = now.checked_add(Duration::from_millis(ms)).unwrap_or(now);
+        *self = BridgeState::WaitingMs { deadline };
     }
 }
