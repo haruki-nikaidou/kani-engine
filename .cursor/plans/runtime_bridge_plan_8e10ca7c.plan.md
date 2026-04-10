@@ -4,7 +4,7 @@ overview: Add a new `kani-runtime` workspace crate that bridges `KagInterpreter`
 todos:
   - id: new-crate-scaffold
     content: "Scaffold kani-runtime crate: Cargo.toml, src/lib.rs, add to workspace"
-    status: in_progress
+    status: pending
   - id: asset-backend
     content: Implement AssetBackend (FileSystem + Pak variants), load_text/load_bytes, register_bevy_source
     status: pending

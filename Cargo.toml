@@ -8,6 +8,7 @@ thiserror = "2"
 anyhow = "1"
 
 # kani-pak
+bevy = "0.18.1"
 memmap2 = "0.9.10"
 zstd = "0.13.3"
 bytemuck = { version = "1.25.0", features = ["derive"] }
