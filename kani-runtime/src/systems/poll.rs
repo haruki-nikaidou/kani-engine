@@ -23,16 +23,16 @@ use crate::systems::scenario::load_and_send;
 pub fn poll_interpreter(
     mut bridge: ResMut<InterpreterBridge>,
     backend: Res<AssetBackend>,
-    mut ev_text: EventWriter<EvDisplayText>,
-    mut ev_br: EventWriter<EvInsertLineBreak>,
-    mut ev_clear: EventWriter<EvClearMessage>,
-    mut ev_clear_cur: EventWriter<EvClearCurrentMessage>,
-    mut ev_choices: EventWriter<EvBeginChoices>,
-    mut ev_input: EventWriter<EvInputRequested>,
-    mut ev_embed: EventWriter<EvEmbedText>,
-    mut ev_backlog: EventWriter<EvPushBacklog>,
-    mut ev_snap: EventWriter<EvSnapshot>,
-    mut ev_tag: EventWriter<EvTagRouted>,
+    mut ev_text: MessageWriter<EvDisplayText>,
+    mut ev_br: MessageWriter<EvInsertLineBreak>,
+    mut ev_clear: MessageWriter<EvClearMessage>,
+    mut ev_clear_cur: MessageWriter<EvClearCurrentMessage>,
+    mut ev_choices: MessageWriter<EvBeginChoices>,
+    mut ev_input: MessageWriter<EvInputRequested>,
+    mut ev_embed: MessageWriter<EvEmbedText>,
+    mut ev_backlog: MessageWriter<EvPushBacklog>,
+    mut ev_snap: MessageWriter<EvSnapshot>,
+    mut ev_tag: MessageWriter<EvTagRouted>,
 ) {
     loop {
         let event = match bridge.event_rx.try_recv() {

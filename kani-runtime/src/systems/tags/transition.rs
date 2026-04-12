@@ -6,10 +6,10 @@ use crate::events::{EvFadeScreen, EvMoveLayerTransition, EvRunTransition, EvTagR
 use super::{param, param_f32, param_u64};
 
 pub fn handle_transition_tags(
-    mut reader: EventReader<EvTagRouted>,
-    mut ev_trans: EventWriter<EvRunTransition>,
-    mut ev_fade: EventWriter<EvFadeScreen>,
-    mut ev_move: EventWriter<EvMoveLayerTransition>,
+    mut reader: MessageReader<EvTagRouted>,
+    mut ev_trans: MessageWriter<EvRunTransition>,
+    mut ev_fade: MessageWriter<EvFadeScreen>,
+    mut ev_move: MessageWriter<EvMoveLayerTransition>,
 ) {
     for tag in reader.read() {
         let p = &tag.params;

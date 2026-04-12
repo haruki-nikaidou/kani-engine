@@ -9,11 +9,11 @@ use crate::events::{
 use super::{param, param_f32};
 
 pub fn handle_chara_tags(
-    mut reader: EventReader<EvTagRouted>,
-    mut ev_set: EventWriter<EvSetCharacter>,
-    mut ev_hide: EventWriter<EvHideCharacter>,
-    mut ev_free: EventWriter<EvFreeCharacter>,
-    mut ev_mod: EventWriter<EvModCharacter>,
+    mut reader: MessageReader<EvTagRouted>,
+    mut ev_set: MessageWriter<EvSetCharacter>,
+    mut ev_hide: MessageWriter<EvHideCharacter>,
+    mut ev_free: MessageWriter<EvFreeCharacter>,
+    mut ev_mod: MessageWriter<EvModCharacter>,
 ) {
     for tag in reader.read() {
         let p = &tag.params;

@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, anyhow};
-use bevy::asset::io::{AssetSource, AssetSourceId};
+use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
+use bevy::asset::AssetApp;
 use bevy::prelude::App;
 use kani_pak::{PakAssetReader, PakReader};
 
@@ -64,8 +65,7 @@ impl AssetBackend {
             let reader = Arc::clone(&reader);
             app.register_asset_source(
                 AssetSourceId::Name("pak".into()),
-                AssetSource::build()
-                    .with_reader(move || Box::new(PakAssetReader::from_reader(Arc::clone(&reader)))),
+                AssetSourceBuilder::new(move || Box::new(PakAssetReader::from_reader(Arc::clone(&reader)))),
             );
         }
     }

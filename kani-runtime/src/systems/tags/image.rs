@@ -9,12 +9,12 @@ use crate::events::{
 use super::{param, param_bool, param_f32, param_u64};
 
 pub fn handle_image_tags(
-    mut reader: EventReader<EvTagRouted>,
-    mut ev_bg: EventWriter<EvSetBackground>,
-    mut ev_image: EventWriter<EvSetImageLayer>,
-    mut ev_layopt: EventWriter<EvSetLayerOpt>,
-    mut ev_free: EventWriter<EvFreeLayer>,
-    mut ev_pos: EventWriter<EvSetLayerPosition>,
+    mut reader: MessageReader<EvTagRouted>,
+    mut ev_bg: MessageWriter<EvSetBackground>,
+    mut ev_image: MessageWriter<EvSetImageLayer>,
+    mut ev_layopt: MessageWriter<EvSetLayerOpt>,
+    mut ev_free: MessageWriter<EvFreeLayer>,
+    mut ev_pos: MessageWriter<EvSetLayerPosition>,
 ) {
     for tag in reader.read() {
         let p = &tag.params;

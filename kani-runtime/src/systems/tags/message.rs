@@ -10,13 +10,13 @@ use crate::events::{
 use super::{param, param_bool, param_f32};
 
 pub fn handle_message_tags(
-    mut reader: EventReader<EvTagRouted>,
-    mut ev_msgwnd: EventWriter<EvMessageWindow>,
-    mut ev_wndctrl: EventWriter<EvWindowControl>,
-    mut ev_resetfont: EventWriter<EvResetFont>,
-    mut ev_font: EventWriter<EvSetFont>,
-    mut ev_ruby: EventWriter<EvSetRuby>,
-    mut ev_nowrap: EventWriter<EvSetNowrap>,
+    mut reader: MessageReader<EvTagRouted>,
+    mut ev_msgwnd: MessageWriter<EvMessageWindow>,
+    mut ev_wndctrl: MessageWriter<EvWindowControl>,
+    mut ev_resetfont: MessageWriter<EvResetFont>,
+    mut ev_font: MessageWriter<EvSetFont>,
+    mut ev_ruby: MessageWriter<EvSetRuby>,
+    mut ev_nowrap: MessageWriter<EvSetNowrap>,
 ) {
     for tag in reader.read() {
         let p = &tag.params;

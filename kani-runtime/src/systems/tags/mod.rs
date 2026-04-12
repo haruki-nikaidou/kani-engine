@@ -69,8 +69,8 @@ pub fn is_known_tag(name: &str) -> bool {
 
 /// Emit [`EvUnknownTag`] for every tag that no built-in handler covers.
 pub fn emit_unknown_tags(
-    mut reader: EventReader<EvTagRouted>,
-    mut writer: EventWriter<EvUnknownTag>,
+    mut reader: MessageReader<EvTagRouted>,
+    mut writer: MessageWriter<EvUnknownTag>,
 ) {
     for tag in reader.read() {
         if !is_known_tag(&tag.name) {

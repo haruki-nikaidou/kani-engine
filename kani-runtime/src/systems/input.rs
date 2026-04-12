@@ -43,9 +43,9 @@ pub fn handle_timer(mut bridge: ResMut<InterpreterBridge>) {
 /// and `EvFireTrigger` → `HostEvent::TriggerFired` while waiting for a trigger.
 pub fn handle_ui_inputs(
     mut bridge: ResMut<InterpreterBridge>,
-    mut choices: EventReader<EvSelectChoice>,
-    mut inputs: EventReader<EvSubmitInput>,
-    mut triggers: EventReader<EvFireTrigger>,
+    mut choices: MessageReader<EvSelectChoice>,
+    mut inputs: MessageReader<EvSubmitInput>,
+    mut triggers: MessageReader<EvFireTrigger>,
 ) {
     // Choice selection
     if matches!(bridge.state, BridgeState::WaitingChoice) {
@@ -91,7 +91,7 @@ pub fn handle_ui_inputs(
 /// interpreter is blocked on a `WaitForCompletion` / `[wa]`-family wait.
 pub fn handle_completion(
     mut bridge: ResMut<InterpreterBridge>,
-    mut signals: EventReader<EvCompletionSignal>,
+    mut signals: MessageReader<EvCompletionSignal>,
 ) {
     if !matches!(bridge.state, BridgeState::WaitingCompletion { .. }) {
         return;

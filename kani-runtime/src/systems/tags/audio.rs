@@ -9,13 +9,13 @@ use crate::events::{
 use super::{param, param_bool, param_f32, param_u32, param_u64};
 
 pub fn handle_audio_tags(
-    mut reader: EventReader<EvTagRouted>,
-    mut ev_bgm: EventWriter<EvPlayBgm>,
-    mut ev_stop_bgm: EventWriter<EvStopBgm>,
-    mut ev_se: EventWriter<EvPlaySe>,
-    mut ev_stop_se: EventWriter<EvStopSe>,
-    mut ev_voice: EventWriter<EvPlayVoice>,
-    mut ev_fade: EventWriter<EvFadeBgm>,
+    mut reader: MessageReader<EvTagRouted>,
+    mut ev_bgm: MessageWriter<EvPlayBgm>,
+    mut ev_stop_bgm: MessageWriter<EvStopBgm>,
+    mut ev_se: MessageWriter<EvPlaySe>,
+    mut ev_stop_se: MessageWriter<EvStopSe>,
+    mut ev_voice: MessageWriter<EvPlayVoice>,
+    mut ev_fade: MessageWriter<EvFadeBgm>,
 ) {
     for tag in reader.read() {
         let p = &tag.params;

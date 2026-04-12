@@ -6,10 +6,10 @@ use crate::events::{EvFlash, EvQuake, EvShake, EvTagRouted};
 use super::{param, param_f32, param_u64};
 
 pub fn handle_effect_tags(
-    mut reader: EventReader<EvTagRouted>,
-    mut ev_quake: EventWriter<EvQuake>,
-    mut ev_shake: EventWriter<EvShake>,
-    mut ev_flash: EventWriter<EvFlash>,
+    mut reader: MessageReader<EvTagRouted>,
+    mut ev_quake: MessageWriter<EvQuake>,
+    mut ev_shake: MessageWriter<EvShake>,
+    mut ev_flash: MessageWriter<EvFlash>,
 ) {
     for tag in reader.read() {
         let p = &tag.params;
