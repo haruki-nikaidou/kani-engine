@@ -1,0 +1,40 @@
+//! Screen-effect tag handlers (`[quake]`, `[shake]`, `[flash]`).
+
+use bevy::prelude::*;
+
+use crate::events::{EvFlash, EvQuake, EvShake, EvTagRouted};
+use super::{param, param_f32, param_u64};
+
+pub fn handle_effect_tags(
+    mut reader: EventReader<EvTagRouted>,
+    mut ev_quake: EventWriter<EvQuake>,
+    mut ev_shake: EventWriter<EvShake>,
+    mut ev_flash: EventWriter<EvFlash>,
+) {
+    for tag in reader.read() {
+        let p = &tag.params;
+        match tag.name.as_str() {
+            "quake" => {
+                ev_quake.write(EvQuake {
+                    time: param_u64(p, "time"),
+                    hmax: param_f32(p, "hmax"),
+                    vmax: param_f32(p, "vmax"),
+                });
+            }
+            "shake" => {
+                ev_shake.write(EvShake {
+                    time: param_u64(p, "time"),
+                    amount: param_f32(p, "amount"),
+                    axis: param(p, "axis"),
+                });
+            }
+            "flash" => {
+                ev_flash.write(EvFlash {
+                    time: param_u64(p, "time"),
+                    color: param(p, "color"),
+                });
+            }
+            _ => {}
+        }
+    }
+}

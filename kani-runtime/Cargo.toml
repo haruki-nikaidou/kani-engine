@@ -1,0 +1,14 @@
+[package]
+name = "kani-runtime"
+version = "0.1.0"
+edition = "2024"
+description = "Bevy runtime bridge between kag-interpreter and Bevy ECS"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+bevy.workspace = true
+
+kag-interpreter = { path = "../kag-interpreter" }
+kani-pak = { path = "../kani-pak", features = ["bevy"] }

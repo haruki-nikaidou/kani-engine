@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["kag-syntax", "kag-interpreter", "kag-lsp", "kani-pak"]
+members = ["kag-syntax", "kag-interpreter", "kag-lsp", "kani-pak", "kani-runtime"]
 
 [workspace.dependencies]
 # Error handling
