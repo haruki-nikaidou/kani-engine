@@ -6,11 +6,18 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-      in {
+      in
+      {
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
             pkg-config
@@ -24,11 +31,11 @@
             libxkbcommon
 
             # X11
-            xorg.libX11
-            xorg.libXi
-            xorg.libXcursor
-            xorg.libXrandr
-            xorg.libXinerama
+            libX11
+            libXi
+            libXcursor
+            libXrandr
+            libXinerama
 
             # Graphics
             libGL
@@ -46,14 +53,16 @@
           ];
 
           # Point the dynamic linker at Nix-managed libs at runtime
-          LD_LIBRARY_PATH = with pkgs; lib.makeLibraryPath [
-            wayland
-            libxkbcommon
-            libGL
-            vulkan-loader
-            alsa-lib
-            udev
-          ];
+          LD_LIBRARY_PATH =
+            with pkgs;
+            lib.makeLibraryPath [
+              wayland
+              libxkbcommon
+              libGL
+              vulkan-loader
+              alsa-lib
+              udev
+            ];
 
           shellHook = ''
             echo "kani-engine dev shell ready"
