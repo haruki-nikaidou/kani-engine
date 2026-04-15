@@ -11,7 +11,6 @@ use rhai::Map;
 use crate::error::KagError;
 use crate::snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSnap};
 
-
 use super::script_engine::ScriptEngine;
 
 // ─── Stack frames ─────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["kag-syntax", "kag-interpreter", "kag-lsp", "kani-pak"]
+members = ["kag-syntax", "kag-interpreter", "kag-lsp", "kani-pak", "kani-runtime"]
 
 [workspace.dependencies]
 # Error handling
@@ -20,6 +20,7 @@ rhai = { version = "1.24", features = ["serde"] }
 
 # Async
 tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
 
 # Serialize
 serde = { version = "1", features = ["derive"] }

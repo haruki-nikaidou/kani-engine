@@ -4,46 +4,46 @@ overview: Add a new `kani-runtime` workspace crate that bridges `KagInterpreter`
 todos:
   - id: new-crate-scaffold
     content: "Scaffold kani-runtime crate: Cargo.toml, src/lib.rs, add to workspace"
-    status: pending
+    status: completed
   - id: asset-backend
     content: Implement AssetBackend (FileSystem + Pak variants), load_text/load_bytes, register_bevy_source
-    status: pending
+    status: completed
   - id: bridge-resource
     content: Implement InterpreterBridge resource, BridgeState enum, and interpreter spawn (dedicated thread + LocalSet)
-    status: pending
+    status: completed
   - id: bevy-events
     content: Define all Bevy event types in src/events.rs
-    status: pending
+    status: completed
   - id: poll-system
     content: "Implement poll_interpreter system: drain event_rx each frame, dispatch to Bevy events and BridgeState"
-    status: pending
+    status: completed
   - id: input-system
     content: "Implement input systems: translate BridgeState + Bevy input → HostEvent sends"
-    status: pending
+    status: completed
   - id: scenario-loader
     content: "Implement scenario loader: handle Jump/Return events, load .ks via AssetBackend, send ScenarioLoaded"
-    status: pending
+    status: completed
   - id: tag-image
     content: Implement image/layer tag handlers (bg, image, layopt, free, position)
-    status: pending
+    status: completed
   - id: tag-audio
     content: Implement audio tag handlers (bgm, stopbgm, se, stopse, vo, fadebgm)
-    status: pending
+    status: completed
   - id: tag-transition
     content: Implement transition tag handlers (trans, fadein, fadeout, movetrans)
-    status: pending
+    status: completed
   - id: tag-effect
     content: Implement effect tag handlers (quake, shake, flash)
-    status: pending
+    status: completed
   - id: tag-message
     content: Implement message window tag handlers (msgwnd, wndctrl, resetfont, font, size, etc.)
-    status: pending
+    status: completed
   - id: tag-chara
     content: Implement character sprite tag handlers (chara, chara_hide, chara_free, chara_mod)
-    status: pending
+    status: completed
   - id: plugin-wiring
     content: "Wire everything in KaniRuntimePlugin::build: register sources, insert resources, add events + systems"
-    status: pending
+    status: in_progress
 isProject: false
 ---
 

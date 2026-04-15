@@ -5,8 +5,8 @@ use memmap2::Mmap;
 
 use crate::error::PakError;
 use crate::format::{
-    hash_path, Header, IndexEntry, COMPRESSION_NONE, COMPRESSION_ZSTD, HEADER_SIZE,
-    INDEX_ENTRY_SIZE, MAGIC, VERSION,
+    COMPRESSION_NONE, COMPRESSION_ZSTD, HEADER_SIZE, Header, INDEX_ENTRY_SIZE, IndexEntry, MAGIC,
+    VERSION, hash_path,
 };
 
 /// Read-only handle to an open `.pak` file.
@@ -101,8 +101,9 @@ impl PakReader {
         let raw = self.entry_data(entry)?;
         match entry.compression {
             COMPRESSION_NONE => Ok(raw.to_vec()),
-            COMPRESSION_ZSTD => zstd::decode_all(raw)
-                .map_err(|e| PakError::DecompressError(e.to_string())),
+            COMPRESSION_ZSTD => {
+                zstd::decode_all(raw).map_err(|e| PakError::DecompressError(e.to_string()))
+            }
             other => Err(PakError::DecompressError(format!(
                 "unknown compression type {other:#x}"
             ))),
@@ -137,9 +138,7 @@ impl PakReader {
     fn find_entry(&self, path: &str) -> Option<&IndexEntry> {
         let hash = hash_path(path);
         let entries = self.entries();
-        let idx = entries
-            .binary_search_by_key(&hash, |e| e.path_hash)
-            .ok()?;
+        let idx = entries.binary_search_by_key(&hash, |e| e.path_hash).ok()?;
 
         // Walk left to the first entry with this hash.
         let mut lo = idx;

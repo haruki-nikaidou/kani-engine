@@ -38,8 +38,7 @@ static SCRIPT: &str = include_str!("1-choose-your-new-life/game.ks");
 /// Drive the interpreter to completion, auto-clicking through all wait points
 /// and consuming choices from the provided slice in order.
 async fn drive(choices: &[usize]) -> Vec<KagEvent> {
-    let (mut handle, _task, _diags) =
-        KagInterpreter::spawn_from_source(SCRIPT, "game.ks").unwrap();
+    let (mut handle, _task, _diags) = KagInterpreter::spawn_from_source(SCRIPT, "game.ks").unwrap();
 
     let mut events: Vec<KagEvent> = Vec::new();
     let mut ci = 0usize;
@@ -85,7 +84,10 @@ async fn test_ending_normie() {
 
             assert!(has_text(&events, "普通人"), "normie ending missing");
             assert!(!has_text(&events, "怪盗"), "master-thief must not appear");
-            assert!(!has_text(&events, "偉大なるプログラマー"), "grand-prog must not appear");
+            assert!(
+                !has_text(&events, "偉大なるプログラマー"),
+                "grand-prog must not appear"
+            );
         })
         .await;
 }
@@ -107,7 +109,10 @@ async fn test_ending_master_thief() {
 
             assert!(has_text(&events, "怪盗"), "master-thief ending missing");
             assert!(!has_text(&events, "普通人"), "normie must not appear");
-            assert!(!has_text(&events, "偉大なるプログラマー"), "grand-prog must not appear");
+            assert!(
+                !has_text(&events, "偉大なるプログラマー"),
+                "grand-prog must not appear"
+            );
         })
         .await;
 }
@@ -126,7 +131,10 @@ async fn test_ending_grand_programmer() {
             ];
             let events = drive(choices).await;
 
-            assert!(has_text(&events, "偉大なるプログラマー"), "grand-programmer ending missing");
+            assert!(
+                has_text(&events, "偉大なるプログラマー"),
+                "grand-programmer ending missing"
+            );
             assert!(!has_text(&events, "怪盗"), "master-thief must not appear");
             assert!(!has_text(&events, "普通人"), "normie must not appear");
         })
@@ -145,7 +153,10 @@ async fn test_ending_scumbag() {
 
             assert!(has_text(&events, "ならず者"), "scumbag ending missing");
             assert!(!has_text(&events, "怪盗"), "master-thief must not appear");
-            assert!(!has_text(&events, "エクストリームスポーツ"), "extreme-sports must not appear");
+            assert!(
+                !has_text(&events, "エクストリームスポーツ"),
+                "extreme-sports must not appear"
+            );
         })
         .await;
 }
@@ -160,7 +171,10 @@ async fn test_ending_extreme_sports() {
             let choices: &[usize] = &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
             let events = drive(choices).await;
 
-            assert!(has_text(&events, "エクストリームスポーツ"), "extreme-sports ending missing");
+            assert!(
+                has_text(&events, "エクストリームスポーツ"),
+                "extreme-sports ending missing"
+            );
             assert!(!has_text(&events, "ならず者"), "scumbag must not appear");
             assert!(!has_text(&events, "普通人"), "normie must not appear");
         })

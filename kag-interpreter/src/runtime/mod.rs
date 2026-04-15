@@ -31,7 +31,7 @@ use executor::execute_op;
 /// Number of `KagEvent`s that can be buffered before the interpreter blocks.
 const EVENT_CHANNEL_CAP: usize = 64;
 /// Number of `HostEvent`s that can be buffered before the host blocks.
-const INPUT_CHANNEL_CAP: usize = 16;
+const INPUT_CHANNEL_CAP: usize = 64;
 
 // ─── Public actor handle ──────────────────────────────────────────────────────
 
@@ -175,15 +175,21 @@ impl KagInterpreter {
 /// `Some(event)` when the caller's loop should still match on it.
 fn try_side_band(ctx: &mut RuntimeContext, event: HostEvent) -> Option<HostEvent> {
     match event {
-        HostEvent::SetVariable { scope, key, value_expr } => {
+        HostEvent::SetVariable {
+            scope,
+            key,
+            value_expr,
+        } => {
             let prefix = match scope {
-                VarScope::F  => "f",
+                VarScope::F => "f",
                 VarScope::Sf => "sf",
                 VarScope::Tf => "tf",
                 VarScope::Mp => "mp",
             };
             // Mirrors [eval] — errors become warnings rather than panics.
-            let _ = ctx.script_engine.exec(&format!("{prefix}.{key} = {value_expr};"));
+            let _ = ctx
+                .script_engine
+                .exec(&format!("{prefix}.{key} = {value_expr};"));
             None
         }
         HostEvent::QueryVariables(tx) => {
@@ -225,6 +231,7 @@ async fn emit_snapshot(ctx: &RuntimeContext, event_tx: &mpsc::Sender<KagEvent>) 
             let _ = event_tx.send(KagEvent::Snapshot(Box::new(snap))).await;
         }
         Err(e) => {
+            tracing::error!("[kag] snapshot error: {e}");
             let _ = event_tx
                 .send(KagEvent::Error(format!("snapshot error: {e}")))
                 .await;
@@ -244,6 +251,7 @@ async fn interpreter_task_from_snapshot(
     let storage = snapshot.storage.clone();
     let mut ctx = RuntimeContext::new(storage);
     if let Err(e) = ctx.restore_from_snapshot(&snapshot) {
+        tracing::error!("[kag] snapshot restore failed: {e}");
         let _ = event_tx
             .send(KagEvent::Error(format!("restore error: {e}")))
             .await;
@@ -296,40 +304,54 @@ async fn perform_jump(
         loop {
             match input_rx.recv().await {
                 Some(event) => {
-                    if let Some(event) = try_side_band(ctx, event) {
-                        match event {
-                            HostEvent::ScenarioLoaded { name, source } => {
-                                let (new_script, diags) = parse_script(&source, &name);
-                                *script = new_script;
-                                ctx.current_storage = name.clone();
-                                for d in diags {
-                                    let _ = event_tx.send(KagEvent::Warning(d.message)).await;
-                                }
-                                let idx = if let Some(ref t) = target {
-                                    let key = t.trim_start_matches('*');
-                                    match script.label_map.get(key).copied() {
-                                        Some(i) => i,
-                                        None => {
-                                            let _ = event_tx
-                                                .send(KagEvent::Warning(format!(
-                                                    "label '{key}' not found in '{}' \
-                                                     (script.label_map has {} label(s)); \
-                                                     jumping to start",
-                                                    ctx.current_storage,
-                                                    script.label_map.len(),
-                                                )))
-                                                .await;
-                                            0
-                                        }
-                                    }
-                                } else {
-                                    0
-                                };
-                                ctx.jump_to(idx);
-                                return true;
+                    if let Some(event) = try_side_band(ctx, event)
+                        && let HostEvent::ScenarioLoaded { name, source } = event
+                    {
+                        let (new_script, diags) = parse_script(&source, &name);
+                        *script = new_script;
+                        ctx.current_storage = name.clone();
+                        for d in diags {
+                            match d.severity {
+                                kag_syntax::error::Severity::Error => tracing::error!(
+                                    "[kag] parse error loading '{}': {}",
+                                    name,
+                                    d.message
+                                ),
+                                kag_syntax::error::Severity::Warning => tracing::warn!(
+                                    "[kag] parse warning loading '{}': {}",
+                                    name,
+                                    d.message
+                                ),
                             }
-                            _ => {}
+                            let _ = event_tx.send(KagEvent::Warning(d.message)).await;
                         }
+                        let idx = if let Some(ref t) = target {
+                            let key = t.trim_start_matches('*');
+                            match script.label_map.get(key).copied() {
+                                Some(i) => i,
+                                None => {
+                                    tracing::warn!(
+                                        "[kag] label '{}' not found in '{}', jumping to start",
+                                        key,
+                                        ctx.current_storage
+                                    );
+                                    let _ = event_tx
+                                        .send(KagEvent::Warning(format!(
+                                            "label '{key}' not found in '{}' \
+                                                 (script.label_map has {} label(s)); \
+                                                 jumping to start",
+                                            ctx.current_storage,
+                                            script.label_map.len(),
+                                        )))
+                                        .await;
+                                    0
+                                }
+                            }
+                        } else {
+                            0
+                        };
+                        ctx.jump_to(idx);
+                        return true;
                     }
                 }
                 None => return false,
@@ -340,6 +362,11 @@ async fn perform_jump(
         if let Some(&idx) = script.label_map.get(key) {
             ctx.jump_to(idx);
         } else {
+            tracing::error!(
+                "[kag] label '{}' not found in '{}'",
+                key,
+                ctx.current_storage
+            );
             let _ = event_tx
                 .send(KagEvent::Error(format!(
                     "label not found: '{key}' in '{}'",
@@ -359,7 +386,6 @@ async fn run_interpreter(
     event_tx: mpsc::Sender<KagEvent>,
     mut input_rx: mpsc::Receiver<HostEvent>,
 ) {
-
     loop {
         // ── Execute the next op ───────────────────────────────────────────
         if ctx.pc >= script.ops.len() {
@@ -370,6 +396,7 @@ async fn run_interpreter(
         let events = match execute_op(&script, &mut ctx) {
             Ok(evs) => evs,
             Err(e) => {
+                tracing::error!("[kag] unrecoverable executor error: {e}");
                 let _ = event_tx.send(KagEvent::Error(e.to_string())).await;
                 break;
             }
@@ -402,15 +429,28 @@ async fn run_interpreter(
                                                 ctx.pending_timeout = None;
                                                 ctx.pending_wheel = None;
                                                 let (st, tg) = (handler.storage, handler.target);
-                                                if let Some(exp) = handler.exp {
-                                                    if let Err(e) = ctx.script_engine.exec(&exp) {
-                                                        let _ = event_tx.send(KagEvent::Warning(e.to_string())).await;
-                                                    }
+                                                if let Some(exp) = handler.exp
+                                                    && let Err(e) = ctx.script_engine.exec(&exp)
+                                                {
+                                                    tracing::warn!(
+                                                        "[kag] click handler exp failed: {e}"
+                                                    );
+                                                    let _ = event_tx
+                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .await;
                                                 }
-                                                if st.is_some() || tg.is_some() {
-                                                    if !perform_jump(&mut script, &mut ctx, st, tg, &event_tx, &mut input_rx).await {
-                                                        return;
-                                                    }
+                                                if (st.is_some() || tg.is_some())
+                                                    && !perform_jump(
+                                                        &mut script,
+                                                        &mut ctx,
+                                                        st,
+                                                        tg,
+                                                        &event_tx,
+                                                        &mut input_rx,
+                                                    )
+                                                    .await
+                                                {
+                                                    return;
                                                 }
                                             } else {
                                                 ctx.pending_timeout = None;
@@ -429,15 +469,28 @@ async fn run_interpreter(
                                                 ctx.pending_click = None;
                                                 ctx.pending_wheel = None;
                                                 let (st, tg) = (handler.storage, handler.target);
-                                                if let Some(exp) = handler.exp {
-                                                    if let Err(e) = ctx.script_engine.exec(&exp) {
-                                                        let _ = event_tx.send(KagEvent::Warning(e.to_string())).await;
-                                                    }
+                                                if let Some(exp) = handler.exp
+                                                    && let Err(e) = ctx.script_engine.exec(&exp)
+                                                {
+                                                    tracing::warn!(
+                                                        "[kag] timeout handler exp failed: {e}"
+                                                    );
+                                                    let _ = event_tx
+                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .await;
                                                 }
-                                                if st.is_some() || tg.is_some() {
-                                                    if !perform_jump(&mut script, &mut ctx, st, tg, &event_tx, &mut input_rx).await {
-                                                        return;
-                                                    }
+                                                if (st.is_some() || tg.is_some())
+                                                    && !perform_jump(
+                                                        &mut script,
+                                                        &mut ctx,
+                                                        st,
+                                                        tg,
+                                                        &event_tx,
+                                                        &mut input_rx,
+                                                    )
+                                                    .await
+                                                {
+                                                    return;
                                                 }
                                                 break;
                                             }
@@ -448,15 +501,28 @@ async fn run_interpreter(
                                                 ctx.pending_click = None;
                                                 ctx.pending_timeout = None;
                                                 let (st, tg) = (handler.storage, handler.target);
-                                                if let Some(exp) = handler.exp {
-                                                    if let Err(e) = ctx.script_engine.exec(&exp) {
-                                                        let _ = event_tx.send(KagEvent::Warning(e.to_string())).await;
-                                                    }
+                                                if let Some(exp) = handler.exp
+                                                    && let Err(e) = ctx.script_engine.exec(&exp)
+                                                {
+                                                    tracing::warn!(
+                                                        "[kag] wheel handler exp failed: {e}"
+                                                    );
+                                                    let _ = event_tx
+                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .await;
                                                 }
-                                                if st.is_some() || tg.is_some() {
-                                                    if !perform_jump(&mut script, &mut ctx, st, tg, &event_tx, &mut input_rx).await {
-                                                        return;
-                                                    }
+                                                if (st.is_some() || tg.is_some())
+                                                    && !perform_jump(
+                                                        &mut script,
+                                                        &mut ctx,
+                                                        st,
+                                                        tg,
+                                                        &event_tx,
+                                                        &mut input_rx,
+                                                    )
+                                                    .await
+                                                {
+                                                    return;
                                                 }
                                                 break;
                                             }
@@ -548,23 +614,30 @@ async fn run_interpreter(
                     loop {
                         match input_rx.recv().await {
                             Some(event) => {
-                                if let Some(event) = try_side_band(&mut ctx, event) {
-                                    match event {
-                                        HostEvent::ScenarioLoaded { name, source } => {
-                                            let (new_script, diags) = parse_script(&source, &name);
-                                            script = new_script;
-                                            ctx.current_storage = name;
-                                            for d in diags {
-                                                let _ = event_tx
-                                                    .send(KagEvent::Warning(d.message))
-                                                    .await;
-                                            }
-                                            // ctx.pc was already set to return_pc by the
-                                            // executor — do NOT override it here.
-                                            break;
+                                if let Some(event) = try_side_band(&mut ctx, event)
+                                    && let HostEvent::ScenarioLoaded { name, source } = event
+                                {
+                                    let (new_script, diags) = parse_script(&source, &name);
+                                    script = new_script;
+                                    ctx.current_storage = name;
+                                    for d in diags {
+                                        match d.severity {
+                                            kag_syntax::error::Severity::Error => tracing::error!(
+                                                "[kag] parse error loading '{}': {}",
+                                                ctx.current_storage,
+                                                d.message
+                                            ),
+                                            kag_syntax::error::Severity::Warning => tracing::warn!(
+                                                "[kag] parse warning loading '{}': {}",
+                                                ctx.current_storage,
+                                                d.message
+                                            ),
                                         }
-                                        _ => {}
+                                        let _ = event_tx.send(KagEvent::Warning(d.message)).await;
                                     }
+                                    // ctx.pc was already set to return_pc by the
+                                    // executor — do NOT override it here.
+                                    break;
                                 }
                             }
                             None => return,
@@ -581,22 +654,25 @@ async fn run_interpreter(
                                 if let Some(event) = try_side_band(&mut ctx, event) {
                                     match event {
                                         HostEvent::ChoiceSelected(idx) => {
-                                            ctx.script_engine
-                                                .set_f("_last_choice", rhai::Dynamic::from(idx as i64));
+                                            ctx.script_engine.set_f(
+                                                "_last_choice",
+                                                rhai::Dynamic::from(idx as i64),
+                                            );
                                             if let Some(choice) = choices.get(idx) {
                                                 // Evaluate optional side-effect expression
-                                                if let Some(exp) = &choice.exp {
-                                                    if let Err(e) = ctx.script_engine.exec(exp) {
-                                                        let _ = event_tx
-                                                            .send(KagEvent::Warning(e.to_string()))
-                                                            .await;
-                                                    }
+                                                if let Some(exp) = &choice.exp
+                                                    && let Err(e) = ctx.script_engine.exec(exp)
+                                                {
+                                                    tracing::warn!("[kag] choice exp failed: {e}");
+                                                    let _ = event_tx
+                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .await;
                                                 }
                                                 // Navigate to the choice target if present
                                                 let storage = choice.storage.clone();
                                                 let target = choice.target.clone();
-                                                if storage.is_some() || target.is_some() {
-                                                    if !perform_jump(
+                                                if (storage.is_some() || target.is_some())
+                                                    && !perform_jump(
                                                         &mut script,
                                                         &mut ctx,
                                                         storage,
@@ -605,9 +681,8 @@ async fn run_interpreter(
                                                         &mut input_rx,
                                                     )
                                                     .await
-                                                    {
-                                                        return;
-                                                    }
+                                                {
+                                                    return;
                                                 }
                                             }
                                             break;
@@ -625,14 +700,17 @@ async fn run_interpreter(
                 }
 
                 // ── WaitForCompletion (wa/wm/wt/wq/wb/wf/wl/ws/wv/wp) ─────
-                KagEvent::WaitForCompletion { ref tag, ref params } => {
-                    let canskip = params
-                        .iter()
-                        .any(|(k, v)| k == "canskip" && v != "false");
-                    let _ = event_tx.send(KagEvent::WaitForCompletion {
-                        tag: tag.clone(),
-                        params: params.clone(),
-                    }).await;
+                KagEvent::WaitForCompletion {
+                    ref tag,
+                    ref params,
+                } => {
+                    let canskip = params.iter().any(|(k, v)| k == "canskip" && v != "false");
+                    let _ = event_tx
+                        .send(KagEvent::WaitForCompletion {
+                            tag: tag.clone(),
+                            params: params.clone(),
+                        })
+                        .await;
                     loop {
                         match input_rx.recv().await {
                             Some(event) => {
@@ -674,13 +752,19 @@ async fn run_interpreter(
                 }
 
                 // ── InputRequested (input) ─────────────────────────────────
-                KagEvent::InputRequested { ref name, ref prompt, ref title } => {
+                KagEvent::InputRequested {
+                    ref name,
+                    ref prompt,
+                    ref title,
+                } => {
                     let var_name = name.clone();
-                    let _ = event_tx.send(KagEvent::InputRequested {
-                        name: name.clone(),
-                        prompt: prompt.clone(),
-                        title: title.clone(),
-                    }).await;
+                    let _ = event_tx
+                        .send(KagEvent::InputRequested {
+                            name: name.clone(),
+                            prompt: prompt.clone(),
+                            title: title.clone(),
+                        })
+                        .await;
                     loop {
                         match input_rx.recv().await {
                             Some(event) => {
@@ -691,10 +775,17 @@ async fn run_interpreter(
                                             // result string.  We assign it as a Rhai
                                             // string literal, escaping embedded quotes.
                                             if !var_name.is_empty() {
-                                                let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+                                                let escaped = value
+                                                    .replace('\\', "\\\\")
+                                                    .replace('"', "\\\"");
                                                 let assign = format!("{var_name} = \"{escaped}\";");
                                                 if let Err(e) = ctx.script_engine.exec(&assign) {
-                                                    let _ = event_tx.send(KagEvent::Warning(e.to_string())).await;
+                                                    tracing::warn!(
+                                                        "[kag] input assign failed: {e}"
+                                                    );
+                                                    let _ = event_tx
+                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .await;
                                                 }
                                             }
                                             break;
@@ -714,13 +805,19 @@ async fn run_interpreter(
                 // ── WaitForTrigger (waittrig) ──────────────────────────────
                 KagEvent::WaitForTrigger { ref name } => {
                     let trigger_name = name.clone();
-                    let _ = event_tx.send(KagEvent::WaitForTrigger { name: name.clone() }).await;
+                    let _ = event_tx
+                        .send(KagEvent::WaitForTrigger { name: name.clone() })
+                        .await;
                     loop {
                         match input_rx.recv().await {
                             Some(event) => {
                                 if let Some(event) = try_side_band(&mut ctx, event) {
                                     match event {
-                                        HostEvent::TriggerFired { name } if name == trigger_name => break,
+                                        HostEvent::TriggerFired { name }
+                                            if name == trigger_name =>
+                                        {
+                                            break;
+                                        }
                                         HostEvent::TriggerFired { .. } => {
                                             // Wrong trigger — ignore and keep waiting
                                         }
@@ -1057,8 +1154,7 @@ mod tests {
             let src = "[eval exp=\"f.x = 99;\"]\nbefore\n@l\nafter\n";
 
             // ── Phase 1: run until the click wait, then snapshot ───────────
-            let (mut h1, _t1, _) =
-                KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
+            let (mut h1, _t1, _) = KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
 
             // Collect events up to and including WaitForClick
             loop {
@@ -1082,8 +1178,7 @@ mod tests {
             assert_eq!(snap.f.get("x").and_then(|v| v.as_i64()), Some(99));
 
             // ── Phase 2: restore and continue ────────────────────────────────
-            let (mut h2, _t2, _) =
-                KagInterpreter::spawn_from_snapshot(snap, src).unwrap();
+            let (mut h2, _t2, _) = KagInterpreter::spawn_from_snapshot(snap, src).unwrap();
 
             // Resume by clicking
             h2.send(HostEvent::Clicked).await.unwrap();
@@ -1151,8 +1246,7 @@ mod tests {
     async fn test_wa_blocks_until_completion_signal() {
         with_local(|| async {
             let src = "[wa layer=0 seg=1]\nafter\n";
-            let (mut handle, _task, _) =
-                KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
+            let (mut handle, _task, _) = KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
 
             loop {
                 match handle.recv().await {
@@ -1173,7 +1267,9 @@ mod tests {
             }
 
             assert!(
-                post.iter().any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))),
+                post.iter().any(
+                    |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))
+                ),
                 "script should resume after CompletionSignal: {:?}",
                 post
             );
@@ -1186,8 +1282,7 @@ mod tests {
     async fn test_waitclick_blocks_until_clicked() {
         with_local(|| async {
             let src = "@waitclick\nafter\n";
-            let (mut handle, _task, _) =
-                KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
+            let (mut handle, _task, _) = KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
 
             loop {
                 match handle.recv().await {
@@ -1208,7 +1303,9 @@ mod tests {
             }
 
             assert!(
-                post.iter().any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))),
+                post.iter().any(
+                    |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))
+                ),
                 "script should resume after Clicked: {:?}",
                 post
             );
@@ -1221,8 +1318,7 @@ mod tests {
     async fn test_input_stores_result_in_variable() {
         with_local(|| async {
             let src = "[input name=f.user]\n[eval exp=\"tf.got = f.user;\"]\n@s\n";
-            let (mut handle, _task, _) =
-                KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
+            let (mut handle, _task, _) = KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
 
             loop {
                 match handle.recv().await {
@@ -1232,7 +1328,10 @@ mod tests {
                 }
             }
 
-            handle.send(HostEvent::InputResult("Alice".into())).await.unwrap();
+            handle
+                .send(HostEvent::InputResult("Alice".into()))
+                .await
+                .unwrap();
 
             loop {
                 match handle.recv().await {
@@ -1256,8 +1355,7 @@ mod tests {
     async fn test_waittrig_blocks_until_trigger_fired() {
         with_local(|| async {
             let src = "[waittrig name=go]\nafter\n";
-            let (mut handle, _task, _) =
-                KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
+            let (mut handle, _task, _) = KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
 
             loop {
                 match handle.recv().await {
@@ -1268,9 +1366,17 @@ mod tests {
             }
 
             // A wrong-name trigger should be ignored
-            handle.send(HostEvent::TriggerFired { name: "other".into() }).await.unwrap();
+            handle
+                .send(HostEvent::TriggerFired {
+                    name: "other".into(),
+                })
+                .await
+                .unwrap();
             // The right trigger unblocks
-            handle.send(HostEvent::TriggerFired { name: "go".into() }).await.unwrap();
+            handle
+                .send(HostEvent::TriggerFired { name: "go".into() })
+                .await
+                .unwrap();
 
             let mut post = Vec::new();
             loop {
@@ -1281,7 +1387,9 @@ mod tests {
             }
 
             assert!(
-                post.iter().any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))),
+                post.iter().any(
+                    |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("after"))
+                ),
                 "script should resume after correct TriggerFired: {:?}",
                 post
             );
@@ -1294,8 +1402,7 @@ mod tests {
     async fn test_click_handler_at_stop() {
         with_local(|| async {
             let src = "*start\n@click target=*dest\n@s\n*dest\narrived\n@s\n";
-            let (mut handle, _task, _) =
-                KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
+            let (mut handle, _task, _) = KagInterpreter::spawn_from_source(src, "test.ks").unwrap();
 
             // Wait for the [s] stop
             loop {
@@ -1317,7 +1424,9 @@ mod tests {
             }
 
             assert!(
-                post.iter().any(|e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("arrived"))),
+                post.iter().any(
+                    |e| matches!(e, KagEvent::DisplayText { text, .. } if text.contains("arrived"))
+                ),
                 "click handler should jump to *dest: {:?}",
                 post
             );

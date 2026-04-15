@@ -47,11 +47,13 @@ pub mod lexer;
 pub mod lower;
 pub mod parser;
 pub mod syntax_kind;
+pub mod tag_defs;
 
 // ── Semantic AST re-exports ───────────────────────────────────────────────────
 
 pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 pub use error::{KagError, ParseDiagnostic, Severity};
+pub use tag_defs::{KnownTag, TagName};
 
 // ── Parser entry points ───────────────────────────────────────────────────────
 
