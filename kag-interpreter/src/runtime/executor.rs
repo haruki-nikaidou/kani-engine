@@ -640,7 +640,11 @@ fn execute_tag<'s>(
             let storage = resolved_str(ctx, tag, "storage");
             let target = resolved_str(ctx, tag, "target");
             let exp = tag.param_str("exp").map(str::to_owned);
-            ctx.pending_click = Some(JumpTarget { storage, target, exp });
+            ctx.pending_click = Some(JumpTarget {
+                storage,
+                target,
+                exp,
+            });
             Ok(vec![])
         }
         TAG_CCLICK => {
@@ -654,7 +658,12 @@ fn execute_tag<'s>(
             let storage = resolved_str(ctx, tag, "storage");
             let target = resolved_str(ctx, tag, "target");
             let exp = tag.param_str("exp").map(str::to_owned);
-            ctx.pending_timeout = Some(TimeoutHandler { time_ms, storage, target, exp });
+            ctx.pending_timeout = Some(TimeoutHandler {
+                time_ms,
+                storage,
+                target,
+                exp,
+            });
             Ok(vec![])
         }
         TAG_CTIMEOUT => {
@@ -667,7 +676,11 @@ fn execute_tag<'s>(
             let storage = resolved_str(ctx, tag, "storage");
             let target = resolved_str(ctx, tag, "target");
             let exp = tag.param_str("exp").map(str::to_owned);
-            ctx.pending_wheel = Some(JumpTarget { storage, target, exp });
+            ctx.pending_wheel = Some(JumpTarget {
+                storage,
+                target,
+                exp,
+            });
             Ok(vec![])
         }
         TAG_CWHEEL => {
@@ -678,8 +691,7 @@ fn execute_tag<'s>(
         // ── Blocking wait tags ────────────────────────────────────────────
         // All w* completion-wait tags emit WaitForCompletion with their
         // resolved params so the host bridge can identify what to wait on.
-        TAG_WA | TAG_WM | TAG_WT | TAG_WQ | TAG_WB | TAG_WF | TAG_WL
-        | TAG_WS | TAG_WV | TAG_WP => {
+        TAG_WA | TAG_WM | TAG_WT | TAG_WQ | TAG_WB | TAG_WF | TAG_WL | TAG_WS | TAG_WV | TAG_WP => {
             let params = build_resolved_params(ctx, tag);
             Ok(vec![KagEvent::WaitForCompletion {
                 tag: name.to_owned(),
@@ -1605,15 +1617,25 @@ mod tests {
     fn test_ct_emits_clear_message_and_generic() {
         let (events, _) = run_script("@ct\n");
         let names = event_names(&events);
-        assert!(names.contains(&"cm".to_string()), "ct must emit ClearMessage: {:?}", names);
-        assert!(names.iter().any(|n| n == "tag:ct"), "ct must also emit generic tag: {:?}", names);
+        assert!(
+            names.contains(&"cm".to_string()),
+            "ct must emit ClearMessage: {:?}",
+            names
+        );
+        assert!(
+            names.iter().any(|n| n == "tag:ct"),
+            "ct must also emit generic tag: {:?}",
+            names
+        );
     }
 
     #[test]
     fn test_er_emits_clear_current_message() {
         let (events, _) = run_script("@er\n");
         assert!(
-            events.iter().any(|e| matches!(e, KagEvent::ClearCurrentMessage)),
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::ClearCurrentMessage)),
             "er must emit ClearCurrentMessage: {:?}",
             events
         );
@@ -1635,7 +1657,9 @@ mod tests {
     fn test_waitclick_emits_wait_for_raw_click() {
         let (events, _) = run_script("@waitclick\n");
         assert!(
-            events.iter().any(|e| matches!(e, KagEvent::WaitForRawClick)),
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::WaitForRawClick)),
             "waitclick must emit WaitForRawClick: {:?}",
             events
         );
@@ -1645,7 +1669,9 @@ mod tests {
     fn test_wa_emits_wait_for_completion() {
         let (events, _) = run_script("[wa layer=0 seg=1]\n");
         assert!(
-            events.iter().any(|e| matches!(e, KagEvent::WaitForCompletion { tag, .. } if tag == "wa")),
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::WaitForCompletion { tag, .. } if tag == "wa")),
             "wa must emit WaitForCompletion: {:?}",
             events
         );
@@ -1655,7 +1681,9 @@ mod tests {
     fn test_wt_emits_wait_for_completion() {
         let (events, _) = run_script("@wt\n");
         assert!(
-            events.iter().any(|e| matches!(e, KagEvent::WaitForCompletion { tag, .. } if tag == "wt")),
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::WaitForCompletion { tag, .. } if tag == "wt")),
             "wt must emit WaitForCompletion: {:?}",
             events
         );
@@ -1665,7 +1693,9 @@ mod tests {
     fn test_input_emits_input_requested() {
         let (events, _) = run_script("[input name=f.user prompt=Enter title=Name]\n");
         assert!(
-            events.iter().any(|e| matches!(e, KagEvent::InputRequested { name, .. } if name == "f.user")),
+            events
+                .iter()
+                .any(|e| matches!(e, KagEvent::InputRequested { name, .. } if name == "f.user")),
             "input must emit InputRequested: {:?}",
             events
         );
@@ -1697,7 +1727,10 @@ mod tests {
     fn test_autowc_disabled_clears_map() {
         let src = "[autowc enabled=true ch=X time=10]\n[autowc enabled=false]\n";
         let (_, ctx) = run_script(src);
-        assert!(!ctx.autowc_enabled, "autowc_enabled should be false after disabling");
+        assert!(
+            !ctx.autowc_enabled,
+            "autowc_enabled should be false after disabling"
+        );
         assert!(ctx.autowc_map.is_empty(), "autowc_map should be cleared");
     }
 
@@ -1720,7 +1753,10 @@ mod tests {
     fn test_cclick_clears_pending_click() {
         let src = "@click target=*dest\n@cclick\n";
         let (_, ctx) = run_script(src);
-        assert!(ctx.pending_click.is_none(), "pending_click should be cleared by cclick");
+        assert!(
+            ctx.pending_click.is_none(),
+            "pending_click should be cleared by cclick"
+        );
     }
 
     #[test]
@@ -1736,7 +1772,10 @@ mod tests {
     fn test_ctimeout_clears_pending_timeout() {
         let src = "@timeout time=1000 target=*x\n@ctimeout\n";
         let (_, ctx) = run_script(src);
-        assert!(ctx.pending_timeout.is_none(), "pending_timeout should be cleared by ctimeout");
+        assert!(
+            ctx.pending_timeout.is_none(),
+            "pending_timeout should be cleared by ctimeout"
+        );
     }
 
     #[test]
@@ -1744,21 +1783,30 @@ mod tests {
         let src = "@wheel target=*scroll\n";
         let (_, ctx) = run_script(src);
         assert!(ctx.pending_wheel.is_some());
-        assert_eq!(ctx.pending_wheel.unwrap().target.as_deref(), Some("*scroll"));
+        assert_eq!(
+            ctx.pending_wheel.unwrap().target.as_deref(),
+            Some("*scroll")
+        );
     }
 
     #[test]
     fn test_cwheel_clears_pending_wheel() {
         let src = "@wheel target=*scroll\n@cwheel\n";
         let (_, ctx) = run_script(src);
-        assert!(ctx.pending_wheel.is_none(), "cwheel should clear pending_wheel");
+        assert!(
+            ctx.pending_wheel.is_none(),
+            "cwheel should clear pending_wheel"
+        );
     }
 
     #[test]
     fn test_resetwait_sets_base_time() {
         let src = "@resetwait\n";
         let (_, ctx) = run_script(src);
-        assert!(ctx.wait_base_time.is_some(), "resetwait should set wait_base_time");
+        assert!(
+            ctx.wait_base_time.is_some(),
+            "resetwait should set wait_base_time"
+        );
     }
 
     #[test]

@@ -20,7 +20,9 @@ use crate::events::{EvTagRouted, EvUnknownTag};
 
 /// Look up a parameter by name.
 pub(crate) fn param(params: &[(String, String)], key: &str) -> Option<String> {
-    params.iter().find_map(|(k, v)| (k == key).then(|| v.clone()))
+    params
+        .iter()
+        .find_map(|(k, v)| (k == key).then(|| v.clone()))
 }
 
 /// Parse a parameter as `f32`, returning `None` if absent or unparseable.
@@ -41,8 +43,7 @@ pub(crate) fn param_u32(params: &[(String, String)], key: &str) -> Option<u32> {
 /// Parse a parameter as a boolean (`"false"` / `"0"` → false, anything else →
 /// true).  Returns `None` if the parameter is absent.
 pub(crate) fn param_bool(params: &[(String, String)], key: &str) -> Option<bool> {
-    param(params, key)
-        .map(|v| !matches!(v.to_ascii_lowercase().as_str(), "false" | "0" | "off"))
+    param(params, key).map(|v| !matches!(v.to_ascii_lowercase().as_str(), "false" | "0" | "off"))
 }
 
 // ─── Known-tag registry ───────────────────────────────────────────────────────
@@ -74,7 +75,10 @@ pub fn emit_unknown_tags(
 ) {
     for tag in reader.read() {
         if !is_known_tag(&tag.name) {
-            writer.write(EvUnknownTag { name: tag.name.clone(), params: tag.params.clone() });
+            writer.write(EvUnknownTag {
+                name: tag.name.clone(),
+                params: tag.params.clone(),
+            });
         }
     }
 }

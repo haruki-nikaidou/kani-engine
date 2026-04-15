@@ -20,7 +20,10 @@ pub fn load_and_send(
         .with_context(|| format!("reading scenario '{storage}'"))?;
 
     input_tx
-        .try_send(HostEvent::ScenarioLoaded { name: storage.to_owned(), source })
+        .try_send(HostEvent::ScenarioLoaded {
+            name: storage.to_owned(),
+            source,
+        })
         .with_context(|| format!("sending ScenarioLoaded for '{storage}'"))?;
 
     Ok(())

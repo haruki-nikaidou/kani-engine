@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 
-use crate::events::{EvFlash, EvQuake, EvShake, EvTagRouted};
 use super::{param, param_f32, param_u64};
+use crate::events::{EvFlash, EvQuake, EvShake, EvTagRouted};
 
 pub fn handle_effect_tags(
     mut reader: MessageReader<EvTagRouted>,

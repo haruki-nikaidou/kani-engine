@@ -22,8 +22,8 @@ use bytemuck::bytes_of;
 
 use crate::error::PakError;
 use crate::format::{
-    hash_path, Header, IndexEntry, COMPRESSION_NONE, COMPRESSION_ZSTD, HEADER_SIZE,
-    INDEX_ENTRY_SIZE, MAGIC, VERSION,
+    COMPRESSION_NONE, COMPRESSION_ZSTD, HEADER_SIZE, Header, INDEX_ENTRY_SIZE, IndexEntry, MAGIC,
+    VERSION, hash_path,
 };
 
 /// How to compress an entry when adding it to the archive.
@@ -71,10 +71,15 @@ impl PakWriter {
     /// e.g. `"assets/bg/forest.png"`.
     ///
     /// Returns [`PakError::PathTooLong`] if `path` exceeds 65535 bytes.
-    pub fn add(&mut self, path: &str, data: &[u8], compression: Compression) -> Result<(), PakError> {
+    pub fn add(
+        &mut self,
+        path: &str,
+        data: &[u8],
+        compression: Compression,
+    ) -> Result<(), PakError> {
         let path_bytes = path.as_bytes();
-        let path_len = u16::try_from(path_bytes.len())
-            .map_err(|_| PakError::PathTooLong(path_bytes.len()))?;
+        let path_len =
+            u16::try_from(path_bytes.len()).map_err(|_| PakError::PathTooLong(path_bytes.len()))?;
 
         let path_hash = hash_path(path);
         let uncompressed_size = data.len() as u32;

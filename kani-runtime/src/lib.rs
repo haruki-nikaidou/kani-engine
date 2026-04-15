@@ -31,12 +31,8 @@ use bevy::prelude::*;
 use systems::input::{handle_click_input, handle_completion, handle_timer, handle_ui_inputs};
 use systems::poll::poll_interpreter;
 use systems::tags::{
-    audio::handle_audio_tags,
-    chara::handle_chara_tags,
-    effect::handle_effect_tags,
-    emit_unknown_tags,
-    image::handle_image_tags,
-    message::handle_message_tags,
+    audio::handle_audio_tags, chara::handle_chara_tags, effect::handle_effect_tags,
+    emit_unknown_tags, image::handle_image_tags, message::handle_message_tags,
     transition::handle_transition_tags,
 };
 
@@ -142,7 +138,12 @@ impl Plugin for KaniRuntimePlugin {
                     emit_unknown_tags,
                 )
                     .after(poll_interpreter),
-                (handle_click_input, handle_timer, handle_ui_inputs, handle_completion)
+                (
+                    handle_click_input,
+                    handle_timer,
+                    handle_ui_inputs,
+                    handle_completion,
+                )
                     .after(poll_interpreter),
             ),
         );

@@ -27,8 +27,7 @@ static SCRIPT: &str = include_str!("0-intorudction-to-sorting-algorithm/game.ks"
 /// Drive the interpreter to completion, auto-clicking through all wait points
 /// and consuming choices from the provided slice in order.
 async fn drive(choices: &[usize]) -> Vec<KagEvent> {
-    let (mut handle, _task, _diags) =
-        KagInterpreter::spawn_from_source(SCRIPT, "game.ks").unwrap();
+    let (mut handle, _task, _diags) = KagInterpreter::spawn_from_source(SCRIPT, "game.ks").unwrap();
 
     let mut events: Vec<KagEvent> = Vec::new();
     let mut ci = 0usize;
@@ -70,8 +69,14 @@ async fn test_yes_complexity_merge_sort() {
                 !has_text(&events, "Big O"),
                 "Big O intro should be skipped when player knows complexity"
             );
-            assert!(has_text(&events, "insertion sort"), "insertion sort must appear");
-            assert!(has_text(&events, "divide-and-conquer"), "merge sort missing");
+            assert!(
+                has_text(&events, "insertion sort"),
+                "insertion sort must appear"
+            );
+            assert!(
+                has_text(&events, "divide-and-conquer"),
+                "merge sort missing"
+            );
             assert!(has_text(&events, "stable"), "merge sort stability missing");
             assert!(!has_text(&events, "chaos"), "bogo sort must not appear");
             assert!(has_text(&events, "driftsort"), "Rust answer missing");
@@ -88,10 +93,19 @@ async fn test_yes_complexity_quicksort() {
             let events = drive(&[0, 1]).await;
 
             assert!(!has_text(&events, "Big O"), "Big O intro should be skipped");
-            assert!(has_text(&events, "insertion sort"), "insertion sort must appear");
+            assert!(
+                has_text(&events, "insertion sort"),
+                "insertion sort must appear"
+            );
             assert!(has_text(&events, "pivot"), "quicksort pivot missing");
-            assert!(has_text(&events, "not stable"), "quicksort stability caveat missing");
-            assert!(!has_text(&events, "divide-and-conquer"), "merge sort must not appear");
+            assert!(
+                has_text(&events, "not stable"),
+                "quicksort stability caveat missing"
+            );
+            assert!(
+                !has_text(&events, "divide-and-conquer"),
+                "merge sort must not appear"
+            );
             assert!(has_text(&events, "driftsort"), "Rust answer missing");
         })
         .await;
@@ -107,13 +121,19 @@ async fn test_yes_complexity_bogo_then_merge_sort() {
             let events = drive(&[0, 2, 0]).await;
 
             assert!(!has_text(&events, "Big O"), "Big O intro should be skipped");
-            assert!(has_text(&events, "insertion sort"), "insertion sort must appear");
+            assert!(
+                has_text(&events, "insertion sort"),
+                "insertion sort must appear"
+            );
             assert!(has_text(&events, "chaos"), "bogo sort (chaos) missing");
             assert!(
                 has_text(&events, "The joke ends here"),
                 "bogo loop-back phrase missing"
             );
-            assert!(has_text(&events, "divide-and-conquer"), "merge sort after bogo missing");
+            assert!(
+                has_text(&events, "divide-and-conquer"),
+                "merge sort after bogo missing"
+            );
             assert!(has_text(&events, "driftsort"), "Rust answer missing");
         })
         .await;
@@ -132,9 +152,18 @@ async fn test_no_complexity_merge_sort() {
                 has_text(&events, "Big O"),
                 "Big O intro must appear when player does not know it"
             );
-            assert!(has_text(&events, "linearithmic"), "Big O complexity types missing");
-            assert!(has_text(&events, "insertion sort"), "insertion sort must appear");
-            assert!(has_text(&events, "divide-and-conquer"), "merge sort missing");
+            assert!(
+                has_text(&events, "linearithmic"),
+                "Big O complexity types missing"
+            );
+            assert!(
+                has_text(&events, "insertion sort"),
+                "insertion sort must appear"
+            );
+            assert!(
+                has_text(&events, "divide-and-conquer"),
+                "merge sort missing"
+            );
             assert!(has_text(&events, "driftsort"), "Rust answer missing");
         })
         .await;
@@ -149,9 +178,15 @@ async fn test_no_complexity_quicksort() {
             let events = drive(&[1, 1]).await;
 
             assert!(has_text(&events, "Big O"), "Big O intro must appear");
-            assert!(has_text(&events, "insertion sort"), "insertion sort must appear");
+            assert!(
+                has_text(&events, "insertion sort"),
+                "insertion sort must appear"
+            );
             assert!(has_text(&events, "pivot"), "quicksort pivot missing");
-            assert!(!has_text(&events, "divide-and-conquer"), "merge sort must not appear");
+            assert!(
+                !has_text(&events, "divide-and-conquer"),
+                "merge sort must not appear"
+            );
             assert!(has_text(&events, "driftsort"), "Rust answer missing");
         })
         .await;
@@ -167,13 +202,19 @@ async fn test_no_complexity_bogo_then_merge_sort() {
             let events = drive(&[1, 2, 0]).await;
 
             assert!(has_text(&events, "Big O"), "Big O intro must appear");
-            assert!(has_text(&events, "insertion sort"), "insertion sort must appear");
+            assert!(
+                has_text(&events, "insertion sort"),
+                "insertion sort must appear"
+            );
             assert!(has_text(&events, "chaos"), "bogo sort (chaos) missing");
             assert!(
                 has_text(&events, "The joke ends here"),
                 "bogo loop-back phrase missing"
             );
-            assert!(has_text(&events, "divide-and-conquer"), "merge sort after bogo missing");
+            assert!(
+                has_text(&events, "divide-and-conquer"),
+                "merge sort after bogo missing"
+            );
             assert!(has_text(&events, "driftsort"), "Rust answer missing");
         })
         .await;

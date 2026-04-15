@@ -208,8 +208,7 @@ impl ScriptEngine {
             "mp" => self.mp(),
             _ => Map::new(),
         };
-        serde_json::to_value(&map)
-            .map_err(|e| KagError::SerializationError(e.to_string()))
+        serde_json::to_value(&map).map_err(|e| KagError::SerializationError(e.to_string()))
     }
 
     /// Deserialise a `serde_json::Value` back into a named scope map.

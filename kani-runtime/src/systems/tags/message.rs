@@ -4,10 +4,10 @@
 
 use bevy::prelude::*;
 
+use super::{param, param_bool, param_f32};
 use crate::events::{
     EvMessageWindow, EvResetFont, EvSetFont, EvSetNowrap, EvSetRuby, EvTagRouted, EvWindowControl,
 };
-use super::{param, param_bool, param_f32};
 
 pub fn handle_message_tags(
     mut reader: MessageReader<EvTagRouted>,
@@ -74,7 +74,9 @@ pub fn handle_message_tags(
                 });
             }
             "ruby" => {
-                ev_ruby.write(EvSetRuby { text: param(p, "text") });
+                ev_ruby.write(EvSetRuby {
+                    text: param(p, "text"),
+                });
             }
             "nowrap" => {
                 ev_nowrap.write(EvSetNowrap { enabled: true });

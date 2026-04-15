@@ -3,10 +3,10 @@
 
 use bevy::prelude::*;
 
+use super::{param, param_bool, param_f32, param_u32, param_u64};
 use crate::events::{
     EvFadeBgm, EvPlayBgm, EvPlaySe, EvPlayVoice, EvStopBgm, EvStopSe, EvTagRouted,
 };
-use super::{param, param_bool, param_f32, param_u32, param_u64};
 
 pub fn handle_audio_tags(
     mut reader: MessageReader<EvTagRouted>,
@@ -31,7 +31,9 @@ pub fn handle_audio_tags(
                 }
             }
             "stopbgm" => {
-                ev_stop_bgm.write(EvStopBgm { fadetime: param_u64(p, "fadetime") });
+                ev_stop_bgm.write(EvStopBgm {
+                    fadetime: param_u64(p, "fadetime"),
+                });
             }
             "se" | "playSe" => {
                 if let Some(storage) = param(p, "storage") {
@@ -44,7 +46,9 @@ pub fn handle_audio_tags(
                 }
             }
             "stopse" => {
-                ev_stop_se.write(EvStopSe { buf: param_u32(p, "buf") });
+                ev_stop_se.write(EvStopSe {
+                    buf: param_u32(p, "buf"),
+                });
             }
             "vo" | "voice" => {
                 if let Some(storage) = param(p, "storage") {

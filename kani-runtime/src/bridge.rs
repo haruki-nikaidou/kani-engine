@@ -35,7 +35,10 @@ pub enum BridgeState {
     /// Interpreter paused at `[s]`.  Click → `HostEvent::Clicked`.
     Stopped,
     /// Interpreter paused at a `[wa]`/`[wt]`/… completion wait.
-    WaitingCompletion { tag: String, params: Vec<(String, String)> },
+    WaitingCompletion {
+        tag: String,
+        params: Vec<(String, String)>,
+    },
     /// Interpreter waiting for a choice selection.
     WaitingChoice,
     /// Interpreter waiting for text-input from the player.
@@ -112,5 +115,6 @@ pub fn spawn_interpreter(entry_script: &str, backend: &AssetBackend) -> Result<I
         })
         .context("spawning interpreter thread")?;
 
-    rx.recv().context("interpreter thread did not send a result")?
+    rx.recv()
+        .context("interpreter thread did not send a result")?
 }

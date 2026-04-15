@@ -46,8 +46,18 @@ pub fn poll_interpreter(
 
         match event {
             // ── Text output ───────────────────────────────────────────────────
-            KagEvent::DisplayText { text, speaker, speed, log } => {
-                ev_text.write(EvDisplayText { text, speaker, speed, log });
+            KagEvent::DisplayText {
+                text,
+                speaker,
+                speed,
+                log,
+            } => {
+                ev_text.write(EvDisplayText {
+                    text,
+                    speaker,
+                    speed,
+                    log,
+                });
             }
             KagEvent::InsertLineBreak => {
                 ev_br.write(EvInsertLineBreak);
@@ -77,16 +87,29 @@ pub fn poll_interpreter(
             KagEvent::WaitForRawClick => {
                 bridge.state = BridgeState::WaitingClick { clear_after: false };
             }
-            KagEvent::InputRequested { name, prompt, title } => {
-                bridge.state = BridgeState::WaitingInput { var_name: name.clone() };
-                ev_input.write(EvInputRequested { name, prompt, title });
+            KagEvent::InputRequested {
+                name,
+                prompt,
+                title,
+            } => {
+                bridge.state = BridgeState::WaitingInput {
+                    var_name: name.clone(),
+                };
+                ev_input.write(EvInputRequested {
+                    name,
+                    prompt,
+                    title,
+                });
             }
             KagEvent::WaitForTrigger { name } => {
                 bridge.state = BridgeState::WaitingTrigger { name };
             }
 
             // ── Navigation ────────────────────────────────────────────────────
-            KagEvent::Jump { storage: Some(storage), .. } => {
+            KagEvent::Jump {
+                storage: Some(storage),
+                ..
+            } => {
                 if let Err(e) = load_and_send(&backend, &bridge.input_tx, &storage) {
                     error!("[kani-runtime] Jump load failed: {e:#}");
                     bridge.state = BridgeState::Ended;

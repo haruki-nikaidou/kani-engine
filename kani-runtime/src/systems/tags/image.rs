@@ -3,10 +3,10 @@
 
 use bevy::prelude::*;
 
+use super::{param, param_bool, param_f32, param_u64};
 use crate::events::{
     EvFreeLayer, EvSetBackground, EvSetImageLayer, EvSetLayerOpt, EvSetLayerPosition, EvTagRouted,
 };
-use super::{param, param_bool, param_f32, param_u64};
 
 pub fn handle_image_tags(
     mut reader: MessageReader<EvTagRouted>,

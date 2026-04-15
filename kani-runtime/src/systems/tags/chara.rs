@@ -3,10 +3,10 @@
 
 use bevy::prelude::*;
 
+use super::{param, param_f32};
 use crate::events::{
     EvFreeCharacter, EvHideCharacter, EvModCharacter, EvSetCharacter, EvTagRouted,
 };
-use super::{param, param_f32};
 
 pub fn handle_chara_tags(
     mut reader: MessageReader<EvTagRouted>,
@@ -31,10 +31,16 @@ pub fn handle_chara_tags(
                 });
             }
             "chara_hide" => {
-                ev_hide.write(EvHideCharacter { id: id(), slot: param(p, "slot") });
+                ev_hide.write(EvHideCharacter {
+                    id: id(),
+                    slot: param(p, "slot"),
+                });
             }
             "chara_free" => {
-                ev_free.write(EvFreeCharacter { id: id(), slot: param(p, "slot") });
+                ev_free.write(EvFreeCharacter {
+                    id: id(),
+                    slot: param(p, "slot"),
+                });
             }
             "chara_mod" => {
                 ev_mod.write(EvModCharacter {

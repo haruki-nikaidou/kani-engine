@@ -50,7 +50,11 @@ pub fn handle_ui_inputs(
     // Choice selection
     if matches!(bridge.state, BridgeState::WaitingChoice) {
         if let Some(&EvSelectChoice(idx)) = choices.read().next() {
-            if bridge.input_tx.try_send(HostEvent::ChoiceSelected(idx)).is_ok() {
+            if bridge
+                .input_tx
+                .try_send(HostEvent::ChoiceSelected(idx))
+                .is_ok()
+            {
                 bridge.state = BridgeState::Running;
                 return;
             }
@@ -60,7 +64,11 @@ pub fn handle_ui_inputs(
     // Text-input result
     if matches!(bridge.state, BridgeState::WaitingInput { .. }) {
         if let Some(EvSubmitInput(text)) = inputs.read().next().cloned() {
-            if bridge.input_tx.try_send(HostEvent::InputResult(text)).is_ok() {
+            if bridge
+                .input_tx
+                .try_send(HostEvent::InputResult(text))
+                .is_ok()
+            {
                 bridge.state = BridgeState::Running;
                 return;
             }
@@ -97,7 +105,10 @@ pub fn handle_completion(
         return;
     }
     if signals.read().next().is_some()
-        && bridge.input_tx.try_send(HostEvent::CompletionSignal).is_ok()
+        && bridge
+            .input_tx
+            .try_send(HostEvent::CompletionSignal)
+            .is_ok()
     {
         bridge.state = BridgeState::Running;
     }

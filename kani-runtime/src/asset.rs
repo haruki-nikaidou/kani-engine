@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, anyhow};
-use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
 use bevy::asset::AssetApp;
+use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
 use bevy::prelude::App;
 use kani_pak::{PakAssetReader, PakReader};
 
@@ -30,14 +30,15 @@ impl AssetBackend {
         let path = path.as_ref();
         let reader =
             PakReader::open(path).with_context(|| format!("opening pak '{}'", path.display()))?;
-        Ok(Self::Pak { reader: Arc::new(reader) })
+        Ok(Self::Pak {
+            reader: Arc::new(reader),
+        })
     }
 
     /// Synchronously load a UTF-8 text file (used for `.ks` scenario files).
     pub fn load_text(&self, path: &str) -> Result<String> {
         let bytes = self.load_bytes(path)?;
-        String::from_utf8(bytes)
-            .map_err(|e| anyhow!("asset '{path}' is not valid UTF-8: {e}"))
+        String::from_utf8(bytes).map_err(|e| anyhow!("asset '{path}' is not valid UTF-8: {e}"))
     }
 
     /// Synchronously load raw bytes.
@@ -45,12 +46,11 @@ impl AssetBackend {
         match self {
             Self::FileSystem { base } => {
                 let full = base.join(path);
-                std::fs::read(&full)
-                    .with_context(|| format!("reading '{}'", full.display()))
+                std::fs::read(&full).with_context(|| format!("reading '{}'", full.display()))
             }
-            Self::Pak { reader } => {
-                reader.read(path).with_context(|| format!("reading '{path}' from pak"))
-            }
+            Self::Pak { reader } => reader
+                .read(path)
+                .with_context(|| format!("reading '{path}' from pak")),
         }
     }
 
@@ -65,7 +65,9 @@ impl AssetBackend {
             let reader = Arc::clone(&reader);
             app.register_asset_source(
                 AssetSourceId::Name("pak".into()),
-                AssetSourceBuilder::new(move || Box::new(PakAssetReader::from_reader(Arc::clone(&reader)))),
+                AssetSourceBuilder::new(move || {
+                    Box::new(PakAssetReader::from_reader(Arc::clone(&reader)))
+                }),
             );
         }
     }
