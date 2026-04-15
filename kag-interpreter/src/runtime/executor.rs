@@ -135,7 +135,10 @@ pub fn execute_op<'s>(
             ctx.script_engine
                 .exec(&script_text)
                 .map(|_| vec![])
-                .or_else(|e| Ok(vec![KagEvent::Error(e.to_string())]))
+                .or_else(|e| {
+                    tracing::error!("[kag] iscript block failed: {e}");
+                    Ok(vec![KagEvent::Error(e.to_string())])
+                })
         }
         // Skip past the macro body to the op after [endmacro].  skip_to was
         // encoded at compile time for *this specific definition*, so duplicate
@@ -385,6 +388,7 @@ fn execute_tag<'s>(
             let result = ctx.script_engine.exec(&exp);
             let mut events = Vec::new();
             if let Err(e) = result {
+                tracing::warn!("[kag] [eval] expression failed: {e}");
                 events.push(KagEvent::Warning(e.to_string()));
             }
             if next == "false" {
@@ -469,6 +473,7 @@ fn execute_tag<'s>(
         // ── Internal warning ──────────────────────────────────────────────
         TAG_WARNING => {
             let msg = tag.param_str("msg").unwrap_or("warning").to_owned();
+            tracing::warn!("[kag] [_warning] {msg}");
             Ok(vec![KagEvent::Warning(msg)])
         }
 

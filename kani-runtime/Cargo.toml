@@ -8,6 +8,7 @@ description = "Bevy runtime bridge between kag-interpreter and Bevy ECS"
 anyhow.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tracing = { workspace = true }
 bevy.workspace = true
 
 kag-interpreter = { path = "../kag-interpreter" }

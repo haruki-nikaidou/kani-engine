@@ -96,7 +96,14 @@ pub fn spawn_interpreter(entry_script: &str, backend: &AssetBackend) -> Result<I
                 match KagInterpreter::spawn_from_source(&source, &script_name) {
                     Ok((interp, _join, diags)) => {
                         for d in &diags {
-                            eprintln!("[kani-runtime] parse warning: {}", d.message);
+                            match d.severity {
+                                kag_interpreter::error::Severity::Error => {
+                                    tracing::error!("[kani-runtime] parse error: {}", d.message);
+                                }
+                                kag_interpreter::error::Severity::Warning => {
+                                    tracing::warn!("[kani-runtime] parse warning: {}", d.message);
+                                }
+                            }
                         }
                         let bridge = InterpreterBridge {
                             event_rx: interp.event_rx,
