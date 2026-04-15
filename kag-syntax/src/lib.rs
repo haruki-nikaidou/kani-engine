@@ -53,6 +53,7 @@ pub mod tag_defs;
 
 pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 pub use error::{KagError, ParseDiagnostic, Severity};
+pub use tag_defs::{KnownTag, TagName};
 
 // ── Parser entry points ───────────────────────────────────────────────────────
 
