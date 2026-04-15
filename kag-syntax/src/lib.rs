@@ -47,6 +47,7 @@ pub mod lexer;
 pub mod lower;
 pub mod parser;
 pub mod syntax_kind;
+pub mod tag_defs;
 
 // ── Semantic AST re-exports ───────────────────────────────────────────────────
 

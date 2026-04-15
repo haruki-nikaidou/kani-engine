@@ -12,6 +12,7 @@ use miette::SourceSpan;
 use crate::ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 use crate::cst::{self, Item};
 use crate::error::ParseDiagnostic;
+use crate::tag_defs;
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -243,7 +244,15 @@ impl LowerCtx {
 
     /// Dispatch a tag to the appropriate handler (macro registration, iscript,
     /// or emit as `Op::Tag`).
+    ///
+    /// Before emitting the op, the tag is validated against its known parameter
+    /// requirements.  Any resulting [`ParseDiagnostic`]s are appended to the
+    /// lowering context's error list so callers receive them alongside the
+    /// (possibly partial) [`Script`].
     fn handle_tag(&mut self, tag: Tag<'static>) {
+        for diag in tag_defs::validate_tag(&tag) {
+            self.errors.push(diag);
+        }
         self.emit(Op::Tag(tag));
     }
 }
