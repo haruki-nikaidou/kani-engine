@@ -138,5 +138,5 @@ fn is_target_param(node: &Option<kag_syntax::SyntaxNode>) -> bool {
                 .filter_map(|e| e.into_token())
                 .find(|t| t.kind() == SyntaxKind::IDENT)
         })
-        .map_or(false, |t| matches!(t.text(), "target" | "storage"))
+        .is_some_and(|t| matches!(t.text(), "target" | "storage"))
 }

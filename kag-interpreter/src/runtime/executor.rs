@@ -418,7 +418,7 @@ fn execute_tag<'s>(
 
         TAG_ENDLINK => {
             ctx.in_link = false;
-            if ctx.pending_choices.len() >= 1 {
+            if !ctx.pending_choices.is_empty() {
                 // Emit all accumulated choices as a choice prompt
                 let choices: Vec<ChoiceOption> = ctx
                     .pending_choices

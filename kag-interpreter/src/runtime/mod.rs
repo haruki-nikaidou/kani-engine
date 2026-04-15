@@ -302,41 +302,37 @@ async fn perform_jump(
         loop {
             match input_rx.recv().await {
                 Some(event) => {
-                    if let Some(event) = try_side_band(ctx, event) {
-                        match event {
-                            HostEvent::ScenarioLoaded { name, source } => {
-                                let (new_script, diags) = parse_script(&source, &name);
-                                *script = new_script;
-                                ctx.current_storage = name.clone();
-                                for d in diags {
-                                    let _ = event_tx.send(KagEvent::Warning(d.message)).await;
-                                }
-                                let idx = if let Some(ref t) = target {
-                                    let key = t.trim_start_matches('*');
-                                    match script.label_map.get(key).copied() {
-                                        Some(i) => i,
-                                        None => {
-                                            let _ = event_tx
-                                                .send(KagEvent::Warning(format!(
-                                                    "label '{key}' not found in '{}' \
-                                                     (script.label_map has {} label(s)); \
-                                                     jumping to start",
-                                                    ctx.current_storage,
-                                                    script.label_map.len(),
-                                                )))
-                                                .await;
-                                            0
-                                        }
-                                    }
-                                } else {
-                                    0
-                                };
-                                ctx.jump_to(idx);
-                                return true;
+                    if let Some(event) = try_side_band(ctx, event)
+                        && let HostEvent::ScenarioLoaded { name, source } = event {
+                            let (new_script, diags) = parse_script(&source, &name);
+                            *script = new_script;
+                            ctx.current_storage = name.clone();
+                            for d in diags {
+                                let _ = event_tx.send(KagEvent::Warning(d.message)).await;
                             }
-                            _ => {}
+                            let idx = if let Some(ref t) = target {
+                                let key = t.trim_start_matches('*');
+                                match script.label_map.get(key).copied() {
+                                    Some(i) => i,
+                                    None => {
+                                        let _ = event_tx
+                                            .send(KagEvent::Warning(format!(
+                                                "label '{key}' not found in '{}' \
+                                                 (script.label_map has {} label(s)); \
+                                                 jumping to start",
+                                                ctx.current_storage,
+                                                script.label_map.len(),
+                                            )))
+                                            .await;
+                                        0
+                                    }
+                                }
+                            } else {
+                                0
+                            };
+                            ctx.jump_to(idx);
+                            return true;
                         }
-                    }
                 }
                 None => return false,
             }
@@ -407,15 +403,14 @@ async fn run_interpreter(
                                                 ctx.pending_timeout = None;
                                                 ctx.pending_wheel = None;
                                                 let (st, tg) = (handler.storage, handler.target);
-                                                if let Some(exp) = handler.exp {
-                                                    if let Err(e) = ctx.script_engine.exec(&exp) {
+                                                if let Some(exp) = handler.exp
+                                                    && let Err(e) = ctx.script_engine.exec(&exp) {
                                                         let _ = event_tx
                                                             .send(KagEvent::Warning(e.to_string()))
                                                             .await;
                                                     }
-                                                }
-                                                if st.is_some() || tg.is_some() {
-                                                    if !perform_jump(
+                                                if (st.is_some() || tg.is_some())
+                                                    && !perform_jump(
                                                         &mut script,
                                                         &mut ctx,
                                                         st,
@@ -427,7 +422,6 @@ async fn run_interpreter(
                                                     {
                                                         return;
                                                     }
-                                                }
                                             } else {
                                                 ctx.pending_timeout = None;
                                                 ctx.pending_wheel = None;
@@ -445,15 +439,14 @@ async fn run_interpreter(
                                                 ctx.pending_click = None;
                                                 ctx.pending_wheel = None;
                                                 let (st, tg) = (handler.storage, handler.target);
-                                                if let Some(exp) = handler.exp {
-                                                    if let Err(e) = ctx.script_engine.exec(&exp) {
+                                                if let Some(exp) = handler.exp
+                                                    && let Err(e) = ctx.script_engine.exec(&exp) {
                                                         let _ = event_tx
                                                             .send(KagEvent::Warning(e.to_string()))
                                                             .await;
                                                     }
-                                                }
-                                                if st.is_some() || tg.is_some() {
-                                                    if !perform_jump(
+                                                if (st.is_some() || tg.is_some())
+                                                    && !perform_jump(
                                                         &mut script,
                                                         &mut ctx,
                                                         st,
@@ -465,7 +458,6 @@ async fn run_interpreter(
                                                     {
                                                         return;
                                                     }
-                                                }
                                                 break;
                                             }
                                             // No timeout handler — ignore spurious TimerElapsed
@@ -475,15 +467,14 @@ async fn run_interpreter(
                                                 ctx.pending_click = None;
                                                 ctx.pending_timeout = None;
                                                 let (st, tg) = (handler.storage, handler.target);
-                                                if let Some(exp) = handler.exp {
-                                                    if let Err(e) = ctx.script_engine.exec(&exp) {
+                                                if let Some(exp) = handler.exp
+                                                    && let Err(e) = ctx.script_engine.exec(&exp) {
                                                         let _ = event_tx
                                                             .send(KagEvent::Warning(e.to_string()))
                                                             .await;
                                                     }
-                                                }
-                                                if st.is_some() || tg.is_some() {
-                                                    if !perform_jump(
+                                                if (st.is_some() || tg.is_some())
+                                                    && !perform_jump(
                                                         &mut script,
                                                         &mut ctx,
                                                         st,
@@ -495,7 +486,6 @@ async fn run_interpreter(
                                                     {
                                                         return;
                                                     }
-                                                }
                                                 break;
                                             }
                                             // No wheel handler — ignore
@@ -586,24 +576,20 @@ async fn run_interpreter(
                     loop {
                         match input_rx.recv().await {
                             Some(event) => {
-                                if let Some(event) = try_side_band(&mut ctx, event) {
-                                    match event {
-                                        HostEvent::ScenarioLoaded { name, source } => {
-                                            let (new_script, diags) = parse_script(&source, &name);
-                                            script = new_script;
-                                            ctx.current_storage = name;
-                                            for d in diags {
-                                                let _ = event_tx
-                                                    .send(KagEvent::Warning(d.message))
-                                                    .await;
-                                            }
-                                            // ctx.pc was already set to return_pc by the
-                                            // executor — do NOT override it here.
-                                            break;
+                                if let Some(event) = try_side_band(&mut ctx, event)
+                                    && let HostEvent::ScenarioLoaded { name, source } = event {
+                                        let (new_script, diags) = parse_script(&source, &name);
+                                        script = new_script;
+                                        ctx.current_storage = name;
+                                        for d in diags {
+                                            let _ = event_tx
+                                                .send(KagEvent::Warning(d.message))
+                                                .await;
                                         }
-                                        _ => {}
+                                        // ctx.pc was already set to return_pc by the
+                                        // executor — do NOT override it here.
+                                        break;
                                     }
-                                }
                             }
                             None => return,
                         }
@@ -625,18 +611,17 @@ async fn run_interpreter(
                                             );
                                             if let Some(choice) = choices.get(idx) {
                                                 // Evaluate optional side-effect expression
-                                                if let Some(exp) = &choice.exp {
-                                                    if let Err(e) = ctx.script_engine.exec(exp) {
+                                                if let Some(exp) = &choice.exp
+                                                    && let Err(e) = ctx.script_engine.exec(exp) {
                                                         let _ = event_tx
                                                             .send(KagEvent::Warning(e.to_string()))
                                                             .await;
                                                     }
-                                                }
                                                 // Navigate to the choice target if present
                                                 let storage = choice.storage.clone();
                                                 let target = choice.target.clone();
-                                                if storage.is_some() || target.is_some() {
-                                                    if !perform_jump(
+                                                if (storage.is_some() || target.is_some())
+                                                    && !perform_jump(
                                                         &mut script,
                                                         &mut ctx,
                                                         storage,
@@ -648,7 +633,6 @@ async fn run_interpreter(
                                                     {
                                                         return;
                                                     }
-                                                }
                                             }
                                             break;
                                         }

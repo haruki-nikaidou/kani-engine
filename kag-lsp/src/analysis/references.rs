@@ -73,8 +73,8 @@ pub fn find_references(
             }
 
             // Declaration: a tag name resolves to a macro definition.
-            if include_declaration {
-                if let Some(&macro_range) = doc.index.macros.get(&sym.name) {
+            if include_declaration
+                && let Some(&macro_range) = doc.index.macros.get(&sym.name) {
                     let lsp_range = text_range_to_lsp_range(&doc.source, macro_range);
                     if !locations.iter().any(|l| l.range == lsp_range) {
                         locations.push(Location {
@@ -83,7 +83,6 @@ pub fn find_references(
                         });
                     }
                 }
-            }
         }
 
         SymbolKind::ParamTarget => {
@@ -92,8 +91,8 @@ pub fn find_references(
             collect_param_value_refs(doc, uri, &sym.name, &["target"], &mut locations);
 
             // Declaration: a target= value resolves to a label definition.
-            if include_declaration {
-                if let Some(&label_range) = doc.index.labels.get(&sym.name) {
+            if include_declaration
+                && let Some(&label_range) = doc.index.labels.get(&sym.name) {
                     let lsp_range = text_range_to_lsp_range(&doc.source, label_range);
                     if !locations.iter().any(|l| l.range == lsp_range) {
                         locations.push(Location {
@@ -102,7 +101,6 @@ pub fn find_references(
                         });
                     }
                 }
-            }
         }
 
         SymbolKind::ParamStorage => {
@@ -297,7 +295,7 @@ fn scan_params(
     use kag_syntax::cst::{AstNode, ParamValue};
     for param in params {
         // Only process params whose key is in the caller-supplied allow-list.
-        if !param.key().as_deref().map_or(false, |k| keys.contains(&k)) {
+        if !param.key().as_deref().is_some_and(|k| keys.contains(&k)) {
             continue;
         }
         if let Some(ParamValue::Literal(lit)) = param.value()
