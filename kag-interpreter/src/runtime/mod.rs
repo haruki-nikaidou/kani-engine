@@ -31,7 +31,7 @@ use executor::execute_op;
 /// Number of `KagEvent`s that can be buffered before the interpreter blocks.
 const EVENT_CHANNEL_CAP: usize = 64;
 /// Number of `HostEvent`s that can be buffered before the host blocks.
-const INPUT_CHANNEL_CAP: usize = 16;
+const INPUT_CHANNEL_CAP: usize = 64;
 
 // ─── Public actor handle ──────────────────────────────────────────────────────
 

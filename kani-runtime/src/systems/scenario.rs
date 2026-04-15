@@ -1,8 +1,10 @@
 //! Scenario-file loading helper used by the `poll_interpreter` system.
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
+use bevy::log::warn;
 use kag_interpreter::HostEvent;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::error::TrySendError;
 
 use crate::asset::AssetBackend;
 
@@ -19,12 +21,20 @@ pub fn load_and_send(
         .load_text(storage)
         .with_context(|| format!("reading scenario '{storage}'"))?;
 
-    input_tx
-        .try_send(HostEvent::ScenarioLoaded {
-            name: storage.to_owned(),
-            source,
-        })
-        .with_context(|| format!("sending ScenarioLoaded for '{storage}'"))?;
+    match input_tx.try_send(HostEvent::ScenarioLoaded {
+        name: storage.to_owned(),
+        source,
+    }) {
+        Ok(()) => {}
+        Err(TrySendError::Full(_)) => {
+            warn!("[kani-runtime] input channel full; ScenarioLoaded for '{storage}' dropped");
+        }
+        Err(TrySendError::Closed(_)) => {
+            return Err(anyhow!(
+                "interpreter channel closed while sending ScenarioLoaded for '{storage}'"
+            ));
+        }
+    }
 
     Ok(())
 }
