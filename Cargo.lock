@@ -3384,7 +3384,6 @@ dependencies = [
  "miette",
  "rowan",
  "thiserror 2.0.18",
- "winnow 1.0.1",
 ]
 
 [[package]]
