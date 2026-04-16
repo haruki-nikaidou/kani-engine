@@ -54,15 +54,15 @@
 //!                         └─ ScriptEngine (rhai)
 //! ```
 
-// ─── Syntax crate re-exports (lexer, parser, AST, errors) ────────────────────
+// ─── Syntax crate re-exports (lexer, parser, AST) ────────────────────────────
 
 pub use kag_syntax::ast;
-pub use kag_syntax::error;
 pub use kag_syntax::lexer;
 pub use kag_syntax::parser;
 
 // ─── Interpreter-local modules ────────────────────────────────────────────────
 
+pub mod error;
 pub mod events;
 pub mod runtime;
 pub mod snapshot;
@@ -83,15 +83,18 @@ pub use runtime::context::TimeoutHandler;
 /// The parsed scenario representation.
 pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 
-/// Rich error type with source-code attribution.
-pub use error::KagError;
+/// Runtime error type covering all interpreter failures.
+pub use error::InterpreterError;
 
 /// Serialisable interpreter snapshot for save / load support.
 pub use snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSnap};
 
 /// Parse a `.ks` source string into a `Script` together with any diagnostics.
-/// Returns `(Script<'static>, Vec<ParseDiagnostic>)`.
+/// Returns `(Script<'static>, Vec<SyntaxWarning>)`.
 pub use parser::parse_script;
 
 /// Non-fatal diagnostic emitted during parsing.
-pub use error::ParseDiagnostic;
+pub use kag_syntax::error::SyntaxWarning;
+
+/// Severity level for a [`SyntaxWarning`].
+pub use kag_syntax::error::Severity;

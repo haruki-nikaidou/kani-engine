@@ -1,16 +1,16 @@
-use crate::{ParamValue, ParseDiagnostic, Tag, TagName};
+use crate::{SyntaxWarning, Tag, TagName};
 
 /// Validate a single KAG tag against its known parameter requirements.
 ///
 /// Returns a (possibly empty) list of diagnostics.  Unknown tags produce no
 /// diagnostics — they are forwarded to the host as generic events.
-pub fn validate_tag(tag: &Tag<'_>) -> Vec<ParseDiagnostic> {
+pub fn validate_tag(tag: &Tag<'_>) -> Vec<SyntaxWarning> {
     let mut diags = Vec::new();
     validate(tag, &mut diags);
     diags
 }
 
-fn validate(tag: &Tag<'_>, diags: &mut Vec<ParseDiagnostic>) {
+fn validate(tag: &Tag<'_>, diags: &mut Vec<SyntaxWarning>) {
     match TagName::from_name(tag.name.as_ref()) {
         // ── Interpreter: control flow ──────────────────────────────────────
         //
@@ -166,9 +166,9 @@ fn validate(tag: &Tag<'_>, diags: &mut Vec<ParseDiagnostic>) {
 /// The check uses [`Tag::param`] so that [`ParamValue::Entity`] and
 /// [`ParamValue::MacroParam`] values count as "present" — only a completely
 /// missing key triggers the diagnostic.
-fn require(tag: &Tag<'_>, key: &str, diags: &mut Vec<ParseDiagnostic>) {
+fn require(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
     if tag.param(key).is_none() {
-        diags.push(ParseDiagnostic::error(
+        diags.push(SyntaxWarning::error(
             format!("[{}] is missing required attribute `{key}=`", tag.name),
             tag.span,
         ));
@@ -176,9 +176,9 @@ fn require(tag: &Tag<'_>, key: &str, diags: &mut Vec<ParseDiagnostic>) {
 }
 
 /// Emit a **warning** diagnostic when `key` is absent from `tag`.
-fn recommend(tag: &Tag<'_>, key: &str, diags: &mut Vec<ParseDiagnostic>) {
+fn recommend(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
     if tag.param(key).is_none() {
-        diags.push(ParseDiagnostic::warning(
+        diags.push(SyntaxWarning::warning(
             format!(
                 "[{}] is missing `{key}=`; tag will have no effect",
                 tag.name
@@ -194,7 +194,7 @@ fn recommend(tag: &Tag<'_>, key: &str, diags: &mut Vec<ParseDiagnostic>) {
 /// Used for tags where several alternative attributes serve the same role
 /// (e.g. `storage=` vs `target=` for navigation, or `name=` vs `id=` for
 /// character identity).
-fn recommend_any_of(tag: &Tag<'_>, keys: &[&str], diags: &mut Vec<ParseDiagnostic>) {
+fn recommend_any_of(tag: &Tag<'_>, keys: &[&str], diags: &mut Vec<SyntaxWarning>) {
     let any_present = keys.iter().any(|k| tag.param(k).is_some());
     if !any_present {
         let keys_fmt = keys
@@ -202,7 +202,7 @@ fn recommend_any_of(tag: &Tag<'_>, keys: &[&str], diags: &mut Vec<ParseDiagnosti
             .map(|k| format!("`{k}=`"))
             .collect::<Vec<_>>()
             .join(", ");
-        diags.push(ParseDiagnostic::warning(
+        diags.push(SyntaxWarning::warning(
             format!(
                 "[{}] should specify at least one of {keys_fmt}; tag will have no effect",
                 tag.name

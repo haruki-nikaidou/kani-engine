@@ -8,7 +8,7 @@
 //! in the `KagInterpreter` actor.
 
 use crate::ast::{Op, ParamValue, Script, Tag, TextPart};
-use crate::error::KagError;
+use crate::error::InterpreterError;
 use crate::events::{ChoiceOption, KagEvent};
 
 use super::context::{JumpTarget, RuntimeContext, TimeoutHandler};
@@ -37,7 +37,6 @@ const TAG_LINK: &str = "link";
 const TAG_ENDLINK: &str = "endlink";
 const TAG_GLINK: &str = "glink";
 const TAG_CHARA_PTEXT: &str = "chara_ptext";
-const TAG_WARNING: &str = "_warning";
 
 // ── Internal-state tags ───────────────────────────────────────────────────────
 const TAG_CLEARVAR: &str = "clearvar";
@@ -94,7 +93,7 @@ const TAG_CWHEEL: &str = "cwheel";
 pub fn execute_op<'s>(
     script: &Script<'s>,
     ctx: &mut RuntimeContext,
-) -> Result<Vec<KagEvent>, KagError> {
+) -> Result<Vec<KagEvent>, InterpreterError> {
     let pc = ctx.pc;
     if pc >= script.ops.len() {
         ctx.advance();
@@ -155,7 +154,7 @@ pub fn execute_op<'s>(
 fn execute_text<'s>(
     ctx: &mut RuntimeContext,
     parts: &[TextPart<'s>],
-) -> Result<Vec<KagEvent>, KagError> {
+) -> Result<Vec<KagEvent>, InterpreterError> {
     let mut events = Vec::new();
     let mut text_buf = String::new();
 
@@ -222,7 +221,7 @@ fn execute_text<'s>(
 
 // ─── Inline tag dispatch (occurs within text lines) ───────────────────────────
 
-fn execute_inline_tag(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> Result<Vec<KagEvent>, KagError> {
+fn execute_inline_tag(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> Result<Vec<KagEvent>, InterpreterError> {
     // Honour optional `cond=` guard on any inline tag
     let cond_expr = tag.param_str("cond").map(str::to_owned);
     if let Some(ref expr) = cond_expr
@@ -290,7 +289,7 @@ fn execute_tag<'s>(
     script: &Script<'s>,
     ctx: &mut RuntimeContext,
     tag: &Tag<'s>,
-) -> Result<Vec<KagEvent>, KagError> {
+) -> Result<Vec<KagEvent>, InterpreterError> {
     // Check optional `cond=` guard — if false, skip the tag entirely
     let cond_expr = tag.param_str("cond").map(str::to_owned);
     if let Some(ref expr) = cond_expr
@@ -377,7 +376,7 @@ fn execute_tag<'s>(
                     Ok(vec![])
                 }
             } else {
-                Err(KagError::CallStackUnderflow)
+                Err(InterpreterError::CallStackUnderflow)
             }
         }
 
@@ -468,13 +467,6 @@ fn execute_tag<'s>(
                 ctx.jump_to(frame.return_pc);
             }
             Ok(vec![])
-        }
-
-        // ── Internal warning ──────────────────────────────────────────────
-        TAG_WARNING => {
-            let msg = tag.param_str("msg").unwrap_or("warning").to_owned();
-            tracing::warn!("[kag] [_warning] {msg}");
-            Ok(vec![KagEvent::Warning(msg)])
         }
 
         // ── Variable clearing ─────────────────────────────────────────────
@@ -742,7 +734,7 @@ fn execute_control_flow<'s>(
     _script: &Script<'s>,
     ctx: &mut RuntimeContext,
     tag: &Tag<'s>,
-) -> Result<Vec<KagEvent>, KagError> {
+) -> Result<Vec<KagEvent>, InterpreterError> {
     ctx.advance();
 
     match tag.name.as_ref() {
@@ -802,7 +794,7 @@ fn invoke_macro<'s>(
     script: &Script<'s>,
     ctx: &mut RuntimeContext,
     tag: &Tag<'s>,
-) -> Result<Vec<KagEvent>, KagError> {
+) -> Result<Vec<KagEvent>, InterpreterError> {
     let macro_name = tag.name.as_ref();
     let def = match script.macro_map.get(macro_name) {
         Some(d) => d.clone(),

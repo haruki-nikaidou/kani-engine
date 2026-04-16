@@ -11,11 +11,11 @@ use miette::SourceSpan;
 
 use crate::ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 use crate::cst::{self, Item};
-use crate::error::ParseDiagnostic;
+use crate::error::SyntaxWarning;
 use crate::tag_defs::validate;
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
-pub fn lower_root(root: cst::Root, source_name: &str) -> (Script<'static>, Vec<ParseDiagnostic>) {
+pub fn lower_root(root: cst::Root, source_name: &str) -> (Script<'static>, Vec<SyntaxWarning>) {
     let mut ctx = LowerCtx::new(source_name);
     ctx.lower_items(root.items());
     let LowerCtx {
@@ -43,7 +43,7 @@ struct LowerCtx {
     macro_map: HashMap<Cow<'static, str>, MacroDef>,
     macro_stack: Vec<Cow<'static, str>>,
     source_name: String,
-    errors: Vec<ParseDiagnostic>,
+    errors: Vec<SyntaxWarning>,
 }
 
 impl LowerCtx {
@@ -63,11 +63,11 @@ impl LowerCtx {
     }
 
     fn push_error(&mut self, message: impl Into<String>, span: SourceSpan) {
-        self.errors.push(ParseDiagnostic::error(message, span));
+        self.errors.push(SyntaxWarning::error(message, span));
     }
 
     fn push_warning(&mut self, message: impl Into<String>, span: SourceSpan) {
-        self.errors.push(ParseDiagnostic::warning(message, span));
+        self.errors.push(SyntaxWarning::warning(message, span));
     }
 }
 
@@ -245,7 +245,7 @@ impl LowerCtx {
     /// or emit as `Op::Tag`).
     ///
     /// Before emitting the op, the tag is validated against its known parameter
-    /// requirements.  Any resulting [`ParseDiagnostic`]s are appended to the
+    /// requirements.  Any resulting [`SyntaxWarning`]s are appended to the
     /// lowering context's error list so callers receive them alongside the
     /// (possibly partial) [`Script`].
     fn handle_tag(&mut self, tag: Tag<'static>) {
@@ -274,12 +274,6 @@ impl LowerCtx {
         let idx = self.ops.len();
         if self.label_map.contains_key(name.as_str()) {
             self.push_warning(format!("duplicate label: {name}"), span);
-            // Emit a warning tag instead of a label op (matches original behaviour).
-            self.emit(Op::Tag(Tag {
-                name: Cow::Borrowed("_warning"),
-                params: vec![Param::synthetic("msg", format!("duplicate label: {name}"))],
-                span,
-            }));
         } else {
             self.label_map.insert(Cow::Owned(name), idx);
             self.emit(Op::Label(def));

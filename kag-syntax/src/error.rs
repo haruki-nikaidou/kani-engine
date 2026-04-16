@@ -3,7 +3,7 @@ use thiserror::Error;
 
 // ─── Non-fatal parse diagnostic ───────────────────────────────────────────────
 
-/// Severity level for a [`ParseDiagnostic`].
+/// Severity level for a [`SyntaxWarning`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
     /// The parser recovered and continued, but the result may be inaccurate.
@@ -14,18 +14,18 @@ pub enum Severity {
 
 /// A non-fatal diagnostic produced during parsing.
 ///
-/// Unlike [`KagError`], which aborts the current parse, diagnostics are
+/// Unlike [`SyntaxError`], which aborts the current parse, diagnostics are
 /// collected into a `Vec` and returned alongside the (possibly partial) tree.
 /// Consumers can inspect them to surface warnings or errors to the user
 /// without preventing further processing.
 #[derive(Debug, Clone)]
-pub struct ParseDiagnostic {
+pub struct SyntaxWarning {
     pub message: String,
     pub span: SourceSpan,
     pub severity: Severity,
 }
 
-impl ParseDiagnostic {
+impl SyntaxWarning {
     pub fn error(message: impl Into<String>, span: SourceSpan) -> Self {
         Self {
             message: message.into(),
@@ -43,14 +43,14 @@ impl ParseDiagnostic {
     }
 }
 
-// ─── Fatal KagError ───────────────────────────────────────────────────────────
+// ─── Fatal SyntaxError ────────────────────────────────────────────────────────
 
-/// A rich error type for KAG parse and runtime failures.
+/// A fatal error produced during KAG syntax analysis.
 ///
 /// Implements `miette::Diagnostic` so callers can render human-readable
 /// error reports with source-code highlighting.
 #[derive(Debug, Error, Diagnostic)]
-pub enum KagError {
+pub enum SyntaxError {
     #[error("lexer error at byte {offset}")]
     #[diagnostic(code(kag::lex_error), help("Check for unrecognised characters"))]
     LexError {
@@ -71,43 +71,18 @@ pub enum KagError {
         span: SourceSpan,
     },
 
-    #[error("undefined tag: [{name}]")]
-    #[diagnostic(
-        code(kag::undefined_tag),
-        help("Check spelling or define a macro named '{name}'")
-    )]
-    UndefinedTag { name: String },
-
-    #[error("script evaluation error: {0}")]
-    #[diagnostic(code(kag::script_error))]
-    ScriptError(String),
-
-    #[error("runtime error: {0}")]
-    #[diagnostic(code(kag::runtime_error))]
-    RuntimeError(String),
-
-    #[error("label not found: '{label}' in '{storage}'")]
-    #[diagnostic(code(kag::label_not_found))]
-    LabelNotFound { label: String, storage: String },
-
-    #[error("call stack underflow: [return] without matching [call]")]
-    #[diagnostic(code(kag::stack_underflow))]
-    CallStackUnderflow,
-
-    #[error("macro parameter error: {0}")]
-    #[diagnostic(code(kag::macro_error))]
-    MacroError(String),
-
-    #[error("channel closed unexpectedly")]
-    #[diagnostic(code(kag::channel_closed))]
-    ChannelClosed,
-
-    #[error("serialization error: {0}")]
-    #[diagnostic(code(kag::serialization_error))]
-    SerializationError(String),
+    /// A known tag failed validation (missing required attribute, wrong type, etc.).
+    #[error("invalid tag [{tag_name}]: {message}")]
+    #[diagnostic(code(kag::invalid_tag))]
+    InvalidTag {
+        tag_name: String,
+        message: String,
+        #[label("here")]
+        span: SourceSpan,
+    },
 }
 
-impl KagError {
+impl SyntaxError {
     pub fn parse(message: impl Into<String>, src: NamedSource<String>, span: SourceSpan) -> Self {
         Self::ParseError {
             message: message.into(),

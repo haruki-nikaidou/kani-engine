@@ -7,7 +7,7 @@
 
 use rhai::{Dynamic, Engine, EvalAltResult, Map, Scope};
 
-use crate::error::KagError;
+use crate::error::InterpreterError;
 
 // ─── Engine wrapper ───────────────────────────────────────────────────────────
 
@@ -141,22 +141,22 @@ impl ScriptEngine {
     /// Variables mutated inside `script` are automatically reflected back into
     /// the persistent scope because Rhai's `eval_with_scope` shares the scope
     /// reference.
-    pub fn exec(&mut self, script: &str) -> Result<Dynamic, KagError> {
+    pub fn exec(&mut self, script: &str) -> Result<Dynamic, InterpreterError> {
         self.engine
             .eval_with_scope::<Dynamic>(&mut self.scope, script)
-            .map_err(|e| KagError::ScriptError(rhai_error_msg(&e)))
+            .map_err(|e| InterpreterError::ScriptError(rhai_error_msg(&e)))
     }
 
     /// Evaluate an expression and coerce the result to `bool`.
     ///
     /// Used for `cond=` parameters and `[if exp=…]` conditions.
-    pub fn eval_bool(&mut self, expr: &str) -> Result<bool, KagError> {
+    pub fn eval_bool(&mut self, expr: &str) -> Result<bool, InterpreterError> {
         // Wrap in parentheses to handle bare expressions
         let wrapped = format!("({})", expr);
         let result = self
             .engine
             .eval_with_scope::<Dynamic>(&mut self.scope, &wrapped)
-            .map_err(|e| KagError::ScriptError(rhai_error_msg(&e)))?;
+            .map_err(|e| InterpreterError::ScriptError(rhai_error_msg(&e)))?;
 
         // Flexible truthiness: bools, integers (0 = false), strings ("" = false)
         let b = if result.is_bool() {
@@ -175,12 +175,12 @@ impl ScriptEngine {
     /// Evaluate an expression and convert the result to a display string.
     ///
     /// Used for `[emb exp=…]`.
-    pub fn eval_to_string(&mut self, expr: &str) -> Result<String, KagError> {
+    pub fn eval_to_string(&mut self, expr: &str) -> Result<String, InterpreterError> {
         let wrapped = format!("({})", expr);
         let result = self
             .engine
             .eval_with_scope::<Dynamic>(&mut self.scope, &wrapped)
-            .map_err(|e| KagError::ScriptError(rhai_error_msg(&e)))?;
+            .map_err(|e| InterpreterError::ScriptError(rhai_error_msg(&e)))?;
         Ok(result.to_string())
     }
 
@@ -199,8 +199,8 @@ impl ScriptEngine {
     /// Serialise a named variable map (`"f"`, `"sf"`, `"tf"`, or `"mp"`) to a
     /// `serde_json::Value`.
     ///
-    /// Returns `KagError::SerializationError` on serialisation failure.
-    pub fn map_to_json(&self, name: &str) -> Result<serde_json::Value, KagError> {
+    /// Returns `InterpreterError::SerializationError` on serialisation failure.
+    pub fn map_to_json(&self, name: &str) -> Result<serde_json::Value, InterpreterError> {
         let map = match name {
             "f" => self.f(),
             "sf" => self.sf(),
@@ -208,14 +208,14 @@ impl ScriptEngine {
             "mp" => self.mp(),
             _ => Map::new(),
         };
-        serde_json::to_value(&map).map_err(|e| KagError::SerializationError(e.to_string()))
+        serde_json::to_value(&map).map_err(|e| InterpreterError::SerializationError(e.to_string()))
     }
 
     /// Deserialise a `serde_json::Value` back into a named scope map.
     /// Existing scope entries are replaced.
-    pub fn restore_map(&mut self, name: &str, json: &serde_json::Value) -> Result<(), KagError> {
+    pub fn restore_map(&mut self, name: &str, json: &serde_json::Value) -> Result<(), InterpreterError> {
         let map: Map = serde_json::from_value(json.clone())
-            .map_err(|e| KagError::SerializationError(e.to_string()))?;
+            .map_err(|e| InterpreterError::SerializationError(e.to_string()))?;
         set_map_in_scope(&mut self.scope, name, map);
         Ok(())
     }

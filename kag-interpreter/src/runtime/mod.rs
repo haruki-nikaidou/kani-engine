@@ -18,7 +18,8 @@ pub mod script_engine;
 use tokio::sync::mpsc;
 
 use crate::ast::Script;
-use crate::error::{KagError, ParseDiagnostic};
+use crate::error::InterpreterError;
+use kag_syntax::error::SyntaxWarning;
 use crate::events::{HostEvent, KagEvent, VarScope, VariableSnapshot};
 use crate::parser::parse_script;
 use crate::snapshot::InterpreterSnapshot;
@@ -80,14 +81,14 @@ impl KagInterpreter {
     /// The source is borrowed during parsing and then converted to owned data
     /// before the async task starts.
     ///
-    /// Any [`ParseDiagnostic`]s produced during parsing are returned alongside
+    /// Any [`SyntaxWarning`]s produced during parsing are returned alongside
     /// the handle and join-handle so callers can inspect or log them.  A
     /// non-empty diagnostics list does **not** mean the script is unusable —
     /// the interpreter still receives a best-effort op stream.
     pub fn spawn_from_source(
         source: &str,
         source_name: &str,
-    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<ParseDiagnostic>), KagError> {
+    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<SyntaxWarning>), InterpreterError> {
         let (script, diags) = parse_script(source, source_name);
         let (handle, task) = Self::spawn(script);
         Ok((handle, task, diags))
@@ -109,7 +110,7 @@ impl KagInterpreter {
     pub fn spawn_from_snapshot(
         snapshot: InterpreterSnapshot,
         source: &str,
-    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<ParseDiagnostic>), KagError> {
+    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<SyntaxWarning>), InterpreterError> {
         let source_name = snapshot.storage.clone();
         let (script, diags) = parse_script(source, &source_name);
 
@@ -132,11 +133,11 @@ impl KagInterpreter {
     }
 
     /// Send a `HostEvent` to the interpreter.
-    pub async fn send(&self, event: HostEvent) -> Result<(), KagError> {
+    pub async fn send(&self, event: HostEvent) -> Result<(), InterpreterError> {
         self.input_tx
             .send(event)
             .await
-            .map_err(|_| KagError::ChannelClosed)
+            .map_err(|_| InterpreterError::ChannelClosed)
     }
 
     /// Inject a variable value while the interpreter is paused at any blocking
@@ -147,7 +148,7 @@ impl KagInterpreter {
         scope: VarScope,
         key: impl Into<String>,
         value_expr: impl Into<String>,
-    ) -> Result<(), KagError> {
+    ) -> Result<(), InterpreterError> {
         self.send(HostEvent::SetVariable {
             scope,
             key: key.into(),
@@ -161,10 +162,10 @@ impl KagInterpreter {
     /// Call only when the interpreter is paused (after any blocking `KagEvent`
     /// such as `WaitForClick`, `WaitMs`, `Stop`, or `BeginChoices`) and before
     /// the corresponding resume event has been sent.
-    pub async fn snapshot(&self) -> Result<VariableSnapshot, KagError> {
+    pub async fn snapshot(&self) -> Result<VariableSnapshot, InterpreterError> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.send(HostEvent::QueryVariables(tx)).await?;
-        rx.await.map_err(|_| KagError::ChannelClosed)
+        rx.await.map_err(|_| InterpreterError::ChannelClosed)
     }
 }
 

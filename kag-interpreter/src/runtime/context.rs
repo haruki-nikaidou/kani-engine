@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use rhai::Map;
 
-use crate::error::KagError;
+use crate::error::InterpreterError;
 use crate::snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSnap};
 
 use super::script_engine::ScriptEngine;
@@ -347,7 +347,7 @@ impl RuntimeContext {
     /// This captures `pc`, all variable maps (`f`, `sf`, `mp`), all three
     /// execution stacks, and the display-mode flags.  Transient variables
     /// (`tf`) are intentionally excluded.
-    pub fn to_snapshot(&self) -> Result<InterpreterSnapshot, KagError> {
+    pub fn to_snapshot(&self) -> Result<InterpreterSnapshot, InterpreterError> {
         let f = self.script_engine.map_to_json("f")?;
         let sf = self.script_engine.map_to_json("sf")?;
         let mp = self.script_engine.map_to_json("mp")?;
@@ -376,14 +376,14 @@ impl RuntimeContext {
             .iter()
             .map(|fr| {
                 let saved_mp = serde_json::to_value(&fr.saved_mp)
-                    .map_err(|e| KagError::SerializationError(e.to_string()))?;
+                    .map_err(|e| InterpreterError::SerializationError(e.to_string()))?;
                 Ok(MacroFrameSnap {
                     macro_name: fr.macro_name.clone(),
                     return_pc: fr.return_pc,
                     saved_mp,
                 })
             })
-            .collect::<Result<Vec<_>, KagError>>()?;
+            .collect::<Result<Vec<_>, InterpreterError>>()?;
 
         let erased_macros = self.erased_macros.iter().cloned().collect();
 
@@ -411,7 +411,7 @@ impl RuntimeContext {
     /// The caller is responsible for re-parsing the correct scenario source
     /// and pointing the interpreter task at the restored `pc`.
     /// Transient variables (`tf`) are reset to empty.
-    pub fn restore_from_snapshot(&mut self, snap: &InterpreterSnapshot) -> Result<(), KagError> {
+    pub fn restore_from_snapshot(&mut self, snap: &InterpreterSnapshot) -> Result<(), InterpreterError> {
         self.pc = snap.pc;
         self.current_storage = snap.storage.clone();
 
@@ -444,14 +444,14 @@ impl RuntimeContext {
             .iter()
             .map(|fr| {
                 let saved_mp: Map = serde_json::from_value(fr.saved_mp.clone())
-                    .map_err(|e| KagError::SerializationError(e.to_string()))?;
+                    .map_err(|e| InterpreterError::SerializationError(e.to_string()))?;
                 Ok(MacroFrame {
                     macro_name: fr.macro_name.clone(),
                     return_pc: fr.return_pc,
                     saved_mp,
                 })
             })
-            .collect::<Result<Vec<_>, KagError>>()?;
+            .collect::<Result<Vec<_>, InterpreterError>>()?;
 
         self.current_speaker = None;
         self.pending_choices.clear();

@@ -4,31 +4,31 @@ overview: Split `kag-syntax`'s monolithic `KagError` into a syntax-only `SyntaxE
 todos:
   - id: rewrite-syntax-error
     content: "Rewrite kag-syntax/src/error.rs: rename KagError→SyntaxError (syntax variants only), rename ParseDiagnostic→SyntaxWarning, keep Severity"
-    status: pending
+    status: completed
   - id: update-syntax-lib
     content: "Update kag-syntax/src/lib.rs exports: SyntaxError, SyntaxWarning, Severity"
-    status: pending
+    status: completed
   - id: fix-lower-rs
     content: Remove _warning Op::Tag emission from lower.rs duplicate-label branch; update ParseDiagnostic references to SyntaxWarning
-    status: pending
+    status: completed
   - id: create-interpreter-error
     content: Create kag-interpreter/src/error.rs with InterpreterError owning all 7 runtime variants
-    status: pending
+    status: completed
   - id: update-interpreter-lib
     content: "Update kag-interpreter/src/lib.rs: add pub mod error; replace kag_syntax::error re-export; export InterpreterError"
-    status: pending
+    status: completed
   - id: update-runtime-files
     content: "Update all 4 kag-interpreter/src/runtime/ files: swap KagError→InterpreterError imports and usages; delete TAG_WARNING handler from executor.rs"
-    status: pending
+    status: completed
   - id: update-bridge
     content: Update kani-runtime/src/bridge.rs Severity path
-    status: pending
+    status: completed
   - id: update-lsp-convert
     content: "Update kag-lsp/src/convert.rs: ParseDiagnostic→SyntaxWarning"
-    status: pending
+    status: completed
   - id: verify-compile
     content: Run cargo check --workspace and cargo test --workspace; fix any remaining type errors
-    status: pending
+    status: completed
 isProject: false
 ---
 

@@ -97,10 +97,10 @@ pub fn spawn_interpreter(entry_script: &str, backend: &AssetBackend) -> Result<I
                     Ok((interp, _join, diags)) => {
                         for d in &diags {
                             match d.severity {
-                                kag_interpreter::error::Severity::Error => {
+                                kag_interpreter::Severity::Error => {
                                     tracing::error!("[kani-runtime] parse error: {}", d.message);
                                 }
-                                kag_interpreter::error::Severity::Warning => {
+                                kag_interpreter::Severity::Warning => {
                                     tracing::warn!("[kani-runtime] parse warning: {}", d.message);
                                 }
                             }
