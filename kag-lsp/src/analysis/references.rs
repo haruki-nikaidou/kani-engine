@@ -73,16 +73,15 @@ pub fn find_references(
             }
 
             // Declaration: a tag name resolves to a macro definition.
-            if include_declaration
-                && let Some(&macro_range) = doc.index.macros.get(&sym.name) {
-                    let lsp_range = text_range_to_lsp_range(&doc.source, macro_range);
-                    if !locations.iter().any(|l| l.range == lsp_range) {
-                        locations.push(Location {
-                            uri: uri.clone(),
-                            range: lsp_range,
-                        });
-                    }
+            if include_declaration && let Some(&macro_range) = doc.index.macros.get(&sym.name) {
+                let lsp_range = text_range_to_lsp_range(&doc.source, macro_range);
+                if !locations.iter().any(|l| l.range == lsp_range) {
+                    locations.push(Location {
+                        uri: uri.clone(),
+                        range: lsp_range,
+                    });
                 }
+            }
         }
 
         SymbolKind::ParamTarget => {
@@ -91,16 +90,15 @@ pub fn find_references(
             collect_param_value_refs(doc, uri, &sym.name, &["target"], &mut locations);
 
             // Declaration: a target= value resolves to a label definition.
-            if include_declaration
-                && let Some(&label_range) = doc.index.labels.get(&sym.name) {
-                    let lsp_range = text_range_to_lsp_range(&doc.source, label_range);
-                    if !locations.iter().any(|l| l.range == lsp_range) {
-                        locations.push(Location {
-                            uri: uri.clone(),
-                            range: lsp_range,
-                        });
-                    }
+            if include_declaration && let Some(&label_range) = doc.index.labels.get(&sym.name) {
+                let lsp_range = text_range_to_lsp_range(&doc.source, label_range);
+                if !locations.iter().any(|l| l.range == lsp_range) {
+                    locations.push(Location {
+                        uri: uri.clone(),
+                        range: lsp_range,
+                    });
                 }
+            }
         }
 
         SymbolKind::ParamStorage => {

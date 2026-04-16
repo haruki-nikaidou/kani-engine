@@ -50,26 +50,26 @@ pub fn handle_ui_inputs(
     // Choice selection
     if matches!(bridge.state, BridgeState::WaitingChoice)
         && let Some(&EvSelectChoice(idx)) = choices.read().next()
-            && bridge
-                .input_tx
-                .try_send(HostEvent::ChoiceSelected(idx))
-                .is_ok()
-            {
-                bridge.state = BridgeState::Running;
-                return;
-            }
+        && bridge
+            .input_tx
+            .try_send(HostEvent::ChoiceSelected(idx))
+            .is_ok()
+    {
+        bridge.state = BridgeState::Running;
+        return;
+    }
 
     // Text-input result
     if matches!(bridge.state, BridgeState::WaitingInput { .. })
         && let Some(EvSubmitInput(text)) = inputs.read().next().cloned()
-            && bridge
-                .input_tx
-                .try_send(HostEvent::InputResult(text))
-                .is_ok()
-            {
-                bridge.state = BridgeState::Running;
-                return;
-            }
+        && bridge
+            .input_tx
+            .try_send(HostEvent::InputResult(text))
+            .is_ok()
+    {
+        bridge.state = BridgeState::Running;
+        return;
+    }
 
     // Named trigger
     let expected = match &bridge.state {

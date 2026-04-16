@@ -1,5 +1,5 @@
-use std::fmt;
 use super::KnownTag;
+use std::fmt;
 
 /// The canonical name of every KAG tag known to the engine.
 ///
