@@ -221,7 +221,10 @@ fn execute_text<'s>(
 
 // ─── Inline tag dispatch (occurs within text lines) ───────────────────────────
 
-fn execute_inline_tag(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> Result<Vec<KagEvent>, InterpreterError> {
+fn execute_inline_tag(
+    ctx: &mut RuntimeContext,
+    tag: &Tag<'_>,
+) -> Result<Vec<KagEvent>, InterpreterError> {
     // Honour optional `cond=` guard on any inline tag
     let cond_expr = tag.param_str("cond").map(str::to_owned);
     if let Some(ref expr) = cond_expr

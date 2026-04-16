@@ -19,10 +19,10 @@ use tokio::sync::mpsc;
 
 use crate::ast::Script;
 use crate::error::InterpreterError;
-use kag_syntax::error::SyntaxWarning;
 use crate::events::{HostEvent, KagEvent, VarScope, VariableSnapshot};
 use crate::parser::parse_script;
 use crate::snapshot::InterpreterSnapshot;
+use kag_syntax::error::SyntaxWarning;
 
 use context::RuntimeContext;
 use executor::execute_op;

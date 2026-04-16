@@ -213,7 +213,11 @@ impl ScriptEngine {
 
     /// Deserialise a `serde_json::Value` back into a named scope map.
     /// Existing scope entries are replaced.
-    pub fn restore_map(&mut self, name: &str, json: &serde_json::Value) -> Result<(), InterpreterError> {
+    pub fn restore_map(
+        &mut self,
+        name: &str,
+        json: &serde_json::Value,
+    ) -> Result<(), InterpreterError> {
         let map: Map = serde_json::from_value(json.clone())
             .map_err(|e| InterpreterError::SerializationError(e.to_string()))?;
         set_map_in_scope(&mut self.scope, name, map);

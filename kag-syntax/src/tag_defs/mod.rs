@@ -111,7 +111,10 @@ fn require_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
 fn recommend_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
     if tag.param(key).is_none() {
         diags.push(SyntaxWarning::warning(
-            format!("[{}] is missing `{key}=`; tag will have no effect", tag.name),
+            format!(
+                "[{}] is missing `{key}=`; tag will have no effect",
+                tag.name
+            ),
             tag.span,
         ));
     }
@@ -635,8 +638,7 @@ mod tests {
     fn known_tag_se_and_play_se_unify() {
         let mut diags = vec![];
         let se = KnownTag::from_tag(&tag_with_param("se", "storage", "beep.ogg"), &mut diags);
-        let play =
-            KnownTag::from_tag(&tag_with_param("playSe", "storage", "beep.ogg"), &mut diags);
+        let play = KnownTag::from_tag(&tag_with_param("playSe", "storage", "beep.ogg"), &mut diags);
         assert!(diags.is_empty(), "no diags expected: {diags:?}");
         assert_eq!(se.tag_name(), Some(TagName::Se));
         assert_eq!(play.tag_name(), Some(TagName::Se));
@@ -648,8 +650,7 @@ mod tests {
     fn known_tag_vo_and_voice_unify() {
         let mut diags = vec![];
         let vo = KnownTag::from_tag(&tag_with_param("vo", "storage", "v01.ogg"), &mut diags);
-        let voice =
-            KnownTag::from_tag(&tag_with_param("voice", "storage", "v01.ogg"), &mut diags);
+        let voice = KnownTag::from_tag(&tag_with_param("voice", "storage", "v01.ogg"), &mut diags);
         assert!(diags.is_empty(), "no diags expected: {diags:?}");
         assert_eq!(vo.tag_name(), Some(TagName::Vo));
         assert_eq!(voice.tag_name(), Some(TagName::Vo));
@@ -1274,22 +1275,103 @@ mod tests {
     #[test]
     fn tag_name_from_name_round_trips() {
         for name in &[
-            "if", "elsif", "else", "endif", "ignore", "endignore",
-            "jump", "call", "return", "link", "endlink", "glink",
-            "eval", "emb", "trace", "l", "p", "r", "s", "cm", "er",
-            "ch", "hch", "wait", "wc", "wa", "wm", "wt", "wq", "wb",
-            "wf", "wl", "ws", "wv", "wp", "ct", "timeout", "waitclick",
-            "cclick", "ctimeout", "cwheel", "click", "wheel",
-            "nolog", "endnolog", "nowait", "endnowait", "resetdelay",
-            "delay", "configdelay", "resetwait", "autowc", "pushlog",
-            "input", "waittrig", "macro", "erasemacro", "endmacro",
-            "clearvar", "clearsysvar", "clearstack", "clickskip",
-            "chara_ptext", "bg", "image", "layopt", "free", "position",
-            "bgm", "stopbgm", "se", "playSe", "stopse", "vo", "voice",
-            "fadebgm", "trans", "fadein", "fadeout", "movetrans",
-            "quake", "shake", "flash", "msgwnd", "wndctrl", "resetfont",
-            "font", "size", "bold", "italic", "ruby", "nowrap",
-            "endnowrap", "chara", "chara_hide", "chara_free", "chara_mod",
+            "if",
+            "elsif",
+            "else",
+            "endif",
+            "ignore",
+            "endignore",
+            "jump",
+            "call",
+            "return",
+            "link",
+            "endlink",
+            "glink",
+            "eval",
+            "emb",
+            "trace",
+            "l",
+            "p",
+            "r",
+            "s",
+            "cm",
+            "er",
+            "ch",
+            "hch",
+            "wait",
+            "wc",
+            "wa",
+            "wm",
+            "wt",
+            "wq",
+            "wb",
+            "wf",
+            "wl",
+            "ws",
+            "wv",
+            "wp",
+            "ct",
+            "timeout",
+            "waitclick",
+            "cclick",
+            "ctimeout",
+            "cwheel",
+            "click",
+            "wheel",
+            "nolog",
+            "endnolog",
+            "nowait",
+            "endnowait",
+            "resetdelay",
+            "delay",
+            "configdelay",
+            "resetwait",
+            "autowc",
+            "pushlog",
+            "input",
+            "waittrig",
+            "macro",
+            "erasemacro",
+            "endmacro",
+            "clearvar",
+            "clearsysvar",
+            "clearstack",
+            "clickskip",
+            "chara_ptext",
+            "bg",
+            "image",
+            "layopt",
+            "free",
+            "position",
+            "bgm",
+            "stopbgm",
+            "se",
+            "playSe",
+            "stopse",
+            "vo",
+            "voice",
+            "fadebgm",
+            "trans",
+            "fadein",
+            "fadeout",
+            "movetrans",
+            "quake",
+            "shake",
+            "flash",
+            "msgwnd",
+            "wndctrl",
+            "resetfont",
+            "font",
+            "size",
+            "bold",
+            "italic",
+            "ruby",
+            "nowrap",
+            "endnowrap",
+            "chara",
+            "chara_hide",
+            "chara_free",
+            "chara_mod",
         ] {
             let tag_name = TagName::from_name(name)
                 .unwrap_or_else(|| panic!("TagName::from_name({name:?}) returned None"));

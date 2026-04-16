@@ -411,7 +411,10 @@ impl RuntimeContext {
     /// The caller is responsible for re-parsing the correct scenario source
     /// and pointing the interpreter task at the restored `pc`.
     /// Transient variables (`tf`) are reset to empty.
-    pub fn restore_from_snapshot(&mut self, snap: &InterpreterSnapshot) -> Result<(), InterpreterError> {
+    pub fn restore_from_snapshot(
+        &mut self,
+        snap: &InterpreterSnapshot,
+    ) -> Result<(), InterpreterError> {
         self.pc = snap.pc;
         self.current_storage = snap.storage.clone();
 
