@@ -38,9 +38,8 @@ use std::str::FromStr;
 
 use miette::SourceSpan;
 
-use crate::ast::{Param, ParamValue, Tag};
+use crate::ast::{ParamValue, Tag};
 use crate::error::SyntaxWarning;
-pub use crate::tag_defs::names::TagName;
 
 // ─── AttributeString ─────────────────────────────────────────────────────────
 
@@ -68,358 +67,9 @@ pub enum MaybeResolved<'src, T> {
     Dynamic(ParamValue<'src>),
 }
 
-// ─── KnownTag ─────────────────────────────────────────────────────────────────
-
-/// A KAG tag with typed, validated attributes extracted as named fields.
-///
-/// Construct with [`KnownTag::from_tag`], which both parses attributes into
-/// their typed forms and emits diagnostics for any missing required or
-/// recommended attributes.
-///
-/// Unknown tag names produce a [`KnownTag::Extension`] variant rather than an
-/// error.  The aliases `"playSe"` and `"voice"` are decoded into the canonical
-/// variants [`KnownTag::Se`] and [`KnownTag::Vo`] respectively.  If you need
-/// to distinguish the original tag name string, read it from [`Tag::name`]
-/// before calling `from_tag`.
-#[derive(Debug, Clone, PartialEq)]
-pub enum KnownTag<'src> {
-    // ── Control flow ──────────────────────────────────────────────────────
-    If {
-        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Elsif {
-        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Else,
-    Endif,
-    Ignore {
-        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Endignore,
-
-    // ── Navigation ────────────────────────────────────────────────────────
-    Jump {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Call {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Return,
-
-    // ── Choice links ──────────────────────────────────────────────────────
-    Link {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Endlink,
-    Glink {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-
-    // ── Scripting / expressions ───────────────────────────────────────────
-    Eval {
-        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Emb {
-        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Trace {
-        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-
-    // ── Display control ───────────────────────────────────────────────────
-    L,
-    P,
-    R,
-    S,
-    Cm,
-    Er,
-    Ch {
-        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Hch {
-        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-
-    // ── Timed waits ───────────────────────────────────────────────────────
-    Wait {
-        time: Option<MaybeResolved<'src, u64>>,
-        canskip: Option<MaybeResolved<'src, bool>>,
-    },
-    Wc {
-        time: Option<MaybeResolved<'src, u64>>,
-    },
-
-    // ── Async-completion waits (`wa`/`wm`/`wt`/`wq`/`wb`/`wf`/`wl`/`ws`/`wv`/`wp`) ──
-    /// Covers the entire `w*` family of async-completion waits.
-    ///
-    /// `which` identifies the specific tag ([`TagName::Wa`] … [`TagName::Wp`]).
-    /// `canskip` mirrors the KAG `canskip=` attribute; when `true` the host
-    /// may resolve the wait early on a click.  `buf` selects the audio/effect
-    /// buffer slot on waits that support it (e.g. `[ws]`, `[wv]`).
-    WaitForCompletion {
-        which: TagName,
-        canskip: Option<MaybeResolved<'src, bool>>,
-        buf: Option<MaybeResolved<'src, u32>>,
-    },
-    /// Cancel all in-progress asynchronous operations (`[ct]`).
-    Ct,
-
-    // ── Input / event handlers ────────────────────────────────────────────
-    Timeout {
-        time: Option<MaybeResolved<'src, u64>>,
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Waitclick,
-    Cclick,
-    Ctimeout,
-    Cwheel,
-    Click {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Wheel {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-
-    // ── Log control ───────────────────────────────────────────────────────
-    Nolog,
-    Endnolog,
-
-    // ── Display-speed control ─────────────────────────────────────────────
-    Nowait,
-    Endnowait,
-    Resetdelay,
-    Delay {
-        speed: Option<MaybeResolved<'src, u64>>,
-    },
-    Configdelay {
-        speed: Option<MaybeResolved<'src, u64>>,
-    },
-    Resetwait,
-    Autowc {
-        time: Option<MaybeResolved<'src, u64>>,
-    },
-
-    // ── Backlog ───────────────────────────────────────────────────────────
-    Pushlog {
-        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        join: Option<MaybeResolved<'src, bool>>,
-    },
-
-    // ── Player input / triggers ───────────────────────────────────────────
-    Input {
-        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        prompt: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        title: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Waittrig {
-        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-
-    // ── Macro management ──────────────────────────────────────────────────
-    Macro {
-        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Erasemacro {
-        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Endmacro,
-
-    // ── Variable management ───────────────────────────────────────────────
-    Clearvar,
-    Clearsysvar,
-    Clearstack,
-
-    // ── Misc ──────────────────────────────────────────────────────────────
-    Clickskip {
-        enabled: Option<MaybeResolved<'src, bool>>,
-    },
-    CharaPtext {
-        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-
-    // ── Image / layer (runtime passthrough) ───────────────────────────────
-    Bg {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        time: Option<MaybeResolved<'src, u64>>,
-        method: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Image {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        x: Option<MaybeResolved<'src, f32>>,
-        y: Option<MaybeResolved<'src, f32>>,
-        visible: Option<MaybeResolved<'src, bool>>,
-    },
-    Layopt {
-        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        visible: Option<MaybeResolved<'src, bool>>,
-        opacity: Option<MaybeResolved<'src, f32>>,
-    },
-    Free {
-        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Position {
-        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        x: Option<MaybeResolved<'src, f32>>,
-        y: Option<MaybeResolved<'src, f32>>,
-    },
-
-    // ── Audio (runtime passthrough) ───────────────────────────────────────
-    Bgm {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        /// KAG parameter key `loop`.
-        r#loop: Option<MaybeResolved<'src, bool>>,
-        volume: Option<MaybeResolved<'src, f32>>,
-        fadetime: Option<MaybeResolved<'src, u64>>,
-    },
-    Stopbgm {
-        fadetime: Option<MaybeResolved<'src, u64>>,
-    },
-    /// Covers both `[se]` and `[playSe]`.
-    Se {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        buf: Option<MaybeResolved<'src, u32>>,
-        volume: Option<MaybeResolved<'src, f32>>,
-        /// KAG parameter key `loop`.
-        r#loop: Option<MaybeResolved<'src, bool>>,
-    },
-    Stopse {
-        buf: Option<MaybeResolved<'src, u32>>,
-    },
-    /// Covers both `[vo]` and `[voice]`.
-    Vo {
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        buf: Option<MaybeResolved<'src, u32>>,
-    },
-    Fadebgm {
-        time: Option<MaybeResolved<'src, u64>>,
-        volume: Option<MaybeResolved<'src, f32>>,
-    },
-
-    // ── Transition (runtime passthrough) ──────────────────────────────────
-    Trans {
-        method: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        time: Option<MaybeResolved<'src, u64>>,
-        rule: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Fadein {
-        time: Option<MaybeResolved<'src, u64>>,
-        color: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Fadeout {
-        time: Option<MaybeResolved<'src, u64>>,
-        color: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Movetrans {
-        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        time: Option<MaybeResolved<'src, u64>>,
-        x: Option<MaybeResolved<'src, f32>>,
-        y: Option<MaybeResolved<'src, f32>>,
-    },
-
-    // ── Effect (runtime passthrough) ──────────────────────────────────────
-    Quake {
-        time: Option<MaybeResolved<'src, u64>>,
-        hmax: Option<MaybeResolved<'src, f32>>,
-        vmax: Option<MaybeResolved<'src, f32>>,
-    },
-    Shake {
-        time: Option<MaybeResolved<'src, u64>>,
-        amount: Option<MaybeResolved<'src, f32>>,
-        axis: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Flash {
-        time: Option<MaybeResolved<'src, u64>>,
-        color: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-
-    // ── Message window (runtime passthrough) ──────────────────────────────
-    Msgwnd {
-        visible: Option<MaybeResolved<'src, bool>>,
-        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Wndctrl {
-        x: Option<MaybeResolved<'src, f32>>,
-        y: Option<MaybeResolved<'src, f32>>,
-        width: Option<MaybeResolved<'src, f32>>,
-        height: Option<MaybeResolved<'src, f32>>,
-    },
-    Resetfont,
-    Font {
-        face: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        size: Option<MaybeResolved<'src, f32>>,
-        bold: Option<MaybeResolved<'src, bool>>,
-        italic: Option<MaybeResolved<'src, bool>>,
-    },
-    Size {
-        value: Option<MaybeResolved<'src, f32>>,
-    },
-    Bold {
-        value: Option<MaybeResolved<'src, bool>>,
-    },
-    Italic {
-        value: Option<MaybeResolved<'src, bool>>,
-    },
-    Ruby {
-        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    Nowrap,
-    Endnowrap,
-
-    // ── Character sprites (runtime passthrough) ───────────────────────────
-    Chara {
-        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        id: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        slot: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        x: Option<MaybeResolved<'src, f32>>,
-        y: Option<MaybeResolved<'src, f32>>,
-    },
-    CharaHide {
-        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        id: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        slot: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    CharaFree {
-        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        id: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        slot: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-    CharaMod {
-        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        id: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        face: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        pose: Option<MaybeResolved<'src, AttributeString<'src>>>,
-        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
-    },
-
-    // ── Extensions ────────────────────────────────────────────────────────
-    /// A tag not recognised by the engine.
-    ///
-    /// Game-specific or plugin code can match on this variant to handle
-    /// custom tags.  The raw `name` and `params` are preserved so the tag can
-    /// be forwarded to the host without loss of information.
-    Extension {
-        name: Cow<'src, str>,
-        params: Vec<Param<'src>>,
-    },
-}
-
 // ─── Private parsing helpers ──────────────────────────────────────────────────
 
-/// Wrap a [`ParamValue`] as a string attribute.  Literals become
-/// [`MaybeResolved::Literal`]; everything else becomes [`MaybeResolved::Dynamic`].
+/// Wrap a [`ParamValue`] as a string attribute.
 fn parse_str_attr<'src>(pv: ParamValue<'src>) -> MaybeResolved<'src, AttributeString<'src>> {
     match pv {
         ParamValue::Literal(s) => MaybeResolved::Literal(AttributeString(s)),
@@ -428,11 +78,6 @@ fn parse_str_attr<'src>(pv: ParamValue<'src>) -> MaybeResolved<'src, AttributeSt
 }
 
 /// Parse a [`ParamValue`] into a typed `T`.
-///
-/// * Literals are parsed with [`FromStr`]; on failure a warning is pushed and
-///   the raw value is returned as [`MaybeResolved::Dynamic`].
-/// * Non-literal values (entities, macro params) pass through as
-///   [`MaybeResolved::Dynamic`] without touching `diags`.
 fn parse_typed_attr<'src, T: FromStr>(
     pv: ParamValue<'src>,
     tag_name: &str,
@@ -490,661 +135,416 @@ fn recommend_any_attr(tag: &Tag<'_>, keys: &[&str], diags: &mut Vec<SyntaxWarnin
     }
 }
 
-// ─── KnownTag impl ────────────────────────────────────────────────────────────
+// ─── Macro definition & invocation ────────────────────────────────────────────
 
-impl<'src> KnownTag<'src> {
-    /// Parse and validate a raw [`Tag`] into a typed [`KnownTag`].
-    ///
-    /// Always returns a [`KnownTag`], using [`KnownTag::Extension`] for any
-    /// tag name not recognised by the engine.  Diagnostics for missing
-    /// required/recommended attributes or unparseable typed values are appended
-    /// to `diags`.
-    ///
-    /// The aliases `"playSe"` and `"voice"` are decoded into the canonical
-    /// variants [`KnownTag::Se`] and [`KnownTag::Vo`] respectively.
-    pub fn from_tag(tag: &Tag<'src>, diags: &mut Vec<SyntaxWarning>) -> Self {
-        let name = tag.name.as_ref();
-        let span = tag.span;
+#[macro_use]
+mod macros;
 
-        // String-attribute shorthand: look up a key and wrap it.
-        let ps = |key: &str| tag.param(key).cloned().map(parse_str_attr);
+define_tags! {
+    // ── Control flow ────────────────────────────────────────────────────────
+    /// Conditional branch — begin.
+    If("if") {
+        exp: required<str>,
+    },
+    /// Conditional branch — else-if.
+    Elsif("elsif") {
+        exp: required<str>,
+    },
+    /// Conditional branch — else.
+    Else("else") {},
+    /// Conditional branch — end.
+    Endif("endif") {},
+    /// Ignore block — begin.
+    Ignore("ignore") {
+        exp: required<str>,
+    },
+    /// Ignore block — end.
+    Endignore("endignore") {},
 
-        match name {
-            // ── Control flow ───────────────────────────────────────────────
-            "if" => {
-                require_attr(tag, "exp", diags);
-                Self::If { exp: ps("exp") }
-            }
-            "elsif" => {
-                require_attr(tag, "exp", diags);
-                Self::Elsif { exp: ps("exp") }
-            }
-            "else" => Self::Else,
-            "endif" => Self::Endif,
-            "ignore" => {
-                require_attr(tag, "exp", diags);
-                Self::Ignore { exp: ps("exp") }
-            }
-            "endignore" => Self::Endignore,
+    // ── Navigation ──────────────────────────────────────────────────────────
+    /// Jump to another label or file.
+    Jump("jump") {
+        storage: recommended_any_of("storage", "target")<str>,
+        target: recommended_any_of("storage", "target")<str>,
+    },
+    /// Call a subroutine.
+    Call("call") {
+        storage: recommended_any_of("storage", "target")<str>,
+        target: recommended_any_of("storage", "target")<str>,
+    },
+    /// Return from a subroutine.
+    Return("return") {},
 
-            // ── Navigation ────────────────────────────────────────────────
-            "jump" => {
-                recommend_any_attr(tag, &["storage", "target"], diags);
-                Self::Jump {
-                    storage: ps("storage"),
-                    target: ps("target"),
-                }
-            }
-            "call" => {
-                recommend_any_attr(tag, &["storage", "target"], diags);
-                Self::Call {
-                    storage: ps("storage"),
-                    target: ps("target"),
-                }
-            }
-            "return" => Self::Return,
+    // ── Choice links ────────────────────────────────────────────────────────
+    /// Begin a clickable link region.
+    Link("link") {
+        storage: recommended_any_of("storage", "target")<str>,
+        target: recommended_any_of("storage", "target")<str>,
+        text: optional<str>,
+    },
+    /// End a clickable link region.
+    Endlink("endlink") {},
+    /// A graphical link button.
+    Glink("glink") {
+        storage: recommended_any_of("storage", "target")<str>,
+        target: recommended_any_of("storage", "target")<str>,
+        text: optional<str>,
+    },
 
-            // ── Choice links ──────────────────────────────────────────────
-            "link" => {
-                recommend_any_attr(tag, &["storage", "target"], diags);
-                Self::Link {
-                    storage: ps("storage"),
-                    target: ps("target"),
-                    text: ps("text"),
-                }
-            }
-            "endlink" => Self::Endlink,
-            "glink" => {
-                recommend_any_attr(tag, &["storage", "target"], diags);
-                Self::Glink {
-                    storage: ps("storage"),
-                    target: ps("target"),
-                    text: ps("text"),
-                }
-            }
+    // ── Scripting / expressions ─────────────────────────────────────────────
+    /// Evaluate a Rhai expression.
+    Eval("eval") {
+        exp: recommended<str>,
+    },
+    /// Embed expression result as text.
+    Emb("emb") {
+        exp: recommended<str>,
+    },
+    /// Trace an expression to the debug log.
+    Trace("trace") {
+        exp: recommended<str>,
+    },
 
-            // ── Scripting / expressions ───────────────────────────────────
-            "eval" => {
-                recommend_attr(tag, "exp", diags);
-                Self::Eval { exp: ps("exp") }
-            }
-            "emb" => {
-                recommend_attr(tag, "exp", diags);
-                Self::Emb { exp: ps("exp") }
-            }
-            "trace" => {
-                recommend_attr(tag, "exp", diags);
-                Self::Trace { exp: ps("exp") }
-            }
+    // ── Display control ─────────────────────────────────────────────────────
+    /// Wait for a click (line wait).
+    L("l") {},
+    /// Wait for a page-break click, then clear the window.
+    P("p") {},
+    /// Insert a line break in the message window.
+    R("r") {},
+    /// Stop script execution.
+    S("s") {},
+    /// Clear the current message layer.
+    Cm("cm") {},
+    /// Erase all layers.
+    Er("er") {},
+    /// Output a single character.
+    Ch("ch") {
+        text: recommended<str>,
+    },
+    /// Output a half-width character.
+    Hch("hch") {
+        text: recommended<str>,
+    },
 
-            // ── Display control ───────────────────────────────────────────
-            "l" => Self::L,
-            "p" => Self::P,
-            "r" => Self::R,
-            "s" => Self::S,
-            "cm" => Self::Cm,
-            "er" => Self::Er,
-            "ch" => {
-                recommend_attr(tag, "text", diags);
-                Self::Ch { text: ps("text") }
-            }
-            "hch" => {
-                recommend_attr(tag, "text", diags);
-                Self::Hch { text: ps("text") }
-            }
+    // ── Timed waits ─────────────────────────────────────────────────────────
+    /// Wait for a fixed number of milliseconds.
+    Wait("wait") {
+        time: recommended<u64>,
+        canskip: optional<bool>,
+    },
+    /// Wait for a click with timeout.
+    Wc("wc") {
+        time: recommended<u64>,
+    },
 
-            // ── Timed waits ───────────────────────────────────────────────
-            "wait" => {
-                recommend_attr(tag, "time", diags);
-                let time_pv = tag.param("time").cloned();
-                let canskip_pv = tag.param("canskip").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                let canskip =
-                    canskip_pv.map(|pv| parse_typed_attr(pv, name, "canskip", span, diags));
-                Self::Wait { time, canskip }
-            }
-            "wc" => {
-                recommend_attr(tag, "time", diags);
-                let time_pv = tag.param("time").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                Self::Wc { time }
-            }
+    // ── Cancel async ────────────────────────────────────────────────────────
+    /// Cancel all in-progress asynchronous operations.
+    Ct("ct") {},
 
-            // ── Async-completion waits ─────────────────────────────────────
-            "wa" | "wm" | "wt" | "wq" | "wb" | "wf" | "wl" | "ws" | "wv" | "wp" => {
-                let which = match name {
-                    "wa" => TagName::Wa,
-                    "wm" => TagName::Wm,
-                    "wt" => TagName::Wt,
-                    "wq" => TagName::Wq,
-                    "wb" => TagName::Wb,
-                    "wf" => TagName::Wf,
-                    "wl" => TagName::Wl,
-                    "ws" => TagName::Ws,
-                    "wv" => TagName::Wv,
-                    _ => TagName::Wp,
-                };
-                let canskip_pv = tag.param("canskip").cloned();
-                let buf_pv = tag.param("buf").cloned();
-                let canskip =
-                    canskip_pv.map(|pv| parse_typed_attr(pv, name, "canskip", span, diags));
-                let buf = buf_pv.map(|pv| parse_typed_attr(pv, name, "buf", span, diags));
-                Self::WaitForCompletion { which, canskip, buf }
-            }
-            "ct" => Self::Ct,
+    // ── Input / event handlers ──────────────────────────────────────────────
+    /// Set a timeout handler.
+    Timeout("timeout") {
+        time: recommended<u64>,
+        storage: optional<str>,
+        target: optional<str>,
+    },
+    /// Wait for a click.
+    Waitclick("waitclick") {},
+    /// Cancel click handler.
+    Cclick("cclick") {},
+    /// Cancel timeout handler.
+    Ctimeout("ctimeout") {},
+    /// Cancel wheel handler.
+    Cwheel("cwheel") {},
+    /// Set a click handler.
+    Click("click") {
+        storage: recommended_any_of("storage", "target", "exp")<str>,
+        target: recommended_any_of("storage", "target", "exp")<str>,
+        exp: recommended_any_of("storage", "target", "exp")<str>,
+    },
+    /// Set a wheel handler.
+    Wheel("wheel") {
+        storage: recommended_any_of("storage", "target", "exp")<str>,
+        target: recommended_any_of("storage", "target", "exp")<str>,
+        exp: recommended_any_of("storage", "target", "exp")<str>,
+    },
 
-            // ── Input / event handlers ────────────────────────────────────
-            "timeout" => {
-                recommend_attr(tag, "time", diags);
-                let time_pv = tag.param("time").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                Self::Timeout {
-                    time,
-                    storage: ps("storage"),
-                    target: ps("target"),
-                }
-            }
-            "waitclick" => Self::Waitclick,
-            "cclick" => Self::Cclick,
-            "ctimeout" => Self::Ctimeout,
-            "cwheel" => Self::Cwheel,
-            "click" => {
-                recommend_any_attr(tag, &["storage", "target", "exp"], diags);
-                Self::Click {
-                    storage: ps("storage"),
-                    target: ps("target"),
-                    exp: ps("exp"),
-                }
-            }
-            "wheel" => {
-                recommend_any_attr(tag, &["storage", "target", "exp"], diags);
-                Self::Wheel {
-                    storage: ps("storage"),
-                    target: ps("target"),
-                    exp: ps("exp"),
-                }
-            }
+    // ── Log control ─────────────────────────────────────────────────────────
+    /// Disable backlog recording.
+    Nolog("nolog") {},
+    /// Re-enable backlog recording.
+    Endnolog("endnolog") {},
 
-            // ── Log control ───────────────────────────────────────────────
-            "nolog" => Self::Nolog,
-            "endnolog" => Self::Endnolog,
+    // ── Display-speed control ───────────────────────────────────────────────
+    /// Disable per-character delay.
+    Nowait("nowait") {},
+    /// Re-enable per-character delay.
+    Endnowait("endnowait") {},
+    /// Reset character display delay to default.
+    Resetdelay("resetdelay") {},
+    /// Set character display delay.
+    Delay("delay") {
+        speed: recommended<u64>,
+    },
+    /// Set the config-layer display delay.
+    Configdelay("configdelay") {
+        speed: recommended<u64>,
+    },
+    /// Reset auto-mode wait time.
+    Resetwait("resetwait") {},
+    /// Set auto-mode wait after each character.
+    Autowc("autowc") {
+        time: optional<u64>,
+    },
 
-            // ── Display-speed control ─────────────────────────────────────
-            "nowait" => Self::Nowait,
-            "endnowait" => Self::Endnowait,
-            "resetdelay" => Self::Resetdelay,
-            "delay" => {
-                recommend_attr(tag, "speed", diags);
-                let speed_pv = tag.param("speed").cloned();
-                let speed = speed_pv.map(|pv| parse_typed_attr(pv, name, "speed", span, diags));
-                Self::Delay { speed }
-            }
-            "configdelay" => {
-                recommend_attr(tag, "speed", diags);
-                let speed_pv = tag.param("speed").cloned();
-                let speed = speed_pv.map(|pv| parse_typed_attr(pv, name, "speed", span, diags));
-                Self::Configdelay { speed }
-            }
-            "resetwait" => Self::Resetwait,
-            "autowc" => {
-                let time_pv = tag.param("time").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                Self::Autowc { time }
-            }
+    // ── Backlog ─────────────────────────────────────────────────────────────
+    /// Push text to the backlog.
+    Pushlog("pushlog") {
+        text: recommended<str>,
+        join: optional<bool>,
+    },
 
-            // ── Backlog ───────────────────────────────────────────────────
-            "pushlog" => {
-                recommend_attr(tag, "text", diags);
-                let join_pv = tag.param("join").cloned();
-                let join = join_pv.map(|pv| parse_typed_attr(pv, name, "join", span, diags));
-                Self::Pushlog {
-                    text: ps("text"),
-                    join,
-                }
-            }
+    // ── Player input / triggers ─────────────────────────────────────────────
+    /// Prompt the player for text input.
+    Input("input") {
+        name: recommended<str>,
+        prompt: optional<str>,
+        title: optional<str>,
+    },
+    /// Wait for a named trigger.
+    Waittrig("waittrig") {
+        name: recommended<str>,
+    },
 
-            // ── Player input / triggers ───────────────────────────────────
-            "input" => {
-                recommend_attr(tag, "name", diags);
-                Self::Input {
-                    name: ps("name"),
-                    prompt: ps("prompt"),
-                    title: ps("title"),
-                }
-            }
-            "waittrig" => {
-                recommend_attr(tag, "name", diags);
-                Self::Waittrig { name: ps("name") }
-            }
+    // ── Macro management ────────────────────────────────────────────────────
+    /// Define a macro.
+    Macro("macro") {
+        name: optional<str>,
+    },
+    /// Delete a macro definition.
+    Erasemacro("erasemacro") {
+        name: recommended<str>,
+    },
+    /// End a macro definition.
+    Endmacro("endmacro") {},
 
-            // ── Macro management ──────────────────────────────────────────
-            "macro" => Self::Macro { name: ps("name") },
-            "erasemacro" => {
-                recommend_attr(tag, "name", diags);
-                Self::Erasemacro { name: ps("name") }
-            }
-            "endmacro" => Self::Endmacro,
+    // ── Variable management ─────────────────────────────────────────────────
+    /// Clear game variables.
+    Clearvar("clearvar") {},
+    /// Clear system variables.
+    Clearsysvar("clearsysvar") {},
+    /// Clear the call stack.
+    Clearstack("clearstack") {},
 
-            // ── Variable management ───────────────────────────────────────
-            "clearvar" => Self::Clearvar,
-            "clearsysvar" => Self::Clearsysvar,
-            "clearstack" => Self::Clearstack,
+    // ── Misc ────────────────────────────────────────────────────────────────
+    /// Enable or disable click-to-skip.
+    Clickskip("clickskip") {
+        enabled: optional<bool>,
+    },
+    /// Set the character name in the ptext layer.
+    CharaPtext("chara_ptext") {
+        name: recommended<str>,
+    },
 
-            // ── Misc ──────────────────────────────────────────────────────
-            "clickskip" => {
-                let enabled_pv = tag.param("enabled").cloned();
-                let enabled =
-                    enabled_pv.map(|pv| parse_typed_attr(pv, name, "enabled", span, diags));
-                Self::Clickskip { enabled }
-            }
-            "chara_ptext" => {
-                recommend_attr(tag, "name", diags);
-                Self::CharaPtext { name: ps("name") }
-            }
+    // ── Image / layer ───────────────────────────────────────────────────────
+    /// Set the background image.
+    Bg("bg") {
+        storage: required<str>,
+        time: optional<u64>,
+        method: optional<str>,
+    },
+    /// Display an image on a layer.
+    Image("image") {
+        storage: required<str>,
+        layer: optional<str>,
+        x: optional<f32>,
+        y: optional<f32>,
+        visible: optional<bool>,
+    },
+    /// Set layer options.
+    Layopt("layopt") {
+        layer: required<str>,
+        visible: optional<bool>,
+        opacity: optional<f32>,
+    },
+    /// Free (remove) a layer.
+    Free("free") {
+        layer: required<str>,
+    },
+    /// Set layer position.
+    Position("position") {
+        layer: required<str>,
+        x: optional<f32>,
+        y: optional<f32>,
+    },
 
-            // ── Image / layer ─────────────────────────────────────────────
-            "bg" => {
-                require_attr(tag, "storage", diags);
-                let time_pv = tag.param("time").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                Self::Bg {
-                    storage: ps("storage"),
-                    time,
-                    method: ps("method"),
-                }
-            }
-            "image" => {
-                require_attr(tag, "storage", diags);
-                let x_pv = tag.param("x").cloned();
-                let y_pv = tag.param("y").cloned();
-                let visible_pv = tag.param("visible").cloned();
-                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
-                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
-                let visible =
-                    visible_pv.map(|pv| parse_typed_attr(pv, name, "visible", span, diags));
-                Self::Image {
-                    storage: ps("storage"),
-                    layer: ps("layer"),
-                    x,
-                    y,
-                    visible,
-                }
-            }
-            "layopt" => {
-                require_attr(tag, "layer", diags);
-                let visible_pv = tag.param("visible").cloned();
-                let opacity_pv = tag.param("opacity").cloned();
-                let visible =
-                    visible_pv.map(|pv| parse_typed_attr(pv, name, "visible", span, diags));
-                let opacity =
-                    opacity_pv.map(|pv| parse_typed_attr(pv, name, "opacity", span, diags));
-                Self::Layopt {
-                    layer: ps("layer"),
-                    visible,
-                    opacity,
-                }
-            }
-            "free" => {
-                require_attr(tag, "layer", diags);
-                Self::Free { layer: ps("layer") }
-            }
-            "position" => {
-                require_attr(tag, "layer", diags);
-                let x_pv = tag.param("x").cloned();
-                let y_pv = tag.param("y").cloned();
-                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
-                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
-                Self::Position {
-                    layer: ps("layer"),
-                    x,
-                    y,
-                }
-            }
+    // ── Audio ───────────────────────────────────────────────────────────────
+    /// Play background music.
+    Bgm("bgm") {
+        storage: required<str>,
+        r#loop: optional<bool>,
+        volume: optional<f32>,
+        fadetime: optional<u64>,
+    },
+    /// Stop background music.
+    Stopbgm("stopbgm") {
+        fadetime: optional<u64>,
+    },
+    /// Play a sound effect.
+    Se("se", alias PlaySe "playSe") {
+        storage: required<str>,
+        buf: optional<u32>,
+        volume: optional<f32>,
+        r#loop: optional<bool>,
+    },
+    /// Stop a sound effect.
+    Stopse("stopse") {
+        buf: optional<u32>,
+    },
+    /// Play a voice clip.
+    Vo("vo", alias Voice "voice") {
+        storage: required<str>,
+        buf: optional<u32>,
+    },
+    /// Fade background music volume.
+    Fadebgm("fadebgm") {
+        time: optional<u64>,
+        volume: optional<f32>,
+    },
 
-            // ── Audio ─────────────────────────────────────────────────────
-            "bgm" => {
-                require_attr(tag, "storage", diags);
-                let loop_pv = tag.param("loop").cloned();
-                let volume_pv = tag.param("volume").cloned();
-                let fadetime_pv = tag.param("fadetime").cloned();
-                let r#loop =
-                    loop_pv.map(|pv| parse_typed_attr(pv, name, "loop", span, diags));
-                let volume =
-                    volume_pv.map(|pv| parse_typed_attr(pv, name, "volume", span, diags));
-                let fadetime =
-                    fadetime_pv.map(|pv| parse_typed_attr(pv, name, "fadetime", span, diags));
-                Self::Bgm {
-                    storage: ps("storage"),
-                    r#loop,
-                    volume,
-                    fadetime,
-                }
-            }
-            "stopbgm" => {
-                let fadetime_pv = tag.param("fadetime").cloned();
-                let fadetime =
-                    fadetime_pv.map(|pv| parse_typed_attr(pv, name, "fadetime", span, diags));
-                Self::Stopbgm { fadetime }
-            }
-            // "se" and "playSe" are semantically identical.
-            "se" | "playSe" => {
-                require_attr(tag, "storage", diags);
-                let buf_pv = tag.param("buf").cloned();
-                let volume_pv = tag.param("volume").cloned();
-                let loop_pv = tag.param("loop").cloned();
-                let buf = buf_pv.map(|pv| parse_typed_attr(pv, name, "buf", span, diags));
-                let volume =
-                    volume_pv.map(|pv| parse_typed_attr(pv, name, "volume", span, diags));
-                let r#loop =
-                    loop_pv.map(|pv| parse_typed_attr(pv, name, "loop", span, diags));
-                Self::Se {
-                    storage: ps("storage"),
-                    buf,
-                    volume,
-                    r#loop,
-                }
-            }
-            "stopse" => {
-                let buf_pv = tag.param("buf").cloned();
-                let buf = buf_pv.map(|pv| parse_typed_attr(pv, name, "buf", span, diags));
-                Self::Stopse { buf }
-            }
-            // "vo" and "voice" are semantically identical.
-            "vo" | "voice" => {
-                require_attr(tag, "storage", diags);
-                let buf_pv = tag.param("buf").cloned();
-                let buf = buf_pv.map(|pv| parse_typed_attr(pv, name, "buf", span, diags));
-                Self::Vo {
-                    storage: ps("storage"),
-                    buf,
-                }
-            }
-            "fadebgm" => {
-                let time_pv = tag.param("time").cloned();
-                let volume_pv = tag.param("volume").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                let volume =
-                    volume_pv.map(|pv| parse_typed_attr(pv, name, "volume", span, diags));
-                Self::Fadebgm { time, volume }
-            }
+    // ── Transition ──────────────────────────────────────────────────────────
+    /// Apply a visual transition.
+    Trans("trans") {
+        method: optional<str>,
+        time: optional<u64>,
+        rule: optional<str>,
+    },
+    /// Fade in from a solid color.
+    Fadein("fadein") {
+        time: optional<u64>,
+        color: optional<str>,
+    },
+    /// Fade out to a solid color.
+    Fadeout("fadeout") {
+        time: optional<u64>,
+        color: optional<str>,
+    },
+    /// Move-transition a layer.
+    Movetrans("movetrans") {
+        layer: optional<str>,
+        time: optional<u64>,
+        x: optional<f32>,
+        y: optional<f32>,
+    },
 
-            // ── Transition ────────────────────────────────────────────────
-            "trans" => {
-                let time_pv = tag.param("time").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                Self::Trans {
-                    method: ps("method"),
-                    time,
-                    rule: ps("rule"),
-                }
-            }
-            "fadein" => {
-                let time_pv = tag.param("time").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                Self::Fadein {
-                    time,
-                    color: ps("color"),
-                }
-            }
-            "fadeout" => {
-                let time_pv = tag.param("time").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                Self::Fadeout {
-                    time,
-                    color: ps("color"),
-                }
-            }
-            "movetrans" => {
-                let time_pv = tag.param("time").cloned();
-                let x_pv = tag.param("x").cloned();
-                let y_pv = tag.param("y").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
-                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
-                Self::Movetrans {
-                    layer: ps("layer"),
-                    time,
-                    x,
-                    y,
-                }
-            }
+    // ── Effect ──────────────────────────────────────────────────────────────
+    /// Screen quake effect.
+    Quake("quake") {
+        time: optional<u64>,
+        hmax: optional<f32>,
+        vmax: optional<f32>,
+    },
+    /// Screen shake effect.
+    Shake("shake") {
+        time: optional<u64>,
+        amount: optional<f32>,
+        axis: optional<str>,
+    },
+    /// Screen flash effect.
+    Flash("flash") {
+        time: optional<u64>,
+        color: optional<str>,
+    },
 
-            // ── Effect ────────────────────────────────────────────────────
-            "quake" => {
-                let time_pv = tag.param("time").cloned();
-                let hmax_pv = tag.param("hmax").cloned();
-                let vmax_pv = tag.param("vmax").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                let hmax = hmax_pv.map(|pv| parse_typed_attr(pv, name, "hmax", span, diags));
-                let vmax = vmax_pv.map(|pv| parse_typed_attr(pv, name, "vmax", span, diags));
-                Self::Quake { time, hmax, vmax }
-            }
-            "shake" => {
-                let time_pv = tag.param("time").cloned();
-                let amount_pv = tag.param("amount").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                let amount =
-                    amount_pv.map(|pv| parse_typed_attr(pv, name, "amount", span, diags));
-                Self::Shake {
-                    time,
-                    amount,
-                    axis: ps("axis"),
-                }
-            }
-            "flash" => {
-                let time_pv = tag.param("time").cloned();
-                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
-                Self::Flash {
-                    time,
-                    color: ps("color"),
-                }
-            }
+    // ── Message window ──────────────────────────────────────────────────────
+    /// Control the message window.
+    Msgwnd("msgwnd") {
+        visible: optional<bool>,
+        layer: optional<str>,
+    },
+    /// Set message window geometry.
+    Wndctrl("wndctrl") {
+        x: optional<f32>,
+        y: optional<f32>,
+        width: optional<f32>,
+        height: optional<f32>,
+    },
+    /// Reset font to defaults.
+    Resetfont("resetfont") {},
+    /// Set font properties.
+    Font("font") {
+        face: optional<str>,
+        size: optional<f32>,
+        bold: optional<bool>,
+        italic: optional<bool>,
+    },
+    /// Set font size.
+    Size("size") {
+        value: optional<f32>,
+    },
+    /// Set bold style.
+    Bold("bold") {
+        value: optional<bool>,
+    },
+    /// Set italic style.
+    Italic("italic") {
+        value: optional<bool>,
+    },
+    /// Set ruby (furigana) text.
+    Ruby("ruby") {
+        text: optional<str>,
+    },
+    /// Disable word wrapping.
+    Nowrap("nowrap") {},
+    /// Re-enable word wrapping.
+    Endnowrap("endnowrap") {},
 
-            // ── Message window ────────────────────────────────────────────
-            "msgwnd" => {
-                let visible_pv = tag.param("visible").cloned();
-                let visible =
-                    visible_pv.map(|pv| parse_typed_attr(pv, name, "visible", span, diags));
-                Self::Msgwnd {
-                    visible,
-                    layer: ps("layer"),
-                }
-            }
-            "wndctrl" => {
-                let x_pv = tag.param("x").cloned();
-                let y_pv = tag.param("y").cloned();
-                let width_pv = tag.param("width").cloned();
-                let height_pv = tag.param("height").cloned();
-                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
-                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
-                let width = width_pv.map(|pv| parse_typed_attr(pv, name, "width", span, diags));
-                let height =
-                    height_pv.map(|pv| parse_typed_attr(pv, name, "height", span, diags));
-                Self::Wndctrl { x, y, width, height }
-            }
-            "resetfont" => Self::Resetfont,
-            "font" => {
-                let size_pv = tag.param("size").cloned();
-                let bold_pv = tag.param("bold").cloned();
-                let italic_pv = tag.param("italic").cloned();
-                let size = size_pv.map(|pv| parse_typed_attr(pv, name, "size", span, diags));
-                let bold = bold_pv.map(|pv| parse_typed_attr(pv, name, "bold", span, diags));
-                let italic =
-                    italic_pv.map(|pv| parse_typed_attr(pv, name, "italic", span, diags));
-                Self::Font {
-                    face: ps("face"),
-                    size,
-                    bold,
-                    italic,
-                }
-            }
-            "size" => {
-                let value_pv = tag.param("value").cloned();
-                let value = value_pv.map(|pv| parse_typed_attr(pv, name, "value", span, diags));
-                Self::Size { value }
-            }
-            "bold" => {
-                let value_pv = tag.param("value").cloned();
-                let value = value_pv.map(|pv| parse_typed_attr(pv, name, "value", span, diags));
-                Self::Bold { value }
-            }
-            "italic" => {
-                let value_pv = tag.param("value").cloned();
-                let value = value_pv.map(|pv| parse_typed_attr(pv, name, "value", span, diags));
-                Self::Italic { value }
-            }
-            "ruby" => Self::Ruby { text: ps("text") },
-            "nowrap" => Self::Nowrap,
-            "endnowrap" => Self::Endnowrap,
-
-            // ── Character sprites ─────────────────────────────────────────
-            "chara" => {
-                recommend_any_attr(tag, &["name", "id"], diags);
-                let x_pv = tag.param("x").cloned();
-                let y_pv = tag.param("y").cloned();
-                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
-                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
-                Self::Chara {
-                    name: ps("name"),
-                    id: ps("id"),
-                    storage: ps("storage"),
-                    slot: ps("slot"),
-                    x,
-                    y,
-                }
-            }
-            "chara_hide" => {
-                recommend_any_attr(tag, &["name", "id"], diags);
-                Self::CharaHide {
-                    name: ps("name"),
-                    id: ps("id"),
-                    slot: ps("slot"),
-                }
-            }
-            "chara_free" => {
-                recommend_any_attr(tag, &["name", "id"], diags);
-                Self::CharaFree {
-                    name: ps("name"),
-                    id: ps("id"),
-                    slot: ps("slot"),
-                }
-            }
-            "chara_mod" => {
-                recommend_any_attr(tag, &["name", "id"], diags);
-                Self::CharaMod {
-                    name: ps("name"),
-                    id: ps("id"),
-                    face: ps("face"),
-                    pose: ps("pose"),
-                    storage: ps("storage"),
-                }
-            }
-
-            _ => Self::Extension {
-                name: tag.name.clone(),
-                params: tag.params.clone(),
-            },
-        }
+    // ── Character sprites ───────────────────────────────────────────────────
+    /// Show a character sprite.
+    Chara("chara") {
+        name: recommended_any_of("name", "id")<str>,
+        id: recommended_any_of("name", "id")<str>,
+        storage: optional<str>,
+        slot: optional<str>,
+        x: optional<f32>,
+        y: optional<f32>,
+    },
+    /// Hide a character sprite.
+    CharaHide("chara_hide") {
+        name: recommended_any_of("name", "id")<str>,
+        id: recommended_any_of("name", "id")<str>,
+        slot: optional<str>,
+    },
+    /// Remove a character sprite.
+    CharaFree("chara_free") {
+        name: recommended_any_of("name", "id")<str>,
+        id: recommended_any_of("name", "id")<str>,
+        slot: optional<str>,
+    },
+    /// Modify a character sprite.
+    CharaMod("chara_mod") {
+        name: recommended_any_of("name", "id")<str>,
+        id: recommended_any_of("name", "id")<str>,
+        face: optional<str>,
+        pose: optional<str>,
+        storage: optional<str>,
     }
 
-    /// Return the [`TagName`] corresponding to this variant, or `None` for
-    /// [`KnownTag::Extension`] (which has no canonical tag name).
-    ///
-    /// For [`KnownTag::Se`] this returns [`Some(TagName::Se)`] (not
-    /// [`TagName::PlaySe`]), and for [`KnownTag::Vo`] this returns
-    /// [`Some(TagName::Vo)`] (not [`TagName::Voice`]).  For
-    /// [`KnownTag::WaitForCompletion`] this returns the `which` field wrapped
-    /// in `Some`.
-    pub fn tag_name(&self) -> Option<TagName> {
-        Some(match self {
-            Self::If { .. } => TagName::If,
-            Self::Elsif { .. } => TagName::Elsif,
-            Self::Else => TagName::Else,
-            Self::Endif => TagName::Endif,
-            Self::Ignore { .. } => TagName::Ignore,
-            Self::Endignore => TagName::Endignore,
-            Self::Jump { .. } => TagName::Jump,
-            Self::Call { .. } => TagName::Call,
-            Self::Return => TagName::Return,
-            Self::Link { .. } => TagName::Link,
-            Self::Endlink => TagName::Endlink,
-            Self::Glink { .. } => TagName::Glink,
-            Self::Eval { .. } => TagName::Eval,
-            Self::Emb { .. } => TagName::Emb,
-            Self::Trace { .. } => TagName::Trace,
-            Self::L => TagName::L,
-            Self::P => TagName::P,
-            Self::R => TagName::R,
-            Self::S => TagName::S,
-            Self::Cm => TagName::Cm,
-            Self::Er => TagName::Er,
-            Self::Ch { .. } => TagName::Ch,
-            Self::Hch { .. } => TagName::Hch,
-            Self::Wait { .. } => TagName::Wait,
-            Self::Wc { .. } => TagName::Wc,
-            Self::WaitForCompletion { which, .. } => *which,
-            Self::Ct => TagName::Ct,
-            Self::Timeout { .. } => TagName::Timeout,
-            Self::Waitclick => TagName::Waitclick,
-            Self::Cclick => TagName::Cclick,
-            Self::Ctimeout => TagName::Ctimeout,
-            Self::Cwheel => TagName::Cwheel,
-            Self::Click { .. } => TagName::Click,
-            Self::Wheel { .. } => TagName::Wheel,
-            Self::Nolog => TagName::Nolog,
-            Self::Endnolog => TagName::Endnolog,
-            Self::Nowait => TagName::Nowait,
-            Self::Endnowait => TagName::Endnowait,
-            Self::Resetdelay => TagName::Resetdelay,
-            Self::Delay { .. } => TagName::Delay,
-            Self::Configdelay { .. } => TagName::Configdelay,
-            Self::Resetwait => TagName::Resetwait,
-            Self::Autowc { .. } => TagName::Autowc,
-            Self::Pushlog { .. } => TagName::Pushlog,
-            Self::Input { .. } => TagName::Input,
-            Self::Waittrig { .. } => TagName::Waittrig,
-            Self::Macro { .. } => TagName::Macro,
-            Self::Erasemacro { .. } => TagName::Erasemacro,
-            Self::Endmacro => TagName::Endmacro,
-            Self::Clearvar => TagName::Clearvar,
-            Self::Clearsysvar => TagName::Clearsysvar,
-            Self::Clearstack => TagName::Clearstack,
-            Self::Clickskip { .. } => TagName::Clickskip,
-            Self::CharaPtext { .. } => TagName::CharaPtext,
-            Self::Bg { .. } => TagName::Bg,
-            Self::Image { .. } => TagName::Image,
-            Self::Layopt { .. } => TagName::Layopt,
-            Self::Free { .. } => TagName::Free,
-            Self::Position { .. } => TagName::Position,
-            Self::Bgm { .. } => TagName::Bgm,
-            Self::Stopbgm { .. } => TagName::Stopbgm,
-            Self::Se { .. } => TagName::Se,
-            Self::Stopse { .. } => TagName::Stopse,
-            Self::Vo { .. } => TagName::Vo,
-            Self::Fadebgm { .. } => TagName::Fadebgm,
-            Self::Trans { .. } => TagName::Trans,
-            Self::Fadein { .. } => TagName::Fadein,
-            Self::Fadeout { .. } => TagName::Fadeout,
-            Self::Movetrans { .. } => TagName::Movetrans,
-            Self::Quake { .. } => TagName::Quake,
-            Self::Shake { .. } => TagName::Shake,
-            Self::Flash { .. } => TagName::Flash,
-            Self::Msgwnd { .. } => TagName::Msgwnd,
-            Self::Wndctrl { .. } => TagName::Wndctrl,
-            Self::Resetfont => TagName::Resetfont,
-            Self::Font { .. } => TagName::Font,
-            Self::Size { .. } => TagName::Size,
-            Self::Bold { .. } => TagName::Bold,
-            Self::Italic { .. } => TagName::Italic,
-            Self::Ruby { .. } => TagName::Ruby,
-            Self::Nowrap => TagName::Nowrap,
-            Self::Endnowrap => TagName::Endnowrap,
-            Self::Chara { .. } => TagName::Chara,
-            Self::CharaHide { .. } => TagName::CharaHide,
-            Self::CharaFree { .. } => TagName::CharaFree,
-            Self::CharaMod { .. } => TagName::CharaMod,
-            Self::Extension { .. } => return None,
-        })
+    ;
+
+    // ── Wait-for-completion group ───────────────────────────────────────────
+    @wait_group {
+        Wa("wa"),
+        Wm("wm"),
+        Wt("wt"),
+        Wq("wq"),
+        Wb("wb"),
+        Wf("wf"),
+        Wl("wl"),
+        Ws("ws"),
+        Wv("wv"),
+        Wp("wp"),
     }
 }
 
@@ -1323,8 +723,6 @@ mod tests {
         let tag = tag_with_param("wait", "time", "not_a_number");
         let mut diags = vec![];
         let known = KnownTag::from_tag(&tag, &mut diags);
-        // One warning from recommend_attr (time absent? no, time IS present),
-        // one warning from parse_typed_attr (bad value).
         assert_eq!(diags.len(), 1, "expected one bad-value warning: {diags:?}");
         assert_eq!(diags[0].severity, Severity::Warning);
         assert!(matches!(
@@ -1836,5 +1234,78 @@ mod tests {
                 "[{name}] should produce no diagnostics when used without params"
             );
         }
+    }
+
+    // ── Metadata accessors ────────────────────────────────────────────────────
+
+    #[test]
+    fn tag_name_all_includes_aliases() {
+        let all: Vec<_> = TagName::all().collect();
+        assert!(all.contains(&TagName::Se));
+        assert!(all.contains(&TagName::PlaySe));
+        assert!(all.contains(&TagName::Vo));
+        assert!(all.contains(&TagName::Voice));
+        assert!(all.contains(&TagName::Wa));
+    }
+
+    #[test]
+    fn tag_name_canonical_maps_aliases() {
+        assert_eq!(TagName::PlaySe.canonical(), TagName::Se);
+        assert_eq!(TagName::Voice.canonical(), TagName::Vo);
+        assert_eq!(TagName::Bg.canonical(), TagName::Bg);
+    }
+
+    #[test]
+    fn tag_name_param_names_for_bg() {
+        assert_eq!(TagName::Bg.param_names(), &["storage", "time", "method"]);
+    }
+
+    #[test]
+    fn tag_name_param_names_for_wait_group() {
+        assert_eq!(TagName::Wa.param_names(), &["canskip", "buf"]);
+    }
+
+    #[test]
+    fn tag_name_doc_summary_nonempty() {
+        assert!(!TagName::Bg.doc_summary().is_empty());
+        assert!(!TagName::Jump.doc_summary().is_empty());
+    }
+
+    #[test]
+    fn tag_name_from_name_round_trips() {
+        for name in &[
+            "if", "elsif", "else", "endif", "ignore", "endignore",
+            "jump", "call", "return", "link", "endlink", "glink",
+            "eval", "emb", "trace", "l", "p", "r", "s", "cm", "er",
+            "ch", "hch", "wait", "wc", "wa", "wm", "wt", "wq", "wb",
+            "wf", "wl", "ws", "wv", "wp", "ct", "timeout", "waitclick",
+            "cclick", "ctimeout", "cwheel", "click", "wheel",
+            "nolog", "endnolog", "nowait", "endnowait", "resetdelay",
+            "delay", "configdelay", "resetwait", "autowc", "pushlog",
+            "input", "waittrig", "macro", "erasemacro", "endmacro",
+            "clearvar", "clearsysvar", "clearstack", "clickskip",
+            "chara_ptext", "bg", "image", "layopt", "free", "position",
+            "bgm", "stopbgm", "se", "playSe", "stopse", "vo", "voice",
+            "fadebgm", "trans", "fadein", "fadeout", "movetrans",
+            "quake", "shake", "flash", "msgwnd", "wndctrl", "resetfont",
+            "font", "size", "bold", "italic", "ruby", "nowrap",
+            "endnowrap", "chara", "chara_hide", "chara_free", "chara_mod",
+        ] {
+            let tag_name = TagName::from_name(name)
+                .unwrap_or_else(|| panic!("TagName::from_name({name:?}) returned None"));
+            assert_eq!(
+                tag_name.as_str(),
+                *name,
+                "TagName::as_str() did not round-trip for {name:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn tag_name_unknown_returns_none() {
+        assert!(TagName::from_name("my_custom_tag").is_none());
+        assert!(TagName::from_name("").is_none());
+        assert!(TagName::from_name("JUMP").is_none());
+        assert!(TagName::from_name("playse").is_none());
     }
 }
