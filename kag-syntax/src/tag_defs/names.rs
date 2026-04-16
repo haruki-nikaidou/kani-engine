@@ -379,3 +379,129 @@ impl fmt::Display for TagName {
         f.write_str(self.as_str())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── TagName round-trip ────────────────────────────────────────────────────
+
+    #[test]
+    fn tag_name_from_name_round_trips() {
+        for name in &[
+            "if",
+            "elsif",
+            "else",
+            "endif",
+            "ignore",
+            "endignore",
+            "jump",
+            "call",
+            "return",
+            "link",
+            "endlink",
+            "glink",
+            "eval",
+            "emb",
+            "trace",
+            "l",
+            "p",
+            "r",
+            "s",
+            "cm",
+            "er",
+            "ch",
+            "hch",
+            "wait",
+            "wc",
+            "wa",
+            "wm",
+            "wt",
+            "wq",
+            "wb",
+            "wf",
+            "wl",
+            "ws",
+            "wv",
+            "wp",
+            "ct",
+            "timeout",
+            "waitclick",
+            "cclick",
+            "ctimeout",
+            "cwheel",
+            "click",
+            "wheel",
+            "nolog",
+            "endnolog",
+            "nowait",
+            "endnowait",
+            "resetdelay",
+            "delay",
+            "configdelay",
+            "resetwait",
+            "autowc",
+            "pushlog",
+            "input",
+            "waittrig",
+            "macro",
+            "erasemacro",
+            "endmacro",
+            "clearvar",
+            "clearsysvar",
+            "clearstack",
+            "clickskip",
+            "chara_ptext",
+            "bg",
+            "image",
+            "layopt",
+            "free",
+            "position",
+            "bgm",
+            "stopbgm",
+            "se",
+            "playSe",
+            "stopse",
+            "vo",
+            "voice",
+            "fadebgm",
+            "trans",
+            "fadein",
+            "fadeout",
+            "movetrans",
+            "quake",
+            "shake",
+            "flash",
+            "msgwnd",
+            "wndctrl",
+            "resetfont",
+            "font",
+            "size",
+            "bold",
+            "italic",
+            "ruby",
+            "nowrap",
+            "endnowrap",
+            "chara",
+            "chara_hide",
+            "chara_free",
+            "chara_mod",
+        ] {
+            let tag_name = TagName::from_name(name)
+                .unwrap_or_else(|| panic!("TagName::from_name({name:?}) returned None"));
+            assert_eq!(
+                tag_name.as_str(),
+                *name,
+                "TagName::as_str() did not round-trip for {name:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn tag_name_unknown_returns_none() {
+        assert!(TagName::from_name("my_custom_tag").is_none());
+        assert!(TagName::from_name("").is_none());
+        assert!(TagName::from_name("JUMP").is_none()); // case-sensitive
+        assert!(TagName::from_name("playse").is_none()); // case-sensitive alias
+    }
+}

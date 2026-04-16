@@ -211,3 +211,494 @@ fn recommend_any_of(tag: &Tag<'_>, keys: &[&str], diags: &mut Vec<ParseDiagnosti
         ));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use super::*;
+    use crate::ast::{Param, ParamValue, Tag};
+    use crate::error::Severity;
+
+    fn span() -> miette::SourceSpan {
+        (0usize, 0usize).into()
+    }
+
+    fn tag_no_params(name: &'static str) -> Tag<'static> {
+        Tag {
+            name: Cow::Borrowed(name),
+            params: vec![],
+            span: span(),
+        }
+    }
+
+    fn tag_with_param(name: &'static str, key: &'static str, val: &'static str) -> Tag<'static> {
+        Tag {
+            name: Cow::Borrowed(name),
+            params: vec![Param::literal(key, val, span())],
+            span: span(),
+        }
+    }
+
+    fn tag_with_entity(name: &'static str, key: &'static str) -> Tag<'static> {
+        Tag {
+            name: Cow::Borrowed(name),
+            params: vec![Param::named(
+                key,
+                ParamValue::Entity(Cow::Borrowed("f.path")),
+                span(),
+            )],
+            span: span(),
+        }
+    }
+
+    fn tag_with_macro_param(name: &'static str, key: &'static str) -> Tag<'static> {
+        Tag {
+            name: Cow::Borrowed(name),
+            params: vec![Param::named(
+                key,
+                ParamValue::MacroParam {
+                    key: Cow::Borrowed(key),
+                    default: None,
+                },
+                span(),
+            )],
+            span: span(),
+        }
+    }
+
+    // ── Required (error) ──────────────────────────────────────────────────────
+
+    #[test]
+    fn if_without_exp_is_error() {
+        let diags = validate_tag(&tag_no_params("if"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert!(diags[0].message.contains("exp="));
+    }
+
+    #[test]
+    fn if_with_exp_is_clean() {
+        let diags = validate_tag(&tag_with_param("if", "exp", "f.flag == 1"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn elsif_without_exp_is_error() {
+        let diags = validate_tag(&tag_no_params("elsif"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn ignore_without_exp_is_error() {
+        let diags = validate_tag(&tag_no_params("ignore"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn bg_without_storage_is_error() {
+        let diags = validate_tag(&tag_no_params("bg"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert!(diags[0].message.contains("storage="));
+    }
+
+    #[test]
+    fn bg_with_storage_is_clean() {
+        let diags = validate_tag(&tag_with_param("bg", "storage", "bg001.jpg"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn image_without_storage_is_error() {
+        let diags = validate_tag(&tag_no_params("image"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn layopt_without_layer_is_error() {
+        let diags = validate_tag(&tag_no_params("layopt"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn free_without_layer_is_error() {
+        let diags = validate_tag(&tag_no_params("free"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn position_without_layer_is_error() {
+        let diags = validate_tag(&tag_no_params("position"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn bgm_without_storage_is_error() {
+        let diags = validate_tag(&tag_no_params("bgm"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn se_without_storage_is_error() {
+        let diags = validate_tag(&tag_no_params("se"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn play_se_without_storage_is_error() {
+        let diags = validate_tag(&tag_no_params("playSe"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn vo_without_storage_is_error() {
+        let diags = validate_tag(&tag_no_params("vo"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn voice_without_storage_is_error() {
+        let diags = validate_tag(&tag_no_params("voice"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    // ── Recommended (warning) ─────────────────────────────────────────────────
+
+    #[test]
+    fn eval_without_exp_is_warning() {
+        let diags = validate_tag(&tag_no_params("eval"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn eval_with_exp_is_clean() {
+        let diags = validate_tag(&tag_with_param("eval", "exp", "f.x = 1"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn emb_without_exp_is_warning() {
+        let diags = validate_tag(&tag_no_params("emb"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn trace_without_exp_is_warning() {
+        let diags = validate_tag(&tag_no_params("trace"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn wait_without_time_is_warning() {
+        let diags = validate_tag(&tag_no_params("wait"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn wait_with_time_is_clean() {
+        let diags = validate_tag(&tag_with_param("wait", "time", "500"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn wc_without_time_is_warning() {
+        let diags = validate_tag(&tag_no_params("wc"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn timeout_without_time_is_warning() {
+        let diags = validate_tag(&tag_no_params("timeout"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn ch_without_text_is_warning() {
+        let diags = validate_tag(&tag_no_params("ch"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn hch_without_text_is_warning() {
+        let diags = validate_tag(&tag_no_params("hch"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn erasemacro_without_name_is_warning() {
+        let diags = validate_tag(&tag_no_params("erasemacro"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn delay_without_speed_is_warning() {
+        let diags = validate_tag(&tag_no_params("delay"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn configdelay_without_speed_is_warning() {
+        let diags = validate_tag(&tag_no_params("configdelay"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn pushlog_without_text_is_warning() {
+        let diags = validate_tag(&tag_no_params("pushlog"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn input_without_name_is_warning() {
+        let diags = validate_tag(&tag_no_params("input"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn waittrig_without_name_is_warning() {
+        let diags = validate_tag(&tag_no_params("waittrig"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_ptext_without_name_is_warning() {
+        let diags = validate_tag(&tag_no_params("chara_ptext"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    // ── Any-of (warning) ──────────────────────────────────────────────────────
+
+    #[test]
+    fn jump_without_storage_or_target_is_warning() {
+        let diags = validate_tag(&tag_no_params("jump"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+        assert!(diags[0].message.contains("storage="));
+        assert!(diags[0].message.contains("target="));
+    }
+
+    #[test]
+    fn jump_with_only_target_is_clean() {
+        let diags = validate_tag(&tag_with_param("jump", "target", "*start"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn jump_with_only_storage_is_clean() {
+        let diags = validate_tag(&tag_with_param("jump", "storage", "scene01.ks"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn call_without_destination_is_warning() {
+        let diags = validate_tag(&tag_no_params("call"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn link_without_destination_is_warning() {
+        let diags = validate_tag(&tag_no_params("link"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn link_with_target_is_clean() {
+        let diags = validate_tag(&tag_with_param("link", "target", "*choice_a"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn glink_without_destination_is_warning() {
+        let diags = validate_tag(&tag_no_params("glink"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn click_without_any_handler_is_warning() {
+        let diags = validate_tag(&tag_no_params("click"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn click_with_exp_is_clean() {
+        let diags = validate_tag(&tag_with_param("click", "exp", "f.handler()"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn wheel_without_any_handler_is_warning() {
+        let diags = validate_tag(&tag_no_params("wheel"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_without_id_or_name_is_warning() {
+        let diags = validate_tag(&tag_no_params("chara"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_with_name_is_clean() {
+        let diags = validate_tag(&tag_with_param("chara", "name", "alice"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn chara_with_id_is_clean() {
+        let diags = validate_tag(&tag_with_param("chara", "id", "alice"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn chara_hide_without_id_or_name_is_warning() {
+        let diags = validate_tag(&tag_no_params("chara_hide"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_free_without_id_or_name_is_warning() {
+        let diags = validate_tag(&tag_no_params("chara_free"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_mod_without_id_or_name_is_warning() {
+        let diags = validate_tag(&tag_no_params("chara_mod"));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    // ── Entity / macro-param values count as present ──────────────────────────
+
+    #[test]
+    fn bg_with_entity_storage_is_clean() {
+        let diags = validate_tag(&tag_with_entity("bg", "storage"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn if_with_macro_param_exp_is_clean() {
+        let diags = validate_tag(&tag_with_macro_param("if", "exp"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn bgm_with_entity_storage_is_clean() {
+        let diags = validate_tag(&tag_with_entity("bgm", "storage"));
+        assert!(diags.is_empty());
+    }
+
+    // ── Unknown tags produce no diagnostics ───────────────────────────────────
+
+    #[test]
+    fn unknown_tag_is_clean() {
+        let diags = validate_tag(&tag_no_params("my_custom_game_tag"));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn no_params_tags_are_clean() {
+        // Tags that have no required params and are valid with no attributes.
+        for name in &[
+            "l",
+            "p",
+            "r",
+            "s",
+            "cm",
+            "return",
+            "else",
+            "endif",
+            "endignore",
+            "endlink",
+            "endmacro",
+            "nowait",
+            "endnowait",
+            "resetdelay",
+            "nolog",
+            "endnolog",
+            "resetwait",
+            "waitclick",
+            "cclick",
+            "ctimeout",
+            "cwheel",
+            "wa",
+            "wm",
+            "wt",
+            "wq",
+            "wb",
+            "wf",
+            "wl",
+            "ws",
+            "wv",
+            "wp",
+            "ct",
+            "er",
+            "clearvar",
+            "clearsysvar",
+            "clearstack",
+            "stopbgm",
+            "stopse",
+            "trans",
+            "fadein",
+            "fadeout",
+            "movetrans",
+            "quake",
+            "shake",
+            "flash",
+            "msgwnd",
+            "wndctrl",
+            "resetfont",
+            "font",
+            "size",
+            "bold",
+            "italic",
+            "ruby",
+            "nowrap",
+            "endnowrap",
+            "autowc",
+            "clickskip",
+        ] {
+            let diags = validate_tag(&tag_no_params(name));
+            assert!(
+                diags.is_empty(),
+                "[{name}] should produce no diagnostics when used without params"
+            );
+        }
+    }
+}
+
