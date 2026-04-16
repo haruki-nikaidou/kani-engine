@@ -21,12 +21,9 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        toolchain = fenix.packages.${system}.fromToolchainFile {
-          file = ./rust-toolchain.toml;
-          # When rust-toolchain.toml changes, set this to pkgs.lib.fakeSha256,
-          # run `nix develop` once, then copy the "got:" hash from the error here.
-          sha256 = "sha256-zC8E38iDVJ1oPIzCqTk/Ujo9+9kx9dXq7wAwPMpkpg0=";
-        };
+        toolchain = fenix.packages.${system}.stable.withComponents [
+         "cargo" "rustc" "rust-src" "rustfmt" "clippy" "rust-analyzer"
+        ];
       in
       {
         devShells.default = pkgs.mkShell {
