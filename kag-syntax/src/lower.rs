@@ -12,7 +12,7 @@ use miette::SourceSpan;
 use crate::ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 use crate::cst::{self, Item};
 use crate::error::SyntaxWarning;
-use crate::tag_defs::validate;
+use crate::tag_defs::KnownTag;
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 pub fn lower_root(root: cst::Root, source_name: &str) -> (Script<'static>, Vec<SyntaxWarning>) {
@@ -249,9 +249,7 @@ impl LowerCtx {
     /// lowering context's error list so callers receive them alongside the
     /// (possibly partial) [`Script`].
     fn handle_tag(&mut self, tag: Tag<'static>) {
-        for diag in validate::validate_tag(&tag) {
-            self.errors.push(diag);
-        }
+        KnownTag::from_tag(&tag, &mut self.errors);
         self.emit(Op::Tag(tag));
     }
 }

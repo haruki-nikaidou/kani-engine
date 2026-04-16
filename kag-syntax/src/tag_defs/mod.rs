@@ -1,19 +1,22 @@
-//! Compile-time validation rules for all known KAG tags, plus canonical type
-//! definitions for tag names and their parameters.
+//! Type definitions for KAG tag names and typed attributes.
 //!
-//! Every tag handled by either the interpreter (`kag-interpreter`) or the
-//! runtime bridge (`kani-runtime`) is listed here.  Two complementary types
-//! are provided:
+//! Two complementary types are provided:
 //!
 //! * [`TagName`] — a lightweight `Copy` enum covering every distinct KAG tag
 //!   name string.  Use it for fast dispatch without heap allocation.
-//! * [`KnownTag`] — a richer `'src`-lifetime enum whose variants carry the
-//!   parsed [`ParamValue`] for each attribute of the tag.  Construct one with
-//!   [`KnownTag::from_tag`].
+//! * [`KnownTag`] — a richer `'src`-lifetime enum whose variants carry typed,
+//!   validated attributes.  Construct one with [`KnownTag::from_tag`], which
+//!   simultaneously validates the tag and emits any diagnostics.
 //!
-//! The lowering pass calls [`validate::validate_tag`] for every [`Tag`] it encounters
-//! and collects the resulting [`ParseDiagnostic`]s alongside the normal parse
-//! errors.
+//! # Attribute types
+//!
+//! | KAG attribute kind | Rust field type |
+//! |--------------------|-----------------|
+//! | string / path / identifier | `Option<MaybeResolved<'src, AttributeString<'src>>>` |
+//! | integer (`time=`, `fadetime=`) | `Option<MaybeResolved<'src, u64>>` |
+//! | buffer slot (`buf=`) | `Option<MaybeResolved<'src, u32>>` |
+//! | float (`x=`, `volume=`, `opacity=`) | `Option<MaybeResolved<'src, f32>>` |
+//! | boolean (`visible=`, `loop=`, `canskip=`) | `Option<MaybeResolved<'src, bool>>` |
 //!
 //! # Severity policy
 //!
@@ -24,93 +27,109 @@
 //!
 //! # Macro-body safety
 //!
-//! Parameters that carry a [`ParamValue::MacroParam`] or [`ParamValue::Entity`]
-//! value are counted as *present* by this validator, so a tag like
-//! `[if exp=%cond]` or `[bg storage=&f.path]` will never trigger a false
-//! positive.  Only a completely absent key triggers a diagnostic.
+//! Attributes carrying a [`ParamValue::Entity`] or [`ParamValue::MacroParam`]
+//! value are represented as [`MaybeResolved::Dynamic`] and never trigger a
+//! missing-attribute diagnostic — only a completely absent key does.
 
 pub mod names;
-pub mod validate;
 
-use crate::ast::{ParamValue, Tag};
+use std::borrow::Cow;
+use std::str::FromStr;
+
+use miette::SourceSpan;
+
+use crate::ast::{Param, ParamValue, Tag};
+use crate::error::SyntaxWarning;
 pub use crate::tag_defs::names::TagName;
+
+// ─── AttributeString ─────────────────────────────────────────────────────────
+
+/// A string-typed tag attribute value.
+///
+/// Distinguishes plain string attributes (like `storage=`, `target=`, `exp=`)
+/// from numeric or boolean ones.  The inner [`Cow`] preserves the source
+/// lifetime when the text is borrowed, or holds an owned copy otherwise.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AttributeString<'src>(pub Cow<'src, str>);
+
+// ─── MaybeResolved ───────────────────────────────────────────────────────────
+
+/// An attribute value that is either statically known or requires runtime
+/// resolution.
+///
+/// * `Literal(T)` — the source contained a plain string and it was parsed
+///   successfully into `T`.
+/// * `Dynamic(ParamValue)` — the source contained an `&expr` entity or a
+///   `%key` macro parameter that can only be resolved at runtime.  The raw
+///   [`ParamValue`] is preserved so the interpreter can resolve it later.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MaybeResolved<'src, T> {
+    Literal(T),
+    Dynamic(ParamValue<'src>),
+}
 
 // ─── KnownTag ─────────────────────────────────────────────────────────────────
 
-/// A KAG tag with its source-level attributes extracted as named fields.
+/// A KAG tag with typed, validated attributes extracted as named fields.
 ///
-/// Construct with [`KnownTag::from_tag`], which returns `None` for any tag
-/// name not recognised by the engine (unknown tags pass through as generic
-/// host events and produce no diagnostics).
+/// Construct with [`KnownTag::from_tag`], which both parses attributes into
+/// their typed forms and emits diagnostics for any missing required or
+/// recommended attributes.
 ///
-/// The aliases `"playSe"` and `"voice"` are both decoded into the canonical
+/// Unknown tag names produce a [`KnownTag::Extension`] variant rather than an
+/// error.  The aliases `"playSe"` and `"voice"` are decoded into the canonical
 /// variants [`KnownTag::Se`] and [`KnownTag::Vo`] respectively.  If you need
 /// to distinguish the original tag name string, read it from [`Tag::name`]
 /// before calling `from_tag`.
-///
-/// # Attribute fields
-///
-/// All attribute fields use `Option<ParamValue<'src>>`:
-///
-/// | Value | Meaning |
-/// |-------|---------|
-/// | `None` | The attribute was absent from the source. |
-/// | `Some(ParamValue::Literal(…))` | A plain string or bare-word value. |
-/// | `Some(ParamValue::Entity(…))` | An `&expr` runtime expression. |
-/// | `Some(ParamValue::MacroParam { … })` | A `%key` macro substitution. |
-///
-/// Both `Entity` and `MacroParam` variants count as *present* for validation
-/// purposes, so `[bg storage=&f.path]` never triggers a missing-`storage=`
-/// diagnostic.
 #[derive(Debug, Clone, PartialEq)]
 pub enum KnownTag<'src> {
     // ── Control flow ──────────────────────────────────────────────────────
     If {
-        exp: Option<ParamValue<'src>>,
+        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Elsif {
-        exp: Option<ParamValue<'src>>,
+        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Else,
     Endif,
     Ignore {
-        exp: Option<ParamValue<'src>>,
+        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Endignore,
 
     // ── Navigation ────────────────────────────────────────────────────────
     Jump {
-        storage: Option<ParamValue<'src>>,
-        target: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Call {
-        storage: Option<ParamValue<'src>>,
-        target: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Return,
 
     // ── Choice links ──────────────────────────────────────────────────────
     Link {
-        storage: Option<ParamValue<'src>>,
-        target: Option<ParamValue<'src>>,
-        text: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Endlink,
     Glink {
-        storage: Option<ParamValue<'src>>,
-        target: Option<ParamValue<'src>>,
-        text: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
 
     // ── Scripting / expressions ───────────────────────────────────────────
     Eval {
-        exp: Option<ParamValue<'src>>,
+        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Emb {
-        exp: Option<ParamValue<'src>>,
+        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Trace {
-        exp: Option<ParamValue<'src>>,
+        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
 
     // ── Display control ───────────────────────────────────────────────────
@@ -121,19 +140,19 @@ pub enum KnownTag<'src> {
     Cm,
     Er,
     Ch {
-        text: Option<ParamValue<'src>>,
+        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Hch {
-        text: Option<ParamValue<'src>>,
+        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
 
     // ── Timed waits ───────────────────────────────────────────────────────
     Wait {
-        time: Option<ParamValue<'src>>,
-        canskip: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        canskip: Option<MaybeResolved<'src, bool>>,
     },
     Wc {
-        time: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
     },
 
     // ── Async-completion waits (`wa`/`wm`/`wt`/`wq`/`wb`/`wf`/`wl`/`ws`/`wv`/`wp`) ──
@@ -145,31 +164,31 @@ pub enum KnownTag<'src> {
     /// buffer slot on waits that support it (e.g. `[ws]`, `[wv]`).
     WaitForCompletion {
         which: TagName,
-        canskip: Option<ParamValue<'src>>,
-        buf: Option<ParamValue<'src>>,
+        canskip: Option<MaybeResolved<'src, bool>>,
+        buf: Option<MaybeResolved<'src, u32>>,
     },
     /// Cancel all in-progress asynchronous operations (`[ct]`).
     Ct,
 
     // ── Input / event handlers ────────────────────────────────────────────
     Timeout {
-        time: Option<ParamValue<'src>>,
-        storage: Option<ParamValue<'src>>,
-        target: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Waitclick,
     Cclick,
     Ctimeout,
     Cwheel,
     Click {
-        storage: Option<ParamValue<'src>>,
-        target: Option<ParamValue<'src>>,
-        exp: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Wheel {
-        storage: Option<ParamValue<'src>>,
-        target: Option<ParamValue<'src>>,
-        exp: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        target: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        exp: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
 
     // ── Log control ───────────────────────────────────────────────────────
@@ -181,38 +200,38 @@ pub enum KnownTag<'src> {
     Endnowait,
     Resetdelay,
     Delay {
-        speed: Option<ParamValue<'src>>,
+        speed: Option<MaybeResolved<'src, u64>>,
     },
     Configdelay {
-        speed: Option<ParamValue<'src>>,
+        speed: Option<MaybeResolved<'src, u64>>,
     },
     Resetwait,
     Autowc {
-        time: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
     },
 
     // ── Backlog ───────────────────────────────────────────────────────────
     Pushlog {
-        text: Option<ParamValue<'src>>,
-        join: Option<ParamValue<'src>>,
+        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        join: Option<MaybeResolved<'src, bool>>,
     },
 
     // ── Player input / triggers ───────────────────────────────────────────
     Input {
-        name: Option<ParamValue<'src>>,
-        prompt: Option<ParamValue<'src>>,
-        title: Option<ParamValue<'src>>,
+        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        prompt: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        title: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Waittrig {
-        name: Option<ParamValue<'src>>,
+        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
 
     // ── Macro management ──────────────────────────────────────────────────
     Macro {
-        name: Option<ParamValue<'src>>,
+        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Erasemacro {
-        name: Option<ParamValue<'src>>,
+        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Endmacro,
 
@@ -223,217 +242,340 @@ pub enum KnownTag<'src> {
 
     // ── Misc ──────────────────────────────────────────────────────────────
     Clickskip {
-        enabled: Option<ParamValue<'src>>,
+        enabled: Option<MaybeResolved<'src, bool>>,
     },
     CharaPtext {
-        name: Option<ParamValue<'src>>,
+        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
 
     // ── Image / layer (runtime passthrough) ───────────────────────────────
     Bg {
-        storage: Option<ParamValue<'src>>,
-        time: Option<ParamValue<'src>>,
-        method: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        method: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Image {
-        storage: Option<ParamValue<'src>>,
-        layer: Option<ParamValue<'src>>,
-        x: Option<ParamValue<'src>>,
-        y: Option<ParamValue<'src>>,
-        visible: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        x: Option<MaybeResolved<'src, f32>>,
+        y: Option<MaybeResolved<'src, f32>>,
+        visible: Option<MaybeResolved<'src, bool>>,
     },
     Layopt {
-        layer: Option<ParamValue<'src>>,
-        visible: Option<ParamValue<'src>>,
-        opacity: Option<ParamValue<'src>>,
+        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        visible: Option<MaybeResolved<'src, bool>>,
+        opacity: Option<MaybeResolved<'src, f32>>,
     },
     Free {
-        layer: Option<ParamValue<'src>>,
+        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Position {
-        layer: Option<ParamValue<'src>>,
-        x: Option<ParamValue<'src>>,
-        y: Option<ParamValue<'src>>,
+        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        x: Option<MaybeResolved<'src, f32>>,
+        y: Option<MaybeResolved<'src, f32>>,
     },
 
     // ── Audio (runtime passthrough) ───────────────────────────────────────
     Bgm {
-        storage: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
         /// KAG parameter key `loop`.
-        r#loop: Option<ParamValue<'src>>,
-        volume: Option<ParamValue<'src>>,
-        fadetime: Option<ParamValue<'src>>,
+        r#loop: Option<MaybeResolved<'src, bool>>,
+        volume: Option<MaybeResolved<'src, f32>>,
+        fadetime: Option<MaybeResolved<'src, u64>>,
     },
     Stopbgm {
-        fadetime: Option<ParamValue<'src>>,
+        fadetime: Option<MaybeResolved<'src, u64>>,
     },
     /// Covers both `[se]` and `[playSe]`.
     Se {
-        storage: Option<ParamValue<'src>>,
-        buf: Option<ParamValue<'src>>,
-        volume: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        buf: Option<MaybeResolved<'src, u32>>,
+        volume: Option<MaybeResolved<'src, f32>>,
         /// KAG parameter key `loop`.
-        r#loop: Option<ParamValue<'src>>,
+        r#loop: Option<MaybeResolved<'src, bool>>,
     },
     Stopse {
-        buf: Option<ParamValue<'src>>,
+        buf: Option<MaybeResolved<'src, u32>>,
     },
     /// Covers both `[vo]` and `[voice]`.
     Vo {
-        storage: Option<ParamValue<'src>>,
-        buf: Option<ParamValue<'src>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        buf: Option<MaybeResolved<'src, u32>>,
     },
     Fadebgm {
-        time: Option<ParamValue<'src>>,
-        volume: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        volume: Option<MaybeResolved<'src, f32>>,
     },
 
     // ── Transition (runtime passthrough) ──────────────────────────────────
     Trans {
-        method: Option<ParamValue<'src>>,
-        time: Option<ParamValue<'src>>,
-        rule: Option<ParamValue<'src>>,
+        method: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        rule: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Fadein {
-        time: Option<ParamValue<'src>>,
-        color: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        color: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Fadeout {
-        time: Option<ParamValue<'src>>,
-        color: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        color: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Movetrans {
-        layer: Option<ParamValue<'src>>,
-        time: Option<ParamValue<'src>>,
-        x: Option<ParamValue<'src>>,
-        y: Option<ParamValue<'src>>,
+        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        x: Option<MaybeResolved<'src, f32>>,
+        y: Option<MaybeResolved<'src, f32>>,
     },
 
     // ── Effect (runtime passthrough) ──────────────────────────────────────
     Quake {
-        time: Option<ParamValue<'src>>,
-        hmax: Option<ParamValue<'src>>,
-        vmax: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        hmax: Option<MaybeResolved<'src, f32>>,
+        vmax: Option<MaybeResolved<'src, f32>>,
     },
     Shake {
-        time: Option<ParamValue<'src>>,
-        amount: Option<ParamValue<'src>>,
-        axis: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        amount: Option<MaybeResolved<'src, f32>>,
+        axis: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Flash {
-        time: Option<ParamValue<'src>>,
-        color: Option<ParamValue<'src>>,
+        time: Option<MaybeResolved<'src, u64>>,
+        color: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
 
     // ── Message window (runtime passthrough) ──────────────────────────────
     Msgwnd {
-        visible: Option<ParamValue<'src>>,
-        layer: Option<ParamValue<'src>>,
+        visible: Option<MaybeResolved<'src, bool>>,
+        layer: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Wndctrl {
-        x: Option<ParamValue<'src>>,
-        y: Option<ParamValue<'src>>,
-        width: Option<ParamValue<'src>>,
-        height: Option<ParamValue<'src>>,
+        x: Option<MaybeResolved<'src, f32>>,
+        y: Option<MaybeResolved<'src, f32>>,
+        width: Option<MaybeResolved<'src, f32>>,
+        height: Option<MaybeResolved<'src, f32>>,
     },
     Resetfont,
     Font {
-        face: Option<ParamValue<'src>>,
-        size: Option<ParamValue<'src>>,
-        bold: Option<ParamValue<'src>>,
-        italic: Option<ParamValue<'src>>,
+        face: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        size: Option<MaybeResolved<'src, f32>>,
+        bold: Option<MaybeResolved<'src, bool>>,
+        italic: Option<MaybeResolved<'src, bool>>,
     },
     Size {
-        value: Option<ParamValue<'src>>,
+        value: Option<MaybeResolved<'src, f32>>,
     },
     Bold {
-        value: Option<ParamValue<'src>>,
+        value: Option<MaybeResolved<'src, bool>>,
     },
     Italic {
-        value: Option<ParamValue<'src>>,
+        value: Option<MaybeResolved<'src, bool>>,
     },
     Ruby {
-        text: Option<ParamValue<'src>>,
+        text: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     Nowrap,
     Endnowrap,
 
     // ── Character sprites (runtime passthrough) ───────────────────────────
     Chara {
-        name: Option<ParamValue<'src>>,
-        id: Option<ParamValue<'src>>,
-        storage: Option<ParamValue<'src>>,
-        slot: Option<ParamValue<'src>>,
-        x: Option<ParamValue<'src>>,
-        y: Option<ParamValue<'src>>,
+        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        id: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        slot: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        x: Option<MaybeResolved<'src, f32>>,
+        y: Option<MaybeResolved<'src, f32>>,
     },
     CharaHide {
-        name: Option<ParamValue<'src>>,
-        id: Option<ParamValue<'src>>,
-        slot: Option<ParamValue<'src>>,
+        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        id: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        slot: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     CharaFree {
-        name: Option<ParamValue<'src>>,
-        id: Option<ParamValue<'src>>,
-        slot: Option<ParamValue<'src>>,
+        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        id: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        slot: Option<MaybeResolved<'src, AttributeString<'src>>>,
     },
     CharaMod {
-        name: Option<ParamValue<'src>>,
-        id: Option<ParamValue<'src>>,
-        face: Option<ParamValue<'src>>,
-        pose: Option<ParamValue<'src>>,
-        storage: Option<ParamValue<'src>>,
+        name: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        id: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        face: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        pose: Option<MaybeResolved<'src, AttributeString<'src>>>,
+        storage: Option<MaybeResolved<'src, AttributeString<'src>>>,
+    },
+
+    // ── Extensions ────────────────────────────────────────────────────────
+    /// A tag not recognised by the engine.
+    ///
+    /// Game-specific or plugin code can match on this variant to handle
+    /// custom tags.  The raw `name` and `params` are preserved so the tag can
+    /// be forwarded to the host without loss of information.
+    Extension {
+        name: Cow<'src, str>,
+        params: Vec<Param<'src>>,
     },
 }
 
+// ─── Private parsing helpers ──────────────────────────────────────────────────
+
+/// Wrap a [`ParamValue`] as a string attribute.  Literals become
+/// [`MaybeResolved::Literal`]; everything else becomes [`MaybeResolved::Dynamic`].
+fn parse_str_attr<'src>(pv: ParamValue<'src>) -> MaybeResolved<'src, AttributeString<'src>> {
+    match pv {
+        ParamValue::Literal(s) => MaybeResolved::Literal(AttributeString(s)),
+        other => MaybeResolved::Dynamic(other),
+    }
+}
+
+/// Parse a [`ParamValue`] into a typed `T`.
+///
+/// * Literals are parsed with [`FromStr`]; on failure a warning is pushed and
+///   the raw value is returned as [`MaybeResolved::Dynamic`].
+/// * Non-literal values (entities, macro params) pass through as
+///   [`MaybeResolved::Dynamic`] without touching `diags`.
+fn parse_typed_attr<'src, T: FromStr>(
+    pv: ParamValue<'src>,
+    tag_name: &str,
+    attr: &str,
+    span: SourceSpan,
+    diags: &mut Vec<SyntaxWarning>,
+) -> MaybeResolved<'src, T> {
+    if let ParamValue::Literal(s) = &pv {
+        if let Ok(v) = s.parse::<T>() {
+            return MaybeResolved::Literal(v);
+        }
+        diags.push(SyntaxWarning::warning(
+            format!("[{tag_name}] attribute `{attr}=` has an unrecognised value"),
+            span,
+        ));
+    }
+    MaybeResolved::Dynamic(pv)
+}
+
+/// Emit an **error** diagnostic when `key` is absent from `tag`.
+fn require_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
+    if tag.param(key).is_none() {
+        diags.push(SyntaxWarning::error(
+            format!("[{}] is missing required attribute `{key}=`", tag.name),
+            tag.span,
+        ));
+    }
+}
+
+/// Emit a **warning** diagnostic when `key` is absent from `tag`.
+fn recommend_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
+    if tag.param(key).is_none() {
+        diags.push(SyntaxWarning::warning(
+            format!("[{}] is missing `{key}=`; tag will have no effect", tag.name),
+            tag.span,
+        ));
+    }
+}
+
+/// Emit a **warning** diagnostic when *none* of the given `keys` are present.
+fn recommend_any_attr(tag: &Tag<'_>, keys: &[&str], diags: &mut Vec<SyntaxWarning>) {
+    if !keys.iter().any(|k| tag.param(k).is_some()) {
+        let keys_fmt = keys
+            .iter()
+            .map(|k| format!("`{k}=`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        diags.push(SyntaxWarning::warning(
+            format!(
+                "[{}] should specify at least one of {keys_fmt}; tag will have no effect",
+                tag.name
+            ),
+            tag.span,
+        ));
+    }
+}
+
+// ─── KnownTag impl ────────────────────────────────────────────────────────────
+
 impl<'src> KnownTag<'src> {
-    /// Decode a [`Tag`] into a `KnownTag`, extracting its named attributes.
+    /// Parse and validate a raw [`Tag`] into a typed [`KnownTag`].
     ///
-    /// Returns `None` when the tag name is not recognised by the engine.
+    /// Always returns a [`KnownTag`], using [`KnownTag::Extension`] for any
+    /// tag name not recognised by the engine.  Diagnostics for missing
+    /// required/recommended attributes or unparseable typed values are appended
+    /// to `diags`.
     ///
     /// The aliases `"playSe"` and `"voice"` are decoded into the canonical
     /// variants [`KnownTag::Se`] and [`KnownTag::Vo`] respectively.
-    pub fn from_tag(tag: &Tag<'src>) -> Option<Self> {
-        // Convenience closure: look up a parameter and clone its value.
-        let p = |key: &str| tag.param(key).cloned();
+    pub fn from_tag(tag: &Tag<'src>, diags: &mut Vec<SyntaxWarning>) -> Self {
+        let name = tag.name.as_ref();
+        let span = tag.span;
 
-        Some(match tag.name.as_ref() {
+        // String-attribute shorthand: look up a key and wrap it.
+        let ps = |key: &str| tag.param(key).cloned().map(parse_str_attr);
+
+        match name {
             // ── Control flow ───────────────────────────────────────────────
-            "if" => Self::If { exp: p("exp") },
-            "elsif" => Self::Elsif { exp: p("exp") },
+            "if" => {
+                require_attr(tag, "exp", diags);
+                Self::If { exp: ps("exp") }
+            }
+            "elsif" => {
+                require_attr(tag, "exp", diags);
+                Self::Elsif { exp: ps("exp") }
+            }
             "else" => Self::Else,
             "endif" => Self::Endif,
-            "ignore" => Self::Ignore { exp: p("exp") },
+            "ignore" => {
+                require_attr(tag, "exp", diags);
+                Self::Ignore { exp: ps("exp") }
+            }
             "endignore" => Self::Endignore,
 
             // ── Navigation ────────────────────────────────────────────────
-            "jump" => Self::Jump {
-                storage: p("storage"),
-                target: p("target"),
-            },
-            "call" => Self::Call {
-                storage: p("storage"),
-                target: p("target"),
-            },
+            "jump" => {
+                recommend_any_attr(tag, &["storage", "target"], diags);
+                Self::Jump {
+                    storage: ps("storage"),
+                    target: ps("target"),
+                }
+            }
+            "call" => {
+                recommend_any_attr(tag, &["storage", "target"], diags);
+                Self::Call {
+                    storage: ps("storage"),
+                    target: ps("target"),
+                }
+            }
             "return" => Self::Return,
 
             // ── Choice links ──────────────────────────────────────────────
-            "link" => Self::Link {
-                storage: p("storage"),
-                target: p("target"),
-                text: p("text"),
-            },
+            "link" => {
+                recommend_any_attr(tag, &["storage", "target"], diags);
+                Self::Link {
+                    storage: ps("storage"),
+                    target: ps("target"),
+                    text: ps("text"),
+                }
+            }
             "endlink" => Self::Endlink,
-            "glink" => Self::Glink {
-                storage: p("storage"),
-                target: p("target"),
-                text: p("text"),
-            },
+            "glink" => {
+                recommend_any_attr(tag, &["storage", "target"], diags);
+                Self::Glink {
+                    storage: ps("storage"),
+                    target: ps("target"),
+                    text: ps("text"),
+                }
+            }
 
             // ── Scripting / expressions ───────────────────────────────────
-            "eval" => Self::Eval { exp: p("exp") },
-            "emb" => Self::Emb { exp: p("exp") },
-            "trace" => Self::Trace { exp: p("exp") },
+            "eval" => {
+                recommend_attr(tag, "exp", diags);
+                Self::Eval { exp: ps("exp") }
+            }
+            "emb" => {
+                recommend_attr(tag, "exp", diags);
+                Self::Emb { exp: ps("exp") }
+            }
+            "trace" => {
+                recommend_attr(tag, "exp", diags);
+                Self::Trace { exp: ps("exp") }
+            }
 
             // ── Display control ───────────────────────────────────────────
             "l" => Self::L,
@@ -442,89 +584,86 @@ impl<'src> KnownTag<'src> {
             "s" => Self::S,
             "cm" => Self::Cm,
             "er" => Self::Er,
-            "ch" => Self::Ch { text: p("text") },
-            "hch" => Self::Hch { text: p("text") },
+            "ch" => {
+                recommend_attr(tag, "text", diags);
+                Self::Ch { text: ps("text") }
+            }
+            "hch" => {
+                recommend_attr(tag, "text", diags);
+                Self::Hch { text: ps("text") }
+            }
 
             // ── Timed waits ───────────────────────────────────────────────
-            "wait" => Self::Wait {
-                time: p("time"),
-                canskip: p("canskip"),
-            },
-            "wc" => Self::Wc { time: p("time") },
+            "wait" => {
+                recommend_attr(tag, "time", diags);
+                let time_pv = tag.param("time").cloned();
+                let canskip_pv = tag.param("canskip").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                let canskip =
+                    canskip_pv.map(|pv| parse_typed_attr(pv, name, "canskip", span, diags));
+                Self::Wait { time, canskip }
+            }
+            "wc" => {
+                recommend_attr(tag, "time", diags);
+                let time_pv = tag.param("time").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                Self::Wc { time }
+            }
 
             // ── Async-completion waits ─────────────────────────────────────
-            "wa" => Self::WaitForCompletion {
-                which: TagName::Wa,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
-            "wm" => Self::WaitForCompletion {
-                which: TagName::Wm,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
-            "wt" => Self::WaitForCompletion {
-                which: TagName::Wt,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
-            "wq" => Self::WaitForCompletion {
-                which: TagName::Wq,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
-            "wb" => Self::WaitForCompletion {
-                which: TagName::Wb,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
-            "wf" => Self::WaitForCompletion {
-                which: TagName::Wf,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
-            "wl" => Self::WaitForCompletion {
-                which: TagName::Wl,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
-            "ws" => Self::WaitForCompletion {
-                which: TagName::Ws,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
-            "wv" => Self::WaitForCompletion {
-                which: TagName::Wv,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
-            "wp" => Self::WaitForCompletion {
-                which: TagName::Wp,
-                canskip: p("canskip"),
-                buf: p("buf"),
-            },
+            "wa" | "wm" | "wt" | "wq" | "wb" | "wf" | "wl" | "ws" | "wv" | "wp" => {
+                let which = match name {
+                    "wa" => TagName::Wa,
+                    "wm" => TagName::Wm,
+                    "wt" => TagName::Wt,
+                    "wq" => TagName::Wq,
+                    "wb" => TagName::Wb,
+                    "wf" => TagName::Wf,
+                    "wl" => TagName::Wl,
+                    "ws" => TagName::Ws,
+                    "wv" => TagName::Wv,
+                    _ => TagName::Wp,
+                };
+                let canskip_pv = tag.param("canskip").cloned();
+                let buf_pv = tag.param("buf").cloned();
+                let canskip =
+                    canskip_pv.map(|pv| parse_typed_attr(pv, name, "canskip", span, diags));
+                let buf = buf_pv.map(|pv| parse_typed_attr(pv, name, "buf", span, diags));
+                Self::WaitForCompletion { which, canskip, buf }
+            }
             "ct" => Self::Ct,
 
             // ── Input / event handlers ────────────────────────────────────
-            "timeout" => Self::Timeout {
-                time: p("time"),
-                storage: p("storage"),
-                target: p("target"),
-            },
+            "timeout" => {
+                recommend_attr(tag, "time", diags);
+                let time_pv = tag.param("time").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                Self::Timeout {
+                    time,
+                    storage: ps("storage"),
+                    target: ps("target"),
+                }
+            }
             "waitclick" => Self::Waitclick,
             "cclick" => Self::Cclick,
             "ctimeout" => Self::Ctimeout,
             "cwheel" => Self::Cwheel,
-            "click" => Self::Click {
-                storage: p("storage"),
-                target: p("target"),
-                exp: p("exp"),
-            },
-            "wheel" => Self::Wheel {
-                storage: p("storage"),
-                target: p("target"),
-                exp: p("exp"),
-            },
+            "click" => {
+                recommend_any_attr(tag, &["storage", "target", "exp"], diags);
+                Self::Click {
+                    storage: ps("storage"),
+                    target: ps("target"),
+                    exp: ps("exp"),
+                }
+            }
+            "wheel" => {
+                recommend_any_attr(tag, &["storage", "target", "exp"], diags);
+                Self::Wheel {
+                    storage: ps("storage"),
+                    target: ps("target"),
+                    exp: ps("exp"),
+                }
+            }
 
             // ── Log control ───────────────────────────────────────────────
             "nolog" => Self::Nolog,
@@ -534,28 +673,56 @@ impl<'src> KnownTag<'src> {
             "nowait" => Self::Nowait,
             "endnowait" => Self::Endnowait,
             "resetdelay" => Self::Resetdelay,
-            "delay" => Self::Delay { speed: p("speed") },
-            "configdelay" => Self::Configdelay { speed: p("speed") },
+            "delay" => {
+                recommend_attr(tag, "speed", diags);
+                let speed_pv = tag.param("speed").cloned();
+                let speed = speed_pv.map(|pv| parse_typed_attr(pv, name, "speed", span, diags));
+                Self::Delay { speed }
+            }
+            "configdelay" => {
+                recommend_attr(tag, "speed", diags);
+                let speed_pv = tag.param("speed").cloned();
+                let speed = speed_pv.map(|pv| parse_typed_attr(pv, name, "speed", span, diags));
+                Self::Configdelay { speed }
+            }
             "resetwait" => Self::Resetwait,
-            "autowc" => Self::Autowc { time: p("time") },
+            "autowc" => {
+                let time_pv = tag.param("time").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                Self::Autowc { time }
+            }
 
             // ── Backlog ───────────────────────────────────────────────────
-            "pushlog" => Self::Pushlog {
-                text: p("text"),
-                join: p("join"),
-            },
+            "pushlog" => {
+                recommend_attr(tag, "text", diags);
+                let join_pv = tag.param("join").cloned();
+                let join = join_pv.map(|pv| parse_typed_attr(pv, name, "join", span, diags));
+                Self::Pushlog {
+                    text: ps("text"),
+                    join,
+                }
+            }
 
             // ── Player input / triggers ───────────────────────────────────
-            "input" => Self::Input {
-                name: p("name"),
-                prompt: p("prompt"),
-                title: p("title"),
-            },
-            "waittrig" => Self::Waittrig { name: p("name") },
+            "input" => {
+                recommend_attr(tag, "name", diags);
+                Self::Input {
+                    name: ps("name"),
+                    prompt: ps("prompt"),
+                    title: ps("title"),
+                }
+            }
+            "waittrig" => {
+                recommend_attr(tag, "name", diags);
+                Self::Waittrig { name: ps("name") }
+            }
 
             // ── Macro management ──────────────────────────────────────────
-            "macro" => Self::Macro { name: p("name") },
-            "erasemacro" => Self::Erasemacro { name: p("name") },
+            "macro" => Self::Macro { name: ps("name") },
+            "erasemacro" => {
+                recommend_attr(tag, "name", diags);
+                Self::Erasemacro { name: ps("name") }
+            }
             "endmacro" => Self::Endmacro,
 
             // ── Variable management ───────────────────────────────────────
@@ -564,165 +731,332 @@ impl<'src> KnownTag<'src> {
             "clearstack" => Self::Clearstack,
 
             // ── Misc ──────────────────────────────────────────────────────
-            "clickskip" => Self::Clickskip {
-                enabled: p("enabled"),
-            },
-            "chara_ptext" => Self::CharaPtext { name: p("name") },
+            "clickskip" => {
+                let enabled_pv = tag.param("enabled").cloned();
+                let enabled =
+                    enabled_pv.map(|pv| parse_typed_attr(pv, name, "enabled", span, diags));
+                Self::Clickskip { enabled }
+            }
+            "chara_ptext" => {
+                recommend_attr(tag, "name", diags);
+                Self::CharaPtext { name: ps("name") }
+            }
 
             // ── Image / layer ─────────────────────────────────────────────
-            "bg" => Self::Bg {
-                storage: p("storage"),
-                time: p("time"),
-                method: p("method"),
-            },
-            "image" => Self::Image {
-                storage: p("storage"),
-                layer: p("layer"),
-                x: p("x"),
-                y: p("y"),
-                visible: p("visible"),
-            },
-            "layopt" => Self::Layopt {
-                layer: p("layer"),
-                visible: p("visible"),
-                opacity: p("opacity"),
-            },
-            "free" => Self::Free { layer: p("layer") },
-            "position" => Self::Position {
-                layer: p("layer"),
-                x: p("x"),
-                y: p("y"),
-            },
+            "bg" => {
+                require_attr(tag, "storage", diags);
+                let time_pv = tag.param("time").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                Self::Bg {
+                    storage: ps("storage"),
+                    time,
+                    method: ps("method"),
+                }
+            }
+            "image" => {
+                require_attr(tag, "storage", diags);
+                let x_pv = tag.param("x").cloned();
+                let y_pv = tag.param("y").cloned();
+                let visible_pv = tag.param("visible").cloned();
+                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
+                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
+                let visible =
+                    visible_pv.map(|pv| parse_typed_attr(pv, name, "visible", span, diags));
+                Self::Image {
+                    storage: ps("storage"),
+                    layer: ps("layer"),
+                    x,
+                    y,
+                    visible,
+                }
+            }
+            "layopt" => {
+                require_attr(tag, "layer", diags);
+                let visible_pv = tag.param("visible").cloned();
+                let opacity_pv = tag.param("opacity").cloned();
+                let visible =
+                    visible_pv.map(|pv| parse_typed_attr(pv, name, "visible", span, diags));
+                let opacity =
+                    opacity_pv.map(|pv| parse_typed_attr(pv, name, "opacity", span, diags));
+                Self::Layopt {
+                    layer: ps("layer"),
+                    visible,
+                    opacity,
+                }
+            }
+            "free" => {
+                require_attr(tag, "layer", diags);
+                Self::Free { layer: ps("layer") }
+            }
+            "position" => {
+                require_attr(tag, "layer", diags);
+                let x_pv = tag.param("x").cloned();
+                let y_pv = tag.param("y").cloned();
+                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
+                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
+                Self::Position {
+                    layer: ps("layer"),
+                    x,
+                    y,
+                }
+            }
 
             // ── Audio ─────────────────────────────────────────────────────
-            "bgm" => Self::Bgm {
-                storage: p("storage"),
-                r#loop: p("loop"),
-                volume: p("volume"),
-                fadetime: p("fadetime"),
-            },
-            "stopbgm" => Self::Stopbgm {
-                fadetime: p("fadetime"),
-            },
+            "bgm" => {
+                require_attr(tag, "storage", diags);
+                let loop_pv = tag.param("loop").cloned();
+                let volume_pv = tag.param("volume").cloned();
+                let fadetime_pv = tag.param("fadetime").cloned();
+                let r#loop =
+                    loop_pv.map(|pv| parse_typed_attr(pv, name, "loop", span, diags));
+                let volume =
+                    volume_pv.map(|pv| parse_typed_attr(pv, name, "volume", span, diags));
+                let fadetime =
+                    fadetime_pv.map(|pv| parse_typed_attr(pv, name, "fadetime", span, diags));
+                Self::Bgm {
+                    storage: ps("storage"),
+                    r#loop,
+                    volume,
+                    fadetime,
+                }
+            }
+            "stopbgm" => {
+                let fadetime_pv = tag.param("fadetime").cloned();
+                let fadetime =
+                    fadetime_pv.map(|pv| parse_typed_attr(pv, name, "fadetime", span, diags));
+                Self::Stopbgm { fadetime }
+            }
             // "se" and "playSe" are semantically identical.
-            "se" | "playSe" => Self::Se {
-                storage: p("storage"),
-                buf: p("buf"),
-                volume: p("volume"),
-                r#loop: p("loop"),
-            },
-            "stopse" => Self::Stopse { buf: p("buf") },
+            "se" | "playSe" => {
+                require_attr(tag, "storage", diags);
+                let buf_pv = tag.param("buf").cloned();
+                let volume_pv = tag.param("volume").cloned();
+                let loop_pv = tag.param("loop").cloned();
+                let buf = buf_pv.map(|pv| parse_typed_attr(pv, name, "buf", span, diags));
+                let volume =
+                    volume_pv.map(|pv| parse_typed_attr(pv, name, "volume", span, diags));
+                let r#loop =
+                    loop_pv.map(|pv| parse_typed_attr(pv, name, "loop", span, diags));
+                Self::Se {
+                    storage: ps("storage"),
+                    buf,
+                    volume,
+                    r#loop,
+                }
+            }
+            "stopse" => {
+                let buf_pv = tag.param("buf").cloned();
+                let buf = buf_pv.map(|pv| parse_typed_attr(pv, name, "buf", span, diags));
+                Self::Stopse { buf }
+            }
             // "vo" and "voice" are semantically identical.
-            "vo" | "voice" => Self::Vo {
-                storage: p("storage"),
-                buf: p("buf"),
-            },
-            "fadebgm" => Self::Fadebgm {
-                time: p("time"),
-                volume: p("volume"),
-            },
+            "vo" | "voice" => {
+                require_attr(tag, "storage", diags);
+                let buf_pv = tag.param("buf").cloned();
+                let buf = buf_pv.map(|pv| parse_typed_attr(pv, name, "buf", span, diags));
+                Self::Vo {
+                    storage: ps("storage"),
+                    buf,
+                }
+            }
+            "fadebgm" => {
+                let time_pv = tag.param("time").cloned();
+                let volume_pv = tag.param("volume").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                let volume =
+                    volume_pv.map(|pv| parse_typed_attr(pv, name, "volume", span, diags));
+                Self::Fadebgm { time, volume }
+            }
 
             // ── Transition ────────────────────────────────────────────────
-            "trans" => Self::Trans {
-                method: p("method"),
-                time: p("time"),
-                rule: p("rule"),
-            },
-            "fadein" => Self::Fadein {
-                time: p("time"),
-                color: p("color"),
-            },
-            "fadeout" => Self::Fadeout {
-                time: p("time"),
-                color: p("color"),
-            },
-            "movetrans" => Self::Movetrans {
-                layer: p("layer"),
-                time: p("time"),
-                x: p("x"),
-                y: p("y"),
-            },
+            "trans" => {
+                let time_pv = tag.param("time").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                Self::Trans {
+                    method: ps("method"),
+                    time,
+                    rule: ps("rule"),
+                }
+            }
+            "fadein" => {
+                let time_pv = tag.param("time").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                Self::Fadein {
+                    time,
+                    color: ps("color"),
+                }
+            }
+            "fadeout" => {
+                let time_pv = tag.param("time").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                Self::Fadeout {
+                    time,
+                    color: ps("color"),
+                }
+            }
+            "movetrans" => {
+                let time_pv = tag.param("time").cloned();
+                let x_pv = tag.param("x").cloned();
+                let y_pv = tag.param("y").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
+                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
+                Self::Movetrans {
+                    layer: ps("layer"),
+                    time,
+                    x,
+                    y,
+                }
+            }
 
             // ── Effect ────────────────────────────────────────────────────
-            "quake" => Self::Quake {
-                time: p("time"),
-                hmax: p("hmax"),
-                vmax: p("vmax"),
-            },
-            "shake" => Self::Shake {
-                time: p("time"),
-                amount: p("amount"),
-                axis: p("axis"),
-            },
-            "flash" => Self::Flash {
-                time: p("time"),
-                color: p("color"),
-            },
+            "quake" => {
+                let time_pv = tag.param("time").cloned();
+                let hmax_pv = tag.param("hmax").cloned();
+                let vmax_pv = tag.param("vmax").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                let hmax = hmax_pv.map(|pv| parse_typed_attr(pv, name, "hmax", span, diags));
+                let vmax = vmax_pv.map(|pv| parse_typed_attr(pv, name, "vmax", span, diags));
+                Self::Quake { time, hmax, vmax }
+            }
+            "shake" => {
+                let time_pv = tag.param("time").cloned();
+                let amount_pv = tag.param("amount").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                let amount =
+                    amount_pv.map(|pv| parse_typed_attr(pv, name, "amount", span, diags));
+                Self::Shake {
+                    time,
+                    amount,
+                    axis: ps("axis"),
+                }
+            }
+            "flash" => {
+                let time_pv = tag.param("time").cloned();
+                let time = time_pv.map(|pv| parse_typed_attr(pv, name, "time", span, diags));
+                Self::Flash {
+                    time,
+                    color: ps("color"),
+                }
+            }
 
             // ── Message window ────────────────────────────────────────────
-            "msgwnd" => Self::Msgwnd {
-                visible: p("visible"),
-                layer: p("layer"),
-            },
-            "wndctrl" => Self::Wndctrl {
-                x: p("x"),
-                y: p("y"),
-                width: p("width"),
-                height: p("height"),
-            },
+            "msgwnd" => {
+                let visible_pv = tag.param("visible").cloned();
+                let visible =
+                    visible_pv.map(|pv| parse_typed_attr(pv, name, "visible", span, diags));
+                Self::Msgwnd {
+                    visible,
+                    layer: ps("layer"),
+                }
+            }
+            "wndctrl" => {
+                let x_pv = tag.param("x").cloned();
+                let y_pv = tag.param("y").cloned();
+                let width_pv = tag.param("width").cloned();
+                let height_pv = tag.param("height").cloned();
+                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
+                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
+                let width = width_pv.map(|pv| parse_typed_attr(pv, name, "width", span, diags));
+                let height =
+                    height_pv.map(|pv| parse_typed_attr(pv, name, "height", span, diags));
+                Self::Wndctrl { x, y, width, height }
+            }
             "resetfont" => Self::Resetfont,
-            "font" => Self::Font {
-                face: p("face"),
-                size: p("size"),
-                bold: p("bold"),
-                italic: p("italic"),
-            },
-            "size" => Self::Size { value: p("value") },
-            "bold" => Self::Bold { value: p("value") },
-            "italic" => Self::Italic { value: p("value") },
-            "ruby" => Self::Ruby { text: p("text") },
+            "font" => {
+                let size_pv = tag.param("size").cloned();
+                let bold_pv = tag.param("bold").cloned();
+                let italic_pv = tag.param("italic").cloned();
+                let size = size_pv.map(|pv| parse_typed_attr(pv, name, "size", span, diags));
+                let bold = bold_pv.map(|pv| parse_typed_attr(pv, name, "bold", span, diags));
+                let italic =
+                    italic_pv.map(|pv| parse_typed_attr(pv, name, "italic", span, diags));
+                Self::Font {
+                    face: ps("face"),
+                    size,
+                    bold,
+                    italic,
+                }
+            }
+            "size" => {
+                let value_pv = tag.param("value").cloned();
+                let value = value_pv.map(|pv| parse_typed_attr(pv, name, "value", span, diags));
+                Self::Size { value }
+            }
+            "bold" => {
+                let value_pv = tag.param("value").cloned();
+                let value = value_pv.map(|pv| parse_typed_attr(pv, name, "value", span, diags));
+                Self::Bold { value }
+            }
+            "italic" => {
+                let value_pv = tag.param("value").cloned();
+                let value = value_pv.map(|pv| parse_typed_attr(pv, name, "value", span, diags));
+                Self::Italic { value }
+            }
+            "ruby" => Self::Ruby { text: ps("text") },
             "nowrap" => Self::Nowrap,
             "endnowrap" => Self::Endnowrap,
 
             // ── Character sprites ─────────────────────────────────────────
-            "chara" => Self::Chara {
-                name: p("name"),
-                id: p("id"),
-                storage: p("storage"),
-                slot: p("slot"),
-                x: p("x"),
-                y: p("y"),
-            },
-            "chara_hide" => Self::CharaHide {
-                name: p("name"),
-                id: p("id"),
-                slot: p("slot"),
-            },
-            "chara_free" => Self::CharaFree {
-                name: p("name"),
-                id: p("id"),
-                slot: p("slot"),
-            },
-            "chara_mod" => Self::CharaMod {
-                name: p("name"),
-                id: p("id"),
-                face: p("face"),
-                pose: p("pose"),
-                storage: p("storage"),
-            },
+            "chara" => {
+                recommend_any_attr(tag, &["name", "id"], diags);
+                let x_pv = tag.param("x").cloned();
+                let y_pv = tag.param("y").cloned();
+                let x = x_pv.map(|pv| parse_typed_attr(pv, name, "x", span, diags));
+                let y = y_pv.map(|pv| parse_typed_attr(pv, name, "y", span, diags));
+                Self::Chara {
+                    name: ps("name"),
+                    id: ps("id"),
+                    storage: ps("storage"),
+                    slot: ps("slot"),
+                    x,
+                    y,
+                }
+            }
+            "chara_hide" => {
+                recommend_any_attr(tag, &["name", "id"], diags);
+                Self::CharaHide {
+                    name: ps("name"),
+                    id: ps("id"),
+                    slot: ps("slot"),
+                }
+            }
+            "chara_free" => {
+                recommend_any_attr(tag, &["name", "id"], diags);
+                Self::CharaFree {
+                    name: ps("name"),
+                    id: ps("id"),
+                    slot: ps("slot"),
+                }
+            }
+            "chara_mod" => {
+                recommend_any_attr(tag, &["name", "id"], diags);
+                Self::CharaMod {
+                    name: ps("name"),
+                    id: ps("id"),
+                    face: ps("face"),
+                    pose: ps("pose"),
+                    storage: ps("storage"),
+                }
+            }
 
-            _ => return None,
-        })
+            _ => Self::Extension {
+                name: tag.name.clone(),
+                params: tag.params.clone(),
+            },
+        }
     }
 
-    /// Return the [`TagName`] corresponding to this variant.
+    /// Return the [`TagName`] corresponding to this variant, or `None` for
+    /// [`KnownTag::Extension`] (which has no canonical tag name).
     ///
-    /// For [`KnownTag::Se`] this returns [`TagName::Se`] (not
+    /// For [`KnownTag::Se`] this returns [`Some(TagName::Se)`] (not
     /// [`TagName::PlaySe`]), and for [`KnownTag::Vo`] this returns
-    /// [`TagName::Vo`] (not [`TagName::Voice`]).  For
-    /// [`KnownTag::WaitForCompletion`] this returns the `which` field.
-    pub fn tag_name(&self) -> TagName {
-        match self {
+    /// [`Some(TagName::Vo)`] (not [`TagName::Voice`]).  For
+    /// [`KnownTag::WaitForCompletion`] this returns the `which` field wrapped
+    /// in `Some`.
+    pub fn tag_name(&self) -> Option<TagName> {
+        Some(match self {
             Self::If { .. } => TagName::If,
             Self::Elsif { .. } => TagName::Elsif,
             Self::Else => TagName::Else,
@@ -809,7 +1143,8 @@ impl<'src> KnownTag<'src> {
             Self::CharaHide { .. } => TagName::CharaHide,
             Self::CharaFree { .. } => TagName::CharaFree,
             Self::CharaMod { .. } => TagName::CharaMod,
-        }
+            Self::Extension { .. } => return None,
+        })
     }
 }
 
@@ -819,6 +1154,7 @@ mod tests {
 
     use super::*;
     use crate::ast::{Param, ParamValue, Tag};
+    use crate::error::Severity;
 
     fn span() -> miette::SourceSpan {
         (0usize, 0usize).into()
@@ -840,22 +1176,55 @@ mod tests {
         }
     }
 
+    fn tag_with_entity(name: &'static str, key: &'static str) -> Tag<'static> {
+        Tag {
+            name: Cow::Borrowed(name),
+            params: vec![Param::named(
+                key,
+                ParamValue::Entity(Cow::Borrowed("f.path")),
+                span(),
+            )],
+            span: span(),
+        }
+    }
+
+    fn tag_with_macro_param(name: &'static str, key: &'static str) -> Tag<'static> {
+        Tag {
+            name: Cow::Borrowed(name),
+            params: vec![Param::named(
+                key,
+                ParamValue::MacroParam {
+                    key: Cow::Borrowed(key),
+                    default: None,
+                },
+                span(),
+            )],
+            span: span(),
+        }
+    }
+
     // ── KnownTag::from_tag ────────────────────────────────────────────────────
 
     #[test]
-    fn known_tag_from_unknown_returns_none() {
-        assert!(KnownTag::from_tag(&tag_no_params("my_custom_tag")).is_none());
+    fn known_tag_from_unknown_produces_extension() {
+        let mut diags = vec![];
+        let known = KnownTag::from_tag(&tag_no_params("my_custom_tag"), &mut diags);
+        assert!(diags.is_empty());
+        assert!(matches!(known, KnownTag::Extension { .. }));
+        assert_eq!(known.tag_name(), None);
     }
 
     #[test]
     fn known_tag_bg_extracts_params() {
         let tag = tag_with_param("bg", "storage", "bg001.jpg");
-        let known = KnownTag::from_tag(&tag).unwrap();
-        assert_eq!(known.tag_name(), TagName::Bg);
+        let mut diags = vec![];
+        let known = KnownTag::from_tag(&tag, &mut diags);
+        assert!(diags.is_empty(), "no diags expected: {diags:?}");
+        assert_eq!(known.tag_name(), Some(TagName::Bg));
         assert!(matches!(
             known,
             KnownTag::Bg {
-                storage: Some(ParamValue::Literal(_)),
+                storage: Some(MaybeResolved::Literal(_)),
                 time: None,
                 method: None
             }
@@ -864,21 +1233,26 @@ mod tests {
 
     #[test]
     fn known_tag_se_and_play_se_unify() {
-        let se = KnownTag::from_tag(&tag_no_params("se")).unwrap();
-        let play = KnownTag::from_tag(&tag_no_params("playSe")).unwrap();
-        // Both decode as KnownTag::Se; tag_name() returns the primary variant.
-        assert_eq!(se.tag_name(), TagName::Se);
-        assert_eq!(play.tag_name(), TagName::Se);
+        let mut diags = vec![];
+        let se = KnownTag::from_tag(&tag_with_param("se", "storage", "beep.ogg"), &mut diags);
+        let play =
+            KnownTag::from_tag(&tag_with_param("playSe", "storage", "beep.ogg"), &mut diags);
+        assert!(diags.is_empty(), "no diags expected: {diags:?}");
+        assert_eq!(se.tag_name(), Some(TagName::Se));
+        assert_eq!(play.tag_name(), Some(TagName::Se));
         assert!(matches!(se, KnownTag::Se { .. }));
         assert!(matches!(play, KnownTag::Se { .. }));
     }
 
     #[test]
     fn known_tag_vo_and_voice_unify() {
-        let vo = KnownTag::from_tag(&tag_no_params("vo")).unwrap();
-        let voice = KnownTag::from_tag(&tag_no_params("voice")).unwrap();
-        assert_eq!(vo.tag_name(), TagName::Vo);
-        assert_eq!(voice.tag_name(), TagName::Vo);
+        let mut diags = vec![];
+        let vo = KnownTag::from_tag(&tag_with_param("vo", "storage", "v01.ogg"), &mut diags);
+        let voice =
+            KnownTag::from_tag(&tag_with_param("voice", "storage", "v01.ogg"), &mut diags);
+        assert!(diags.is_empty(), "no diags expected: {diags:?}");
+        assert_eq!(vo.tag_name(), Some(TagName::Vo));
+        assert_eq!(voice.tag_name(), Some(TagName::Vo));
         assert!(matches!(vo, KnownTag::Vo { .. }));
         assert!(matches!(voice, KnownTag::Vo { .. }));
     }
@@ -897,8 +1271,9 @@ mod tests {
             ("wv", TagName::Wv),
             ("wp", TagName::Wp),
         ] {
-            let known = KnownTag::from_tag(&tag_no_params(name)).unwrap();
-            assert_eq!(known.tag_name(), *expected, "failed for [{name}]");
+            let mut diags = vec![];
+            let known = KnownTag::from_tag(&tag_no_params(name), &mut diags);
+            assert_eq!(known.tag_name(), Some(*expected), "failed for [{name}]");
             assert!(
                 matches!(known, KnownTag::WaitForCompletion { which, .. } if which == *expected),
                 "[{name}] should decode as WaitForCompletion"
@@ -916,13 +1291,550 @@ mod tests {
             ],
             span: span(),
         };
-        let known = KnownTag::from_tag(&tag).unwrap();
+        let mut diags = vec![];
+        let known = KnownTag::from_tag(&tag, &mut diags);
+        assert!(diags.is_empty(), "no diags expected: {diags:?}");
         assert!(matches!(
             known,
             KnownTag::Jump {
-                storage: Some(ParamValue::Literal(_)),
-                target: Some(ParamValue::Literal(_)),
+                storage: Some(MaybeResolved::Literal(_)),
+                target: Some(MaybeResolved::Literal(_)),
             }
         ));
+    }
+
+    #[test]
+    fn typed_attr_parses_u64() {
+        let tag = tag_with_param("wait", "time", "500");
+        let mut diags = vec![];
+        let known = KnownTag::from_tag(&tag, &mut diags);
+        assert!(diags.is_empty(), "no diags expected: {diags:?}");
+        assert!(matches!(
+            known,
+            KnownTag::Wait {
+                time: Some(MaybeResolved::Literal(500u64)),
+                canskip: None,
+            }
+        ));
+    }
+
+    #[test]
+    fn typed_attr_bad_value_is_warning_and_dynamic() {
+        let tag = tag_with_param("wait", "time", "not_a_number");
+        let mut diags = vec![];
+        let known = KnownTag::from_tag(&tag, &mut diags);
+        // One warning from recommend_attr (time absent? no, time IS present),
+        // one warning from parse_typed_attr (bad value).
+        assert_eq!(diags.len(), 1, "expected one bad-value warning: {diags:?}");
+        assert_eq!(diags[0].severity, Severity::Warning);
+        assert!(matches!(
+            known,
+            KnownTag::Wait {
+                time: Some(MaybeResolved::Dynamic(_)),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn entity_attr_is_dynamic() {
+        let tag = tag_with_entity("bg", "storage");
+        let mut diags = vec![];
+        let known = KnownTag::from_tag(&tag, &mut diags);
+        assert!(diags.is_empty(), "no diags expected: {diags:?}");
+        assert!(matches!(
+            known,
+            KnownTag::Bg {
+                storage: Some(MaybeResolved::Dynamic(_)),
+                ..
+            }
+        ));
+    }
+
+    // ── Required (error) ──────────────────────────────────────────────────────
+
+    #[test]
+    fn if_without_exp_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("if"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert!(diags[0].message.contains("exp="));
+    }
+
+    #[test]
+    fn if_with_exp_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("if", "exp", "f.flag == 1"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn elsif_without_exp_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("elsif"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn ignore_without_exp_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("ignore"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn bg_without_storage_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("bg"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert!(diags[0].message.contains("storage="));
+    }
+
+    #[test]
+    fn bg_with_storage_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("bg", "storage", "bg001.jpg"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn image_without_storage_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("image"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn layopt_without_layer_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("layopt"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn free_without_layer_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("free"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn position_without_layer_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("position"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn bgm_without_storage_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("bgm"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn se_without_storage_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("se"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn play_se_without_storage_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("playSe"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn vo_without_storage_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("vo"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn voice_without_storage_is_error() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("voice"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+    }
+
+    // ── Recommended (warning) ─────────────────────────────────────────────────
+
+    #[test]
+    fn eval_without_exp_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("eval"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn eval_with_exp_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("eval", "exp", "f.x = 1"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn emb_without_exp_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("emb"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn trace_without_exp_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("trace"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn wait_without_time_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("wait"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn wait_with_time_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("wait", "time", "500"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn wc_without_time_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("wc"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn timeout_without_time_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("timeout"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn ch_without_text_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("ch"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn hch_without_text_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("hch"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn erasemacro_without_name_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("erasemacro"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn delay_without_speed_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("delay"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn configdelay_without_speed_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("configdelay"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn pushlog_without_text_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("pushlog"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn input_without_name_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("input"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn waittrig_without_name_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("waittrig"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_ptext_without_name_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("chara_ptext"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    // ── Any-of (warning) ──────────────────────────────────────────────────────
+
+    #[test]
+    fn jump_without_storage_or_target_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("jump"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+        assert!(diags[0].message.contains("storage="));
+        assert!(diags[0].message.contains("target="));
+    }
+
+    #[test]
+    fn jump_with_only_target_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("jump", "target", "*start"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn jump_with_only_storage_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("jump", "storage", "scene01.ks"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn call_without_destination_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("call"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn link_without_destination_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("link"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn link_with_target_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("link", "target", "*choice_a"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn glink_without_destination_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("glink"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn click_without_any_handler_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("click"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn click_with_exp_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("click", "exp", "f.handler()"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn wheel_without_any_handler_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("wheel"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_without_id_or_name_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("chara"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_with_name_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("chara", "name", "alice"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn chara_with_id_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("chara", "id", "alice"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn chara_hide_without_id_or_name_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("chara_hide"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_free_without_id_or_name_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("chara_free"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_mod_without_id_or_name_is_warning() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_no_params("chara_mod"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    // ── Entity / macro-param values count as present ──────────────────────────
+
+    #[test]
+    fn bg_with_entity_storage_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_entity("bg", "storage"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn if_with_macro_param_exp_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_macro_param("if", "exp"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn bgm_with_entity_storage_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_entity("bgm", "storage"), &mut diags);
+        assert!(diags.is_empty());
+    }
+
+    // ── Unknown tags produce Extension, no diagnostics ────────────────────────
+
+    #[test]
+    fn unknown_tag_is_extension_with_no_diags() {
+        let mut diags = vec![];
+        let known = KnownTag::from_tag(&tag_no_params("my_custom_game_tag"), &mut diags);
+        assert!(diags.is_empty());
+        assert!(matches!(known, KnownTag::Extension { .. }));
+    }
+
+    #[test]
+    fn no_params_tags_are_clean() {
+        for name in &[
+            "l",
+            "p",
+            "r",
+            "s",
+            "cm",
+            "return",
+            "else",
+            "endif",
+            "endignore",
+            "endlink",
+            "endmacro",
+            "nowait",
+            "endnowait",
+            "resetdelay",
+            "nolog",
+            "endnolog",
+            "resetwait",
+            "waitclick",
+            "cclick",
+            "ctimeout",
+            "cwheel",
+            "wa",
+            "wm",
+            "wt",
+            "wq",
+            "wb",
+            "wf",
+            "wl",
+            "ws",
+            "wv",
+            "wp",
+            "ct",
+            "er",
+            "clearvar",
+            "clearsysvar",
+            "clearstack",
+            "stopbgm",
+            "stopse",
+            "trans",
+            "fadein",
+            "fadeout",
+            "movetrans",
+            "quake",
+            "shake",
+            "flash",
+            "msgwnd",
+            "wndctrl",
+            "resetfont",
+            "font",
+            "size",
+            "bold",
+            "italic",
+            "ruby",
+            "nowrap",
+            "endnowrap",
+            "autowc",
+            "clickskip",
+        ] {
+            let mut diags = vec![];
+            KnownTag::from_tag(&tag_no_params(name), &mut diags);
+            assert!(
+                diags.is_empty(),
+                "[{name}] should produce no diagnostics when used without params"
+            );
+        }
     }
 }

@@ -53,7 +53,7 @@ pub mod tag_defs;
 
 pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 pub use error::{Severity, SyntaxError, SyntaxWarning};
-pub use tag_defs::{KnownTag, TagName};
+pub use tag_defs::{AttributeString, KnownTag, MaybeResolved, TagName};
 
 // ── Parser entry points ───────────────────────────────────────────────────────
 
