@@ -39,9 +39,7 @@ pub fn hover(doc: &ParsedDoc, offset: usize) -> Option<Hover> {
         TokenAtOffset::None => return None,
         TokenAtOffset::Single(t) => t,
         TokenAtOffset::Between(left, right) => {
-            if right.kind() == SyntaxKind::IDENT {
-                right
-            } else if left.kind() == SyntaxKind::WHITESPACE {
+            if right.kind() == SyntaxKind::IDENT || left.kind() == SyntaxKind::WHITESPACE {
                 right
             } else {
                 left
