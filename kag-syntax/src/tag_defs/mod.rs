@@ -70,7 +70,7 @@ pub enum MaybeResolved<'src, T> {
 // ─── Private parsing helpers ──────────────────────────────────────────────────
 
 /// Wrap a [`ParamValue`] as a string attribute.
-fn parse_str_attr<'src>(pv: ParamValue<'src>) -> MaybeResolved<'src, AttributeString<'src>> {
+fn parse_str_attr(pv: ParamValue) -> MaybeResolved<AttributeString> {
     match pv {
         ParamValue::Literal(s) => MaybeResolved::Literal(AttributeString(s)),
         other => MaybeResolved::Dynamic(other),
@@ -559,7 +559,7 @@ mod tests {
     use crate::ast::{Param, ParamValue, Tag};
     use crate::error::Severity;
 
-    fn span() -> miette::SourceSpan {
+    fn span() -> SourceSpan {
         (0usize, 0usize).into()
     }
 
