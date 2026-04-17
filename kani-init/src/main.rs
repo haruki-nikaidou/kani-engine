@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
 
     let entry_script = std::fs::read_to_string(&init_path)
         .map(|s| s.trim().to_owned())
-        .unwrap_or_else(|_| "scenario/first.ks".to_owned());
+        .unwrap_or_else(|_| "first.ks".to_owned());
 
     let pak_path = std::env::args()
         .nth(1)

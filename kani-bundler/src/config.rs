@@ -58,7 +58,7 @@ pub struct AssetsConfig {
 }
 
 fn default_assets_base() -> String {
-    "data".to_owned()
+    "src".to_owned()
 }
 
 fn default_asset_attrs() -> Vec<[String; 2]> {
