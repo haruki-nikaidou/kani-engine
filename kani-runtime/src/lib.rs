@@ -61,6 +61,7 @@ impl Plugin for KaniRuntimePlugin {
         app.insert_resource(self.asset_backend.clone());
 
         // 2. Spawn interpreter and insert bridge resource
+        #[allow(clippy::panic)]
         let bridge = spawn_interpreter(&self.entry_script, &self.asset_backend)
             .unwrap_or_else(|e| panic!("kani-runtime: failed to start interpreter: {e:#}"));
         app.insert_resource(bridge);
