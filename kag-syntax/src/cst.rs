@@ -519,8 +519,7 @@ impl CharaLine {
                     found_hash = true;
                     false
                 } else {
-                    found_hash
-                        && (t.kind() == SyntaxKind::IDENT || t.kind() == SyntaxKind::TEXT)
+                    found_hash && (t.kind() == SyntaxKind::IDENT || t.kind() == SyntaxKind::TEXT)
                 }
             })
             .map(|t| t.text().to_owned())
@@ -539,8 +538,7 @@ impl CharaLine {
                     found_colon = true;
                     false
                 } else {
-                    found_colon
-                        && (t.kind() == SyntaxKind::IDENT || t.kind() == SyntaxKind::TEXT)
+                    found_colon && (t.kind() == SyntaxKind::IDENT || t.kind() == SyntaxKind::TEXT)
                 }
             })
             .map(|t| t.text().to_owned())

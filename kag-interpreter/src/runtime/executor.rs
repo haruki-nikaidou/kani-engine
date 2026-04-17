@@ -786,7 +786,9 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
                 opacity: resolve_typed_field(ctx, opacity),
             })]
         }
-        KnownTag::Free { layer } | KnownTag::Freeimage { layer } | KnownTag::Freelayer { layer } => {
+        KnownTag::Free { layer }
+        | KnownTag::Freeimage { layer }
+        | KnownTag::Freelayer { layer } => {
             vec![KagEvent::Tag(ResolvedTag::Free {
                 layer: resolve_str_field(ctx, layer),
             })]
@@ -985,7 +987,11 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             ctx.current_keyframe_name = None;
             vec![]
         }
-        KnownTag::Kanim { layer, name, r#loop } => {
+        KnownTag::Kanim {
+            layer,
+            name,
+            r#loop,
+        } => {
             let frames = resolve_str_field(ctx, name)
                 .and_then(|n| ctx.keyframe_defs.get(&n).cloned())
                 .unwrap_or_default();
@@ -998,7 +1004,11 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         KnownTag::StopKanim { layer } => vec![KagEvent::Tag(ResolvedTag::StopKanim {
             layer: resolve_str_field(ctx, layer),
         })],
-        KnownTag::Xanim { layer, name, r#loop } => {
+        KnownTag::Xanim {
+            layer,
+            name,
+            r#loop,
+        } => {
             let frames = resolve_str_field(ctx, name)
                 .and_then(|n| ctx.keyframe_defs.get(&n).cloned())
                 .unwrap_or_default();
@@ -1160,7 +1170,10 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             ) {
                 if let Some(def) = ctx.chara_registry.get_mut(&n) {
                     def.faces.retain(|v| v.face != f);
-                    def.faces.push(crate::runtime::context::FaceVariant { face: f, storage: s });
+                    def.faces.push(crate::runtime::context::FaceVariant {
+                        face: f,
+                        storage: s,
+                    });
                 }
             }
             vec![]
@@ -1169,7 +1182,11 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             let name_val = resolve_str_field(ctx, name);
             vec![KagEvent::Tag(ResolvedTag::Extension {
                 name: "chara_config".to_owned(),
-                params: if let Some(n) = name_val { vec![("name".to_owned(), n)] } else { vec![] },
+                params: if let Some(n) = name_val {
+                    vec![("name".to_owned(), n)]
+                } else {
+                    vec![]
+                },
             })]
         }
         KnownTag::CharaShow {
@@ -1182,7 +1199,8 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         } => {
             let name_val = resolve_str_field(ctx, name);
             let face_val = resolve_str_field(ctx, face);
-            let storage = name_val.as_deref()
+            let storage = name_val
+                .as_deref()
                 .and_then(|n| ctx.chara_registry.get(n))
                 .and_then(|def| def.resolve_face(face_val.as_deref()));
             vec![KagEvent::Tag(ResolvedTag::CharaShow {
@@ -1229,7 +1247,8 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             let face_val = resolve_str_field(ctx, face);
             let direct_storage = resolve_str_field(ctx, storage);
             let resolved_storage = direct_storage.or_else(|| {
-                name_val.as_deref()
+                name_val
+                    .as_deref()
                     .and_then(|n| ctx.chara_registry.get(n))
                     .and_then(|def| def.resolve_face(face_val.as_deref()))
             });
@@ -1265,7 +1284,11 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
                 visible: resolve_typed_field(ctx, visible),
             })]
         }
-        KnownTag::CharaPart { name, part, storage } => {
+        KnownTag::CharaPart {
+            name,
+            part,
+            storage,
+        } => {
             vec![KagEvent::Tag(ResolvedTag::CharaPart {
                 name: resolve_str_field(ctx, name),
                 part: resolve_str_field(ctx, part),

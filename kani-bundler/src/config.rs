@@ -79,9 +79,7 @@ fn default_asset_attrs() -> Vec<[String; 2]> {
 impl AssetsConfig {
     /// Returns `true` if `(tag_name, attr_name)` is an asset reference pair.
     pub fn is_asset_attr(&self, tag: &str, attr: &str) -> bool {
-        self.asset_attrs
-            .iter()
-            .any(|[t, a]| t == tag && a == attr)
+        self.asset_attrs.iter().any(|[t, a]| t == tag && a == attr)
     }
 }
 
@@ -116,8 +114,8 @@ fn default_compression() -> String {
 /// Load and parse the `kani.toml` in `project_dir`.
 pub fn load_config(project_dir: &Path) -> Result<KaniConfig> {
     let path = project_dir.join("kani.toml");
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("reading '{}'", path.display()))?;
+    let text =
+        std::fs::read_to_string(&path).with_context(|| format!("reading '{}'", path.display()))?;
     toml::from_str(&text).with_context(|| format!("parsing '{}'", path.display()))
 }
 
