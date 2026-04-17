@@ -1,0 +1,303 @@
+---
+title: メディア — 画像・音声・動画・アニメーション
+description: 画像レイヤー・音声再生・動画・トランジション・スクリーンエフェクト・アニメーションタグ。
+sidebar:
+  order: 4
+---
+
+---
+
+## 画像・レイヤーシステム
+
+{% tabs %}
+{% tabitem label="[bg]" %}
+
+背景画像を設定します。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `storage=` | string | **はい** | 画像ファイルのパス |
+| `time=` | ms | いいえ | トランジション時間 |
+| `method=` | string | いいえ | トランジション方法名 |
+
+```ks
+[bg storage=bg/forest.jpg time=1000 method=crossfade]
+```
+
+{% /tabitem %}
+{% tabitem label="[image]" %}
+
+指定レイヤーに画像を表示します。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `storage=` | string | **はい** | 画像ファイルのパス |
+| `layer=` | string | いいえ | レイヤー識別子 |
+| `x=` | float | いいえ | 水平位置 |
+| `y=` | float | いいえ | 垂直位置 |
+| `visible=` | bool | いいえ | 初期表示状態 |
+
+{% /tabitem %}
+{% tabitem label="[layopt]" %}
+
+既存レイヤーのオプションを変更します。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `layer=` | string | **はい** | レイヤー識別子 |
+| `visible=` | bool | いいえ | 表示・非表示 |
+| `opacity=` | float | いいえ | 透明度（0.0–1.0） |
+
+{% /tabitem %}
+{% tabitem label="レイヤーユーティリティ" %}
+
+- **`[free layer=…]`** / **`[freeimage layer=…]`** / **`[freelayer layer=…]`** — レイヤーを完全に削除します。
+- **`[position layer=… x=… y=…]`** — レイヤーを新しい位置に移動します。
+- **`[backlay]`** — 現在のフロントレイヤーをバックレイヤーにコピーします（トランジション前に使用）。
+- **`[current layer=…]`** — アクティブなメッセージ/テキストレイヤーを切り替えます。
+- **`[locate x=… y=…]`** — 現在のメッセージレイヤー内でテキストカーソルを移動します。
+
+{% /tabitem %}
+{% tabitem label="レイヤーモードとフィルター" %}
+
+- **`[layermode layer=… mode=…]`** — ブレンドモードを設定します（`Normal`・`Add`・`Multiply`…）。
+- **`[free_layermode layer=…]`** — ブレンドモードを `Normal` にリセットします。
+- **`[filter layer=… type=… …]`** — シェーダーエフェクトを適用します（ぼかし・グレースケール・セピア・カラーライズ…）。
+- **`[free_filter layer=…]`** — フィルターを削除します。
+- **`[position_filter layer=… x=… y=…]`** — レイヤー内でフィルターを配置します。
+- **`[mask layer=… storage=…]`** — アルファマスク画像を適用します。
+- **`[mask_off layer=…]`** — マスクを削除します。
+- **`[graph layer=… shape=… x=… y=… width=… height=… color=…]`** — プリミティブ図形（`rect`・`circle`・`line`）を描画します。
+
+{% /tabitem %}
+{% /tabs %}
+
+---
+
+## オーディオ
+
+{% tabs %}
+{% tabitem label="BGM" %}
+
+### `[bgm storage=… loop=… volume=… fadetime=…]`
+
+BGM を再生します。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `storage=` | string | **はい** | 音声ファイルのパス |
+| `loop=` | bool | いいえ | ループ再生（デフォルト: true） |
+| `volume=` | float | いいえ | 音量 0.0–1.0 |
+| `fadetime=` | ms | いいえ | フェードイン時間 |
+
+### `[fadeinbgm storage=… time=…]`
+
+フェードインしながら BGM を再生します（`[bgm … fadetime=time]` のエイリアス）。
+
+### `[stopbgm fadetime=…]` / `[fadeoutbgm time=…]`
+
+BGM を停止します。`[fadeoutbgm]` は `[stopbgm fadetime=time]` のエイリアスです。
+
+### `[fadebgm time=… volume=…]`
+
+BGM を停止せずに音量を滑らかに変更します。
+
+### `[pausebgm]` / `[resumebgm]`
+
+現在のシーク位置で BGM を一時停止・再開します。
+
+### `[xchgbgm storage=… time=…]`
+
+クロスフェード：現在の BGM をフェードアウトしながら新しい BGM を開始します。
+
+### `[bgmopt loop=… seek=…]`
+
+再生中の BGM を再起動せずにオプションを変更します。
+
+### ウェイトタグ
+
+| タグ | 説明 |
+|------|------|
+| `[wb]` / `[wbgm]` | BGM フェードの完了を待つ |
+
+{% /tabitem %}
+{% tabitem label="SE" %}
+
+### `[se storage=… buf=… volume=… loop=…]`
+
+効果音を再生します。エイリアス：`[playSe]`。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `storage=` | string | **はい** | 音声ファイルのパス |
+| `buf=` | int | いいえ | バッファスロット（SE の多重再生用） |
+| `volume=` | float | いいえ | 音量 0.0–1.0 |
+| `loop=` | bool | いいえ | ループ再生 |
+
+### `[stopse buf=…]`
+
+効果音バッファを停止します。
+
+### `[pausese buf=…]` / `[resumese buf=…]`
+
+効果音バッファを一時停止・再開します。
+
+### `[seopt buf=… loop=…]`
+
+再生中の SE バッファを再起動せずにオプションを変更します。
+
+### ウェイトタグ
+
+| タグ | 説明 |
+|------|------|
+| `[ws]` / `[wse buf=…]` | SE バッファの完了を待つ |
+
+{% /tabitem %}
+{% tabitem label="ボイス" %}
+
+### `[vo storage=… buf=…]`
+
+ボイスを再生します。エイリアス：`[voice]`。
+
+| タグ | 説明 |
+|------|------|
+| `[wv]` | ボイス再生の完了を待つ |
+
+{% /tabitem %}
+{% tabitem label="音量制御" %}
+
+### `[changevol target=… vol=… time=…]`
+
+チャンネル（`bgm`・`se`・`voice`）の音量を、任意のフェードつきで設定します。
+
+| 属性 | 型 | 説明 |
+|------|----|------|
+| `target=` | string | チャンネル：`bgm`・`se`・`voice` |
+| `vol=` | float | 目標音量 0.0–1.0 |
+| `time=` | ms | フェード時間（0 = 即時） |
+
+{% /tabitem %}
+{% /tabs %}
+
+---
+
+## 動画・ムービー
+
+{% tabs %}
+{% tabitem label="背景動画" %}
+
+### `[bgmovie storage=… loop=… volume=…]`
+
+動画を背景として再生します。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `storage=` | string | **はい** | 動画ファイルのパス |
+| `loop=` | bool | いいえ | ループ再生 |
+| `volume=` | float | いいえ | 音量 |
+
+### `[stop_bgmovie]`
+
+背景動画を停止します。
+
+### `[wait_bgmovie]`
+
+背景動画の再生完了を待ちます。
+
+{% /tabitem %}
+{% tabitem label="前景動画" %}
+
+### `[movie storage=… x=… y=… width=… height=…]`
+
+動画を前景オーバーレイとして再生します。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `storage=` | string | **はい** | 動画ファイルのパス |
+| `x=` / `y=` | float | いいえ | 位置 |
+| `width=` / `height=` | float | いいえ | サイズ |
+
+{% /tabitem %}
+{% /tabs %}
+
+---
+
+## トランジション
+
+### `[trans method=… time=… rule=…]`
+
+ビジュアルシーントランジションを適用します。
+
+| 属性 | 型 | 説明 |
+|------|----|------|
+| `method=` | string | トランジション種類（例：`crossfade`・`wipe`） |
+| `time=` | ms | 時間 |
+| `rule=` | string | カスタムトランジション用ルール画像 |
+
+### `[fadein time=… color=…]` / `[fadeout time=… color=…]`
+
+指定色からフェードイン、または指定色へフェードアウトします。
+
+### `[movetrans layer=… time=… x=… y=…]`
+
+レイヤーを `time` ms かけて `(x, y)` に移動するトランジション。
+
+---
+
+## スクリーンエフェクト
+
+| タグ | 説明 |
+|------|------|
+| `[quake time=… hmax=… vmax=…]` | 画面クエイク。`hmax`/`vmax` は最大ピクセル変位。 |
+| `[shake time=… amount=… axis=…]` | 画面シェイク。`axis=` は `"h"`・`"v"`、または省略で両方。 |
+| `[flash time=… color=…]` | 指定色で画面をフラッシュ。 |
+
+---
+
+## アニメーション
+
+### `[anim layer=… preset=… time=… loop=… delay=…]`
+
+指定レイヤーにプリセットアニメーションを再生します。
+
+| 属性 | 型 | 説明 |
+|------|----|------|
+| `layer=` | string | 対象レイヤー識別子 |
+| `preset=` | string | アニメーションプリセット名（下記参照） |
+| `time=` | ms | 時間 |
+| `loop=` | bool | ループ |
+| `delay=` | ms | 開始前のディレイ |
+
+**使用可能なプリセット：** `fadein`・`fadeout`・`slide_left`・`slide_right`・`slide_up`・`slide_down`・`zoom_in`・`zoom_out`・`bounce`・`rotate`
+
+### `[stopanim layer=…]`
+
+レイヤーの進行中アニメーションをキャンセルします。
+
+### キーフレームアニメーション
+
+名前付きキーフレームシーケンスを定義してレイヤーに適用します。
+
+```ks
+[keyframe name=myanim]
+[frame time=0 opacity=0 x=0]
+[frame time=500 opacity=1 x=200]
+[frame time=1000 opacity=0 x=400]
+[endkeyframe]
+
+[kanim layer=bg name=myanim loop=false]
+[wm]
+[stop_kanim layer=bg]
+```
+
+`[xanim]` / `[stop_xanim]` はキャラクターレイヤーに同じキーフレーム機構を適用します。
+
+| タグ | 説明 |
+|------|------|
+| `[keyframe name=…]` | 名前付きキーフレーム定義を開始 |
+| `[frame time=… opacity=… x=… y=…]` | `[keyframe]` ブロック内の 1 フレーム |
+| `[endkeyframe]` | キーフレーム定義を終了 |
+| `[kanim layer=… name=… loop=…]` | レイヤーにキーフレームアニメーションを再生 |
+| `[stop_kanim layer=…]` | キーフレームアニメーションを停止 |
+| `[xanim layer=… name=… loop=…]` | キャラクターレイヤーにキーフレームアニメーションを再生 |
+| `[stop_xanim layer=…]` | キャラクターキーフレームアニメーションを停止 |

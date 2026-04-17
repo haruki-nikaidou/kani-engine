@@ -1,0 +1,87 @@
+---
+title: マクロとスクリプト
+description: マクロシステム・Rhai スクリプトブロック・その他のタグ。
+sidebar:
+  order: 7
+---
+
+---
+
+## マクロシステム
+
+{% steps %}
+
+1. `[macro name=…]` … `[endmacro]` でマクロを**定義**します：
+
+   ```ks
+   [macro name=fade_to_black]
+   [fadeout time=500 color=0x000000]
+   [wf]
+   [endmacro]
+   ```
+
+2. マクロ名でどこからでも**呼び出せ**ます：
+
+   ```ks
+   [fade_to_black]
+   ```
+
+3. 呼び出し元でパラメータを渡し、ボディ内で `%key` または `mp` Rhai マップで**受け取り**ます：
+
+   ```ks
+   [macro name=say_hello]
+   こんにちは、%name|名無しさん！
+   [endmacro]
+
+   [say_hello name=Alice]
+   ```
+
+{% /steps %}
+
+### `[erasemacro name=…]`
+
+ランタイムでマクロ定義を削除します。
+
+---
+
+## Rhai スクリプトブロック
+
+### `[iscript]` / `[endscript]`
+
+複数行の Rhai スクリプトブロックを実行します。タグ間のすべてのテキストが Rhai コードとして実行されます。
+
+```ks
+[iscript]
+  let total = 0;
+  for i in 0..10 {
+      total += i;
+  }
+  f.total = total;
+[endscript]
+```
+
+{% aside type="note" %}
+`[iscript]`/`[endscript]` ブロックは `[eval]` と同じ Rhai スコープで実行されます。`f`・`sf`・`tf` への変更は永続化されます。
+{% /aside %}
+
+---
+
+## URL を開く
+
+### `[web url=…]`
+
+システムブラウザで URL を開きます。
+
+```ks
+[web url="https://example.com"]
+```
+
+---
+
+## 変数・スタックの管理
+
+| タグ | クリア対象 |
+|------|-----------|
+| `[clearvar]` | `f` のすべてのゲームフラグ |
+| `[clearsysvar]` | `sf` のすべてのシステムフラグ |
+| `[clearstack]` | コール・if・マクロスタック |

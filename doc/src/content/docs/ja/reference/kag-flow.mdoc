@@ -1,0 +1,102 @@
+---
+title: 制御フローとナビゲーション
+description: 条件分岐・シーン遷移・選択肢リンク。
+sidebar:
+  order: 2
+---
+
+---
+
+## 条件分岐
+
+### `[if]` / `[elsif]` / `[else]` / `[endif]`
+
+```ks
+[if exp="f.score >= 100"]
+完璧なスコアです！
+[elsif exp="f.score >= 50"]
+なかなかです。頑張りましょう！
+[else]
+次は頑張ってください。
+[endif]
+```
+
+`exp=` は論理値に評価される Rhai 式です。真偽判定のルール：
+
+| 型 | 偽となる条件 |
+|----|------------|
+| `bool` | `false` |
+| `int` | `0` |
+| `string` | 空文字列 `""` |
+| その他の型 | ユニット値 |
+
+### `[ignore exp=…]` / `[endignore]`
+
+`exp=` が真のとき、`[ignore]` と `[endignore]` の間をすべてスキップします。大きなブロックを条件付きでコメントアウトするのに便利です：
+
+```ks
+[ignore exp="sf.debug == false"]
+[trace exp="f.current_scene"]
+[endignore]
+```
+
+---
+
+## ナビゲーション
+
+{% tabs %}
+{% tabitem label="[jump]" %}
+
+ラベルへ無条件ジャンプします。`storage=` で現在のファイルを切り替え、`target=` でラベル名（`*` プレフィックス込み）を指定します。
+
+```ks
+[jump target=*game_over]
+[jump storage=scene02.ks target=*start]
+```
+
+{% /tabitem %}
+{% tabitem label="[call] / [return]" %}
+
+`[jump]` と同様ですが、現在の位置をコールスタックに積むので `[return]` で戻れます。
+
+```ks
+[call target=*show_inventory]
+; [return] の後、ここから実行が再開される
+```
+
+新しいシーンへのハードジャンプ前に `[clearstack]` でスタック全体を破棄できます。
+
+{% /tabitem %}
+{% /tabs %}
+
+---
+
+## 選択肢リンク
+
+### `[link]` / `[endlink]`
+
+`[link]` と `[endlink]` の間に 1 つ以上の選択肢ボタンを定義します。各 `[link]` タグが 1 つの選択肢です。
+
+```ks
+[link target=*choice_a]
+選択肢 A
+[link target=*choice_b]
+選択肢 B
+[endlink]
+```
+
+属性：
+
+| 属性 | 型 | 説明 |
+|------|----|------|
+| `storage=` | string | ジャンプ先シナリオファイル |
+| `target=` | string | ジャンプ先ラベル |
+| `text=` | string | ボタンラベルテキスト（インラインテキストの代替） |
+
+{% aside type="note" %}
+`storage=` か `target=` のどちらか一方は指定してください。
+{% /aside %}
+
+### `[glink]` — グラフィカルリンクボタン
+
+`[link]` と同じ動作ですが、テキストスパンではなく画像ボタンを想定します。

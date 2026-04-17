@@ -1,0 +1,165 @@
+---
+title: Display, Waits & Events
+description: Text display control, timed waits, and event handler tags.
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+---
+
+## Display Control
+
+| Tag | Description |
+|-----|-------------|
+| `[l]` | Wait for a click (line wait). |
+| `[p]` | Wait for a click then clear the message window. |
+| `[r]` | Insert a line break. |
+| `[s]` | Halt execution until an event fires (click, timeout, …). |
+| `[cm]` | Clear the current message layer. |
+| `[er]` | Erase all layers. |
+| `[ch text=…]` | Output a single full-width character. |
+| `[hch text=…]` | Output a single half-width character. |
+
+### Nowait mode
+
+| Tag | Description |
+|-----|-------------|
+| `[nowait]` | `[l]` and `[p]` no longer block for a click. |
+| `[endnowait]` | Restore normal click-wait behaviour. |
+
+---
+
+## Timed Waits
+
+### `[wait time=N canskip=…]`
+
+Pause execution for `N` milliseconds. If `canskip=true` (default), the player can click to skip.
+
+```ks
+[wait time=2000]
+[wait time=5000 canskip=false]
+```
+
+### `[wc time=N]`
+
+Wait up to `N` ms for a click. Click cancels the timer early.
+
+### Wait-for-completion tags
+
+The following tags wait for the named async operation to finish:
+
+| Tag | Waits for… |
+|-----|-----------|
+| `[wa]` | All async operations |
+| `[wm]` | Move/position animation |
+| `[wt]` | Transition |
+| `[wq]` | Quake/shake/flash effect |
+| `[wb]` | BGM fade |
+| `[wf]` | Fadein/fadeout |
+| `[wl]` | Layer fade |
+| `[ws]` | Sound effect |
+| `[wv]` | Voice |
+| `[wp]` | Pause (generic) |
+
+All accept optional `canskip=true/false` and `buf=N` attributes.
+
+### `[ct]`
+
+Cancel all in-progress asynchronous operations immediately.
+
+---
+
+## Event Handlers
+
+### `[click storage=… target=… exp=…]`
+
+Register a jump (or expression) to execute the next time the player clicks while execution is halted at `[s]`. Provide at least one of `storage=`/`target=`/`exp=`.
+
+```ks
+[click target=*resume]
+[s]
+```
+
+### `[wheel storage=… target=… exp=…]`
+
+Same as `[click]` but fires on mouse-wheel scroll.
+
+### `[timeout time=N storage=… target=…]`
+
+Register a jump that fires automatically after `N` milliseconds while at `[s]`.
+
+```ks
+[timeout time=3000 target=*auto_continue]
+[s]
+```
+
+### Cancellation
+
+| Tag | Cancels |
+|-----|---------|
+| `[cclick]` | Active `[click]` handler |
+| `[ctimeout]` | Active `[timeout]` handler |
+| `[cwheel]` | Active `[wheel]` handler |
+| `[waitclick]` | Wait until next click, then continue |
+
+---
+
+## Skip Control
+
+| Tag | Description |
+|-----|-------------|
+| `[skipstart]` | Enable skip mode — `[l]`/`[p]` waits are auto-advanced at high speed. |
+| `[skipstop]` | Disable skip mode. |
+| `[cancelskip]` | Cancel skip mode (alias for `[skipstop]`). |
+| `[clickskip enabled=…]` | Enable or disable click-to-skip for transitions and animations. |
+
+---
+
+## Display Speed
+
+| Tag | Description |
+|-----|-------------|
+| `[delay speed=N]` | Set per-character display delay (ms) |
+| `[configdelay speed=N]` | Set the config-layer display delay |
+| `[resetdelay]` | Reset delay to system default |
+| `[nowait]` | Disable character-by-character delay entirely |
+| `[endnowait]` | Re-enable delay |
+| `[autowc time=N]` | Per-character post-display wait; `time=` omitted to disable |
+| `[resetwait]` | Reset the auto-wait baseline timer |
+
+---
+
+## Backlog
+
+### `[pushlog text=… join=…]`
+
+Manually push a string into the backlog.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `text=` | string | The text to record |
+| `join=` | bool | Append to the previous backlog entry instead of starting a new one |
+
+### `[nolog]` / `[endnolog]`
+
+Disable/re-enable automatic backlog recording of `DisplayText` events.
+
+---
+
+## Player Input
+
+### `[input name=… prompt=… title=…]`
+
+Open a text-input dialog. The entered value is stored in `f[name]`.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `name=` | string | Key in `f` to write the result into |
+| `prompt=` | string | Placeholder / hint text |
+| `title=` | string | Dialog title |
+
+### `[waittrig name=…]`
+
+Halt execution until the host fires a named trigger event.

@@ -1,0 +1,89 @@
+---
+title: Macros & Scripting
+description: Macro system, Rhai script blocks, and miscellaneous tags.
+sidebar:
+  order: 7
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+---
+
+## Macro System
+
+{% steps %}
+
+1. **Define** the macro with `[macro name=…]` … `[endmacro]`:
+
+   ```ks
+   [macro name=fade_to_black]
+   [fadeout time=500 color=0x000000]
+   [wf]
+   [endmacro]
+   ```
+
+2. **Invoke** it anywhere by its name:
+
+   ```ks
+   [fade_to_black]
+   ```
+
+3. **Pass parameters** at the call site; access them with `%key` or the `mp` Rhai map inside the body:
+
+   ```ks
+   [macro name=say_hello]
+   Hello, %name|stranger!
+   [endmacro]
+
+   [say_hello name=Alice]
+   ```
+
+{% /steps %}
+
+### `[erasemacro name=…]`
+
+Delete a macro definition at runtime.
+
+---
+
+## Rhai Script Blocks
+
+### `[iscript]` / `[endscript]`
+
+Execute a multi-line Rhai script block. All text between the tags is run as Rhai code.
+
+```ks
+[iscript]
+  let total = 0;
+  for i in 0..10 {
+      total += i;
+  }
+  f.total = total;
+[endscript]
+```
+
+{% aside type="note" %}
+`[iscript]`/`[endscript]` blocks run in the same Rhai scope as `[eval]` — mutations to `f`, `sf`, `tf` are persisted.
+{% /aside %}
+
+---
+
+## Open URL
+
+### `[web url=…]`
+
+Open a URL in the system browser.
+
+```ks
+[web url="https://example.com"]
+```
+
+---
+
+## Variable & Stack Management
+
+| Tag | Clears |
+|-----|--------|
+| `[clearvar]` | All `f` game flags |
+| `[clearsysvar]` | All `sf` system flags |
+| `[clearstack]` | Call, if, and macro stacks |

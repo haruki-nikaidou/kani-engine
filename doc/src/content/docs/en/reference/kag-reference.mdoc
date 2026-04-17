@@ -1,0 +1,196 @@
+---
+title: Quick Reference — All Tags
+description: Complete attribute table for every KAG tag.
+sidebar:
+  order: 8
+---
+
+| Tag | Required attrs | Optional attrs |
+|-----|---------------|---------------|
+| **Control flow** | | |
+| `[if]` | `exp=` | — |
+| `[elsif]` | `exp=` | — |
+| `[else]` | — | — |
+| `[endif]` | — | — |
+| `[ignore]` | `exp=` | — |
+| `[endignore]` | — | — |
+| **Navigation** | | |
+| `[jump]` | `storage=` or `target=` | both |
+| `[call]` | `storage=` or `target=` | both |
+| `[return]` | — | — |
+| `[clearstack]` | — | — |
+| **Choice links** | | |
+| `[link]` | `storage=` or `target=` | `text=` |
+| `[endlink]` | — | — |
+| `[glink]` | `storage=` or `target=` | `text=` |
+| **Rhai** | | |
+| `[eval]` | `exp=` | — |
+| `[emb]` | `exp=` | — |
+| `[trace]` | `exp=` | — |
+| `[iscript]` / `[endscript]` | — | — |
+| **Display** | | |
+| `[l]` | — | — |
+| `[p]` | — | — |
+| `[r]` | — | — |
+| `[s]` | — | — |
+| `[cm]` | — | — |
+| `[er]` | — | — |
+| `[ch]` | `text=` | — |
+| `[hch]` | `text=` | — |
+| **Timed waits** | | |
+| `[wait]` | `time=` | `canskip=` |
+| `[wc]` | `time=` | — |
+| `[ct]` | — | — |
+| `[wa]`…`[wp]` | — | `canskip=`, `buf=` |
+| `[wbgm]` | — | — |
+| `[wse]` | — | `buf=` |
+| **Event handlers** | | |
+| `[timeout]` | `time=` | `storage=`, `target=` |
+| `[waitclick]` | — | — |
+| `[click]` | `storage=`, `target=`, or `exp=` | all three |
+| `[wheel]` | `storage=`, `target=`, or `exp=` | all three |
+| `[cclick]` | — | — |
+| `[ctimeout]` | — | — |
+| `[cwheel]` | — | — |
+| **Skip control** | | |
+| `[skipstart]` | — | — |
+| `[skipstop]` | — | — |
+| `[cancelskip]` | — | — |
+| `[clickskip]` | — | `enabled=` |
+| **Display speed** | | |
+| `[nowait]` | — | — |
+| `[endnowait]` | — | — |
+| `[delay]` | `speed=` | — |
+| `[configdelay]` | `speed=` | — |
+| `[resetdelay]` | — | — |
+| `[autowc]` | — | `time=` |
+| `[resetwait]` | — | — |
+| **Backlog** | | |
+| `[nolog]` | — | — |
+| `[endnolog]` | — | — |
+| `[pushlog]` | `text=` | `join=` |
+| **Player input** | | |
+| `[input]` | `name=` | `prompt=`, `title=` |
+| `[waittrig]` | `name=` | — |
+| **Macros** | | |
+| `[macro]` | — | `name=` |
+| `[erasemacro]` | `name=` | — |
+| `[endmacro]` | — | — |
+| **Variables** | | |
+| `[clearvar]` | — | — |
+| `[clearsysvar]` | — | — |
+| **Image / layers** | | |
+| `[bg]` | `storage=` | `time=`, `method=` |
+| `[image]` | `storage=` | `layer=`, `x=`, `y=`, `visible=` |
+| `[layopt]` | `layer=` | `visible=`, `opacity=` |
+| `[free]` / `[freeimage]` / `[freelayer]` | `layer=` | — |
+| `[position]` | `layer=` | `x=`, `y=` |
+| `[backlay]` | — | — |
+| `[current]` | `layer=` | — |
+| `[locate]` | — | `x=`, `y=` |
+| `[layermode]` | `layer=`, `mode=` | — |
+| `[free_layermode]` | `layer=` | — |
+| `[filter]` | `layer=`, `type=` | varies by type |
+| `[free_filter]` | `layer=` | — |
+| `[position_filter]` | `layer=` | `x=`, `y=` |
+| `[mask]` | `layer=`, `storage=` | — |
+| `[mask_off]` | `layer=` | — |
+| `[graph]` | `layer=`, `shape=` | `x=`, `y=`, `width=`, `height=`, `color=` |
+| **Audio — BGM** | | |
+| `[bgm]` / `[playbgm]` | `storage=` | `loop=`, `volume=`, `fadetime=` |
+| `[fadeinbgm]` | `storage=` | `time=` |
+| `[stopbgm]` | — | `fadetime=` |
+| `[fadeoutbgm]` | — | `time=` |
+| `[fadebgm]` | — | `time=`, `volume=` |
+| `[pausebgm]` | — | — |
+| `[resumebgm]` | — | — |
+| `[xchgbgm]` | `storage=` | `time=` |
+| `[bgmopt]` | — | `loop=`, `seek=` |
+| `[wb]` / `[wbgm]` | — | `canskip=` |
+| **Audio — SE** | | |
+| `[se]` / `[playSe]` | `storage=` | `buf=`, `volume=`, `loop=` |
+| `[stopse]` | — | `buf=` |
+| `[pausese]` | — | `buf=` |
+| `[resumese]` | — | `buf=` |
+| `[seopt]` | — | `buf=`, `loop=` |
+| `[ws]` / `[wse]` | — | `buf=`, `canskip=` |
+| **Audio — Voice** | | |
+| `[vo]` / `[voice]` | `storage=` | `buf=` |
+| `[wv]` | — | `canskip=`, `buf=` |
+| **Audio — Volume** | | |
+| `[changevol]` | `target=` | `vol=`, `time=` |
+| **Video** | | |
+| `[bgmovie]` | `storage=` | `loop=`, `volume=` |
+| `[stop_bgmovie]` | — | — |
+| `[wait_bgmovie]` | — | — |
+| `[movie]` | `storage=` | `x=`, `y=`, `width=`, `height=` |
+| **Transitions** | | |
+| `[trans]` | — | `method=`, `time=`, `rule=` |
+| `[fadein]` | — | `time=`, `color=` |
+| `[fadeout]` | — | `time=`, `color=` |
+| `[movetrans]` | — | `layer=`, `time=`, `x=`, `y=` |
+| **Effects** | | |
+| `[quake]` | — | `time=`, `hmax=`, `vmax=` |
+| `[shake]` | — | `time=`, `amount=`, `axis=` |
+| `[flash]` | — | `time=`, `color=` |
+| **Animation** | | |
+| `[anim]` | `layer=`, `preset=` | `time=`, `loop=`, `delay=` |
+| `[stopanim]` | `layer=` | — |
+| `[keyframe]` | `name=` | — |
+| `[frame]` | `time=` | `opacity=`, `x=`, `y=` |
+| `[endkeyframe]` | — | — |
+| `[kanim]` | `layer=`, `name=` | `loop=` |
+| `[stop_kanim]` | `layer=` | — |
+| `[xanim]` | `layer=`, `name=` | `loop=` |
+| `[stop_xanim]` | `layer=` | — |
+| **Message window** | | |
+| `[msgwnd]` | — | `visible=`, `layer=` |
+| `[wndctrl]` | — | `x=`, `y=`, `width=`, `height=` |
+| `[resetfont]` | — | — |
+| `[font]` | — | `face=`, `size=`, `bold=`, `italic=` |
+| `[size]` | — | `value=` |
+| `[bold]` | — | `value=` |
+| `[italic]` | — | `value=` |
+| `[ruby]` | — | `text=` |
+| `[nowrap]` | — | — |
+| `[endnowrap]` | — | — |
+| **Characters** | | |
+| `[chara_new]` | `name=` | `storage=`, `width=`, `height=` |
+| `[chara_face]` | `name=`, `face=`, `storage=` | — |
+| `[chara_config]` | `name=` | varies |
+| `[chara_show]` | `name=` | `face=`, `x=`, `y=`, `time=`, `method=` |
+| `[chara_hide]` | `name=` | `time=`, `method=` |
+| `[chara_hide_all]` | — | `time=`, `method=` |
+| `[chara_free]` | `name=` | — |
+| `[chara_delete]` | `name=` | — |
+| `[chara_mod]` | `name=` | `face=`, `pose=`, `storage=` |
+| `[chara_move]` | `name=` | `x=`, `y=`, `time=` |
+| `[chara_layer]` | `name=`, `layer=` | — |
+| `[chara_layer_mod]` | `name=` | `opacity=`, `visible=` |
+| `[chara_part]` | `name=`, `part=`, `storage=` | — |
+| `[chara_part_reset]` | `name=` | — |
+| `[chara_ptext]` | `name=` | — |
+| **UI** | | |
+| `[button]` | — | `text=`, `x=`, `y=`, `width=`, `height=`, `bg=`, `hover_bg=`, `press_bg=`, `exp=`, `target=`, `storage=`, `key=`, `visible=`, `opacity=` |
+| `[clickable]` | `layer=` | `target=`, `storage=`, `exp=` |
+| `[showmenu]` | — | — |
+| `[showload]` | — | — |
+| `[showsave]` | — | — |
+| `[showlog]` | — | — |
+| `[hidemessage]` | — | — |
+| `[showmenubutton]` | — | — |
+| `[hidemenubutton]` | — | — |
+| `[dialog]` | — | `text=`, `title=` |
+| `[cursor]` | — | `storage=` |
+| `[speak_on]` | — | — |
+| `[speak_off]` | — | — |
+| `[glyph]` | — | `storage=` |
+| `[glyph_auto]` | — | `storage=` |
+| `[glyph_skip]` | — | `storage=` |
+| `[glink_config]` | — | varies |
+| `[mode_effect]` | `mode=` | `effect=` |
+| **Key config** | | |
+| `[start_keyconfig]` | — | — |
+| `[stop_keyconfig]` | — | — |
+| **Misc** | | |
+| `[web]` | `url=` | — |

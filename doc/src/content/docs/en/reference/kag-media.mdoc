@@ -1,0 +1,306 @@
+---
+title: Media — Images, Audio, Video & Animation
+description: Image layers, audio playback, video, transitions, screen effects, and animation tags.
+sidebar:
+  order: 4
+---
+
+import { Tabs, TabItem, Aside, Badge } from '@astrojs/starlight/components';
+
+---
+
+## Image / Layer System
+
+{% tabs %}
+{% tabitem label="[bg]" %}
+
+Set the background image.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `storage=` | string | **Yes** | Path to image file |
+| `time=` | ms | No | Transition duration |
+| `method=` | string | No | Transition method name |
+
+```ks
+[bg storage=bg/forest.jpg time=1000 method=crossfade]
+```
+
+{% /tabitem %}
+{% tabitem label="[image]" %}
+
+Display an image on a named layer.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `storage=` | string | **Yes** | Path to image file |
+| `layer=` | string | No | Layer identifier |
+| `x=` | float | No | Horizontal position |
+| `y=` | float | No | Vertical position |
+| `visible=` | bool | No | Initial visibility |
+
+{% /tabitem %}
+{% tabitem label="[layopt]" %}
+
+Change options on an existing layer.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `layer=` | string | **Yes** | Layer identifier |
+| `visible=` | bool | No | Show / hide |
+| `opacity=` | float | No | Transparency (0.0–1.0) |
+
+{% /tabitem %}
+{% tabitem label="Layer utilities" %}
+
+- **`[free layer=…]`** / **`[freeimage layer=…]`** / **`[freelayer layer=…]`** — Remove a layer entirely.
+- **`[position layer=… x=… y=…]`** — Move a layer to a new position.
+- **`[backlay]`** — Copy the current front layer to the back layer (used before a transition).
+- **`[current layer=…]`** — Set the active message/text layer.
+- **`[locate x=… y=…]`** — Move the text cursor within the current message layer.
+
+{% /tabitem %}
+{% tabitem label="Layer mode & filters" %}
+
+- **`[layermode layer=… mode=…]`** — Set the blend mode (`Normal`, `Add`, `Multiply`, …).
+- **`[free_layermode layer=…]`** — Reset blend mode to `Normal`.
+- **`[filter layer=… type=… …]`** — Apply a shader effect (blur, grayscale, sepia, colorize, …).
+- **`[free_filter layer=…]`** — Remove a filter.
+- **`[position_filter layer=… x=… y=…]`** — Position a filter within its layer.
+- **`[mask layer=… storage=…]`** — Apply an alpha mask image.
+- **`[mask_off layer=…]`** — Remove a mask.
+- **`[graph layer=… shape=… x=… y=… width=… height=… color=…]`** — Draw a primitive shape (`rect`, `circle`, `line`).
+
+{% /tabitem %}
+{% /tabs %}
+
+---
+
+## Audio
+
+{% tabs %}
+{% tabitem label="BGM" %}
+
+### `[bgm storage=… loop=… volume=… fadetime=…]`
+
+Start background music.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `storage=` | string | **Yes** | Path to audio file |
+| `loop=` | bool | No | Loop playback (default: true) |
+| `volume=` | float | No | Volume 0.0–1.0 |
+| `fadetime=` | ms | No | Fade-in duration |
+
+### `[fadeinbgm storage=… time=…]`
+
+Start BGM with a fade-in (alias for `[bgm … fadetime=time]`).
+
+### `[stopbgm fadetime=…]` / `[fadeoutbgm time=…]`
+
+Stop BGM. `[fadeoutbgm]` is an alias for `[stopbgm fadetime=time]`.
+
+### `[fadebgm time=… volume=…]`
+
+Smoothly change the BGM volume without stopping.
+
+### `[pausebgm]` / `[resumebgm]`
+
+Pause and resume BGM at the current seek position.
+
+### `[xchgbgm storage=… time=…]`
+
+Cross-fade: start new BGM while fading out the current one.
+
+### `[bgmopt loop=… seek=…]`
+
+Change options on the currently-playing BGM without restarting.
+
+### Wait tags
+
+| Tag | Description |
+|-----|-------------|
+| `[wb]` / `[wbgm]` | Wait for BGM fade to finish |
+
+{% /tabitem %}
+{% tabitem label="SE" %}
+
+### `[se storage=… buf=… volume=… loop=…]`
+
+Play a sound effect. Alias: `[playSe]`.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `storage=` | string | **Yes** | Path to audio file |
+| `buf=` | int | No | Buffer slot (for overlapping SEs) |
+| `volume=` | float | No | Volume 0.0–1.0 |
+| `loop=` | bool | No | Loop playback |
+
+### `[stopse buf=…]`
+
+Stop a sound effect buffer.
+
+### `[pausese buf=…]` / `[resumese buf=…]`
+
+Pause and resume a sound effect buffer.
+
+### `[seopt buf=… loop=…]`
+
+Change options on a currently-playing SE buffer without restarting.
+
+### Wait tags
+
+| Tag | Description |
+|-----|-------------|
+| `[ws]` / `[wse buf=…]` | Wait for an SE buffer to finish |
+
+{% /tabitem %}
+{% tabitem label="Voice" %}
+
+### `[vo storage=… buf=…]`
+
+Play a voice clip. Alias: `[voice]`.
+
+| Tag | Description |
+|-----|-------------|
+| `[wv]` | Wait for voice to finish |
+
+{% /tabitem %}
+{% tabitem label="Volume control" %}
+
+### `[changevol target=… vol=… time=…]`
+
+Set the volume for a target channel (`bgm`, `se`, `voice`) with an optional fade.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `target=` | string | Channel: `bgm`, `se`, or `voice` |
+| `vol=` | float | Target volume 0.0–1.0 |
+| `time=` | ms | Fade duration (0 = instant) |
+
+{% /tabitem %}
+{% /tabs %}
+
+---
+
+## Video / Movie
+
+{% tabs %}
+{% tabitem label="Background video" %}
+
+### `[bgmovie storage=… loop=… volume=…]`
+
+Play a video as the background.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `storage=` | string | **Yes** | Path to video file |
+| `loop=` | bool | No | Loop playback |
+| `volume=` | float | No | Audio volume |
+
+### `[stop_bgmovie]`
+
+Stop the background video.
+
+### `[wait_bgmovie]`
+
+Wait until the background video has finished playing.
+
+{% /tabitem %}
+{% tabitem label="Foreground video" %}
+
+### `[movie storage=… x=… y=… width=… height=…]`
+
+Play a video as a foreground overlay.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `storage=` | string | **Yes** | Path to video file |
+| `x=` / `y=` | float | No | Position |
+| `width=` / `height=` | float | No | Size |
+
+{% /tabitem %}
+{% /tabs %}
+
+---
+
+## Transitions
+
+### `[trans method=… time=… rule=…]`
+
+Apply a visual scene transition.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `method=` | string | Transition type (e.g. `crossfade`, `wipe`) |
+| `time=` | ms | Duration |
+| `rule=` | string | Rule image for custom transitions |
+
+### `[fadein time=… color=…]` / `[fadeout time=… color=…]`
+
+Fade in from or out to a solid colour.
+
+### `[movetrans layer=… time=… x=… y=…]`
+
+Move a layer to `(x, y)` over `time` ms as a transition.
+
+---
+
+## Screen Effects
+
+| Tag | Description |
+|-----|-------------|
+| `[quake time=… hmax=… vmax=…]` | Screen quake. `hmax`/`vmax` are maximum pixel displacement. |
+| `[shake time=… amount=… axis=…]` | Screen shake. `axis=` is `"h"`, `"v"`, or omitted for both. |
+| `[flash time=… color=…]` | Flash the screen with a colour. |
+
+---
+
+## Animation
+
+### `[anim layer=… preset=… time=… loop=… delay=…]`
+
+Play a preset animation on a named layer.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `layer=` | string | Target layer identifier |
+| `preset=` | string | Animation preset name (see below) |
+| `time=` | ms | Duration |
+| `loop=` | bool | Loop the animation |
+| `delay=` | ms | Delay before starting |
+
+**Available presets:** `fadein`, `fadeout`, `slide_left`, `slide_right`, `slide_up`, `slide_down`,
+`zoom_in`, `zoom_out`, `bounce`, `rotate`.
+
+### `[stopanim layer=…]`
+
+Cancel the ongoing animation on a layer.
+
+### Keyframe animation
+
+Define a named keyframe sequence and apply it to a layer.
+
+```ks
+[keyframe name=myanim]
+[frame time=0 opacity=0 x=0]
+[frame time=500 opacity=1 x=200]
+[frame time=1000 opacity=0 x=400]
+[endkeyframe]
+
+[kanim layer=bg name=myanim loop=false]
+[wm]
+[stop_kanim layer=bg]
+```
+
+`[xanim]` / `[stop_xanim]` apply the same keyframe mechanism to character layers.
+
+| Tag | Description |
+|-----|-------------|
+| `[keyframe name=…]` | Begin a named keyframe definition |
+| `[frame time=… opacity=… x=… y=…]` | One keyframe inside a `[keyframe]` block |
+| `[endkeyframe]` | End the keyframe definition |
+| `[kanim layer=… name=… loop=…]` | Play a keyframe animation on a layer |
+| `[stop_kanim layer=…]` | Stop a keyframe animation |
+| `[xanim layer=… name=… loop=…]` | Play a keyframe animation on a character layer |
+| `[stop_xanim layer=…]` | Stop a character keyframe animation |
