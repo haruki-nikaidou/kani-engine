@@ -51,7 +51,6 @@ pub enum EvInterpreterCall {
         join: bool,
     },
     Snapshot(Box<InterpreterSnapshot>),
-    TagRouted(EvTagRouted)
 }
 
 #[derive(Message, Debug, Clone)]

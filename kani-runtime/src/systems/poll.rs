@@ -11,6 +11,7 @@ use crate::bridge::{BridgeState, InterpreterBridge};
 use crate::events::{EvInterpreterCall, EvTagRouted};
 use crate::systems::scenario::load_and_send;
 
+
 /// Bevy system — called every `Update` frame.
 ///
 /// Drains `InterpreterBridge::event_rx` in a tight loop and maps each
@@ -23,6 +24,7 @@ pub fn poll_interpreter(
     mut bridge: ResMut<InterpreterBridge>,
     backend: Res<AssetBackend>,
     mut ev: MessageWriter<EvInterpreterCall>,
+    mut ev_tag: MessageWriter<EvTagRouted>,
 ) {
     loop {
         let event = match bridge.event_rx.try_recv() {
@@ -144,7 +146,7 @@ pub fn poll_interpreter(
 
             // ── Passthrough tags ──────────────────────────────────────────────
             KagEvent::Tag(resolved_tag) => {
-                ev.write(EvInterpreterCall::TagRouted(EvTagRouted(resolved_tag)));
+                ev_tag.write(EvTagRouted(resolved_tag));
             }
 
             // ── Lifecycle ─────────────────────────────────────────────────────
