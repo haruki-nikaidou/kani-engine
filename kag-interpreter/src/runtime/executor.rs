@@ -786,11 +786,13 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
                 layer: resolve_str_field(ctx, layer),
             }))]
         }
-        KnownTag::Position { layer, x, y } => vec![KagEvent::Tag(Box::new(ResolvedTag::Position {
-            layer: resolve_str_field(ctx, layer),
-            x: resolve_typed_field(ctx, x),
-            y: resolve_typed_field(ctx, y),
-        }))],
+        KnownTag::Position { layer, x, y } => {
+            vec![KagEvent::Tag(Box::new(ResolvedTag::Position {
+                layer: resolve_str_field(ctx, layer),
+                x: resolve_typed_field(ctx, x),
+                y: resolve_typed_field(ctx, y),
+            }))]
+        }
         KnownTag::Backlay {} => vec![KagEvent::Tag(Box::new(ResolvedTag::Backlay))],
         KnownTag::Current { layer } => vec![KagEvent::Tag(Box::new(ResolvedTag::Current {
             layer: resolve_str_field(ctx, layer),
@@ -799,13 +801,17 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             x: resolve_typed_field(ctx, x),
             y: resolve_typed_field(ctx, y),
         }))],
-        KnownTag::Layermode { layer, mode } => vec![KagEvent::Tag(Box::new(ResolvedTag::Layermode {
-            layer: resolve_str_field(ctx, layer),
-            mode: resolve_str_field(ctx, mode),
-        }))],
-        KnownTag::FreeLayermode { layer } => vec![KagEvent::Tag(Box::new(ResolvedTag::FreeLayermode {
-            layer: resolve_str_field(ctx, layer),
-        }))],
+        KnownTag::Layermode { layer, mode } => {
+            vec![KagEvent::Tag(Box::new(ResolvedTag::Layermode {
+                layer: resolve_str_field(ctx, layer),
+                mode: resolve_str_field(ctx, mode),
+            }))]
+        }
+        KnownTag::FreeLayermode { layer } => {
+            vec![KagEvent::Tag(Box::new(ResolvedTag::FreeLayermode {
+                layer: resolve_str_field(ctx, layer),
+            }))]
+        }
         KnownTag::Filter { layer, r#type } => vec![KagEvent::Tag(Box::new(ResolvedTag::Filter {
             layer: resolve_str_field(ctx, layer),
             filter_type: resolve_str_field(ctx, r#type),
@@ -885,10 +891,12 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             time: resolve_typed_field(ctx, time),
             volume: resolve_typed_field(ctx, volume),
         }))],
-        KnownTag::Xchgbgm { storage, time } => vec![KagEvent::Tag(Box::new(ResolvedTag::Xchgbgm {
-            storage: resolve_str_field(ctx, storage),
-            time: resolve_typed_field(ctx, time),
-        }))],
+        KnownTag::Xchgbgm { storage, time } => {
+            vec![KagEvent::Tag(Box::new(ResolvedTag::Xchgbgm {
+                storage: resolve_str_field(ctx, storage),
+                time: resolve_typed_field(ctx, time),
+            }))]
+        }
         KnownTag::Bgmopt { r#loop, seek } => vec![KagEvent::Tag(Box::new(ResolvedTag::Bgmopt {
             looping: resolve_typed_field(ctx, r#loop),
             seek: resolve_str_field(ctx, seek),
@@ -1045,11 +1053,13 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         }
 
         // ── Transition tags ───────────────────────────────────────────────
-        KnownTag::Trans { method, time, rule } => vec![KagEvent::Tag(Box::new(ResolvedTag::Trans {
-            method: resolve_str_field(ctx, method),
-            time: resolve_typed_field(ctx, time),
-            rule: resolve_str_field(ctx, rule),
-        }))],
+        KnownTag::Trans { method, time, rule } => {
+            vec![KagEvent::Tag(Box::new(ResolvedTag::Trans {
+                method: resolve_str_field(ctx, method),
+                time: resolve_typed_field(ctx, time),
+                rule: resolve_str_field(ctx, rule),
+            }))]
+        }
         KnownTag::Fadein { time, color } => vec![KagEvent::Tag(Box::new(ResolvedTag::Fadein {
             time: resolve_typed_field(ctx, time),
             color: resolve_str_field(ctx, color),
@@ -1073,11 +1083,13 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             hmax: resolve_typed_field(ctx, hmax),
             vmax: resolve_typed_field(ctx, vmax),
         }))],
-        KnownTag::Shake { time, amount, axis } => vec![KagEvent::Tag(Box::new(ResolvedTag::Shake {
-            time: resolve_typed_field(ctx, time),
-            amount: resolve_typed_field(ctx, amount),
-            axis: resolve_str_field(ctx, axis),
-        }))],
+        KnownTag::Shake { time, amount, axis } => {
+            vec![KagEvent::Tag(Box::new(ResolvedTag::Shake {
+                time: resolve_typed_field(ctx, time),
+                amount: resolve_typed_field(ctx, amount),
+                axis: resolve_str_field(ctx, axis),
+            }))]
+        }
         KnownTag::Flash { time, color } => vec![KagEvent::Tag(Box::new(ResolvedTag::Flash {
             time: resolve_typed_field(ctx, time),
             color: resolve_str_field(ctx, color),
@@ -1127,9 +1139,13 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         KnownTag::Ruby { text } => vec![KagEvent::Tag(Box::new(ResolvedTag::Ruby {
             text: resolve_str_field(ctx, text),
         }))],
-        KnownTag::Nowrap {} => vec![KagEvent::Tag(Box::new(ResolvedTag::Nowrap { enabled: true }))],
+        KnownTag::Nowrap {} => vec![KagEvent::Tag(Box::new(ResolvedTag::Nowrap {
+            enabled: true,
+        }))],
         KnownTag::Endnowrap {} => {
-            vec![KagEvent::Tag(Box::new(ResolvedTag::Nowrap { enabled: false }))]
+            vec![KagEvent::Tag(Box::new(ResolvedTag::Nowrap {
+                enabled: false,
+            }))]
         }
 
         // ── Character sprite tags ─────────────────────────────────────────
@@ -1223,7 +1239,9 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             if let Some(n) = &name_val {
                 ctx.chara_registry.remove(n);
             }
-            vec![KagEvent::Tag(Box::new(ResolvedTag::CharaDelete { name: name_val }))]
+            vec![KagEvent::Tag(Box::new(ResolvedTag::CharaDelete {
+                name: name_val,
+            }))]
         }
         KnownTag::CharaMod {
             name,
@@ -1292,17 +1310,25 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         // ── Skip control tags ─────────────────────────────────────────────
         KnownTag::Skipstart {} => {
             ctx.skip_mode = true;
-            vec![KagEvent::Tag(Box::new(ResolvedTag::SkipMode { enabled: true }))]
+            vec![KagEvent::Tag(Box::new(ResolvedTag::SkipMode {
+                enabled: true,
+            }))]
         }
         KnownTag::Skipstop {} | KnownTag::Cancelskip {} => {
             ctx.skip_mode = false;
-            vec![KagEvent::Tag(Box::new(ResolvedTag::SkipMode { enabled: false }))]
+            vec![KagEvent::Tag(Box::new(ResolvedTag::SkipMode {
+                enabled: false,
+            }))]
         }
         KnownTag::StartKeyconfig {} => {
-            vec![KagEvent::Tag(Box::new(ResolvedTag::KeyConfig { open: true }))]
+            vec![KagEvent::Tag(Box::new(ResolvedTag::KeyConfig {
+                open: true,
+            }))]
         }
         KnownTag::StopKeyconfig {} => {
-            vec![KagEvent::Tag(Box::new(ResolvedTag::KeyConfig { open: false }))]
+            vec![KagEvent::Tag(Box::new(ResolvedTag::KeyConfig {
+                open: false,
+            }))]
         }
 
         // ── UI tags ───────────────────────────────────────────────────────
@@ -1423,10 +1449,12 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         KnownTag::Macro { .. } => vec![],
 
         // ── Extension / unknown tags ──────────────────────────────────────
-        KnownTag::Extension { name, params } => vec![KagEvent::Tag(Box::new(ResolvedTag::Extension {
-            name: name.into_owned(),
-            params: resolve_raw_params(ctx, &params),
-        }))],
+        KnownTag::Extension { name, params } => {
+            vec![KagEvent::Tag(Box::new(ResolvedTag::Extension {
+                name: name.into_owned(),
+                params: resolve_raw_params(ctx, &params),
+            }))]
+        }
 
         // ── Control-flow tags ────────────────────────────────────────────
         KnownTag::If { .. }
