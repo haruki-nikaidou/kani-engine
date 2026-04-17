@@ -3,6 +3,57 @@ use kag_syntax::tag_defs::TagName;
 use crate::error::InterpreterDiagnostic;
 use crate::snapshot::InterpreterSnapshot;
 
+// ─── Rich text types ──────────────────────────────────────────────────────────
+
+/// Style attributes accumulated at a single text run.
+///
+/// Produced by parsing XML-style inline markup (`<b>`, `<i>`, `<color>`, …)
+/// within a message text line.  A span with all defaults is semantically
+/// equivalent to a plain string.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TextStyle {
+    pub bold: bool,
+    pub italic: bool,
+    /// CSS-style colour string (e.g. `"#ff0000"` or `"red"`).
+    pub color: Option<String>,
+    /// Font size in points.
+    pub size: Option<f32>,
+    pub shadow: bool,
+    pub outline: bool,
+    /// Furigana reading for the span (set by `<ruby rt="…">`).
+    pub ruby: Option<String>,
+    pub nowrap: bool,
+}
+
+/// A styled fragment of a message text line.
+///
+/// The concatenation of all `text` fields in a `Vec<TextSpan>` equals the
+/// plain text of the message.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextSpan {
+    pub text: String,
+    pub style: TextStyle,
+}
+
+// ─── Animation types ──────────────────────────────────────────────────────────
+
+/// One keyframe in a named keyframe animation sequence.
+///
+/// Produced by `[frame time=… opacity=… x=… y=…]` inside a
+/// `[keyframe]`…`[endkeyframe]` block and carried inside resolved
+/// [`ResolvedTag::Kanim`] / [`ResolvedTag::Xanim`] payloads.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FrameSpec {
+    /// Time offset from animation start in milliseconds.
+    pub time: u64,
+    /// Target opacity at this frame (0.0–1.0).  `None` means unchanged.
+    pub opacity: Option<f32>,
+    /// Target x-position at this frame.  `None` means unchanged.
+    pub x: Option<f32>,
+    /// Target y-position at this frame.  `None` means unchanged.
+    pub y: Option<f32>,
+}
+
 /// The variable-scope identifiers used in KAG scripts.
 ///
 /// - `F`  — per-play game flags (`f.flag_name`)
@@ -56,6 +107,60 @@ pub enum ResolvedTag {
         x: Option<f32>,
         y: Option<f32>,
     },
+    /// Copy the current front layer to the back layer (`[backlay]`).
+    Backlay,
+    /// Set the active message/text layer (`[current]`).
+    Current {
+        layer: Option<String>,
+    },
+    /// Position the text cursor within the current message layer (`[locate]`).
+    Locate {
+        x: Option<f32>,
+        y: Option<f32>,
+    },
+    /// Set the blend mode on a layer (`[layermode]`).
+    Layermode {
+        layer: Option<String>,
+        mode: Option<String>,
+    },
+    /// Reset the blend mode of a layer to Normal (`[free_layermode]`).
+    FreeLayermode {
+        layer: Option<String>,
+    },
+    /// Apply a named shader effect to a layer (`[filter]`).
+    Filter {
+        layer: Option<String>,
+        filter_type: Option<String>,
+    },
+    /// Remove a filter from a layer (`[free_filter]`).
+    FreeFilter {
+        layer: Option<String>,
+    },
+    /// Position a filter within its layer (`[position_filter]`).
+    PositionFilter {
+        layer: Option<String>,
+        x: Option<f32>,
+        y: Option<f32>,
+    },
+    /// Apply an alpha mask image to a layer (`[mask]`).
+    Mask {
+        layer: Option<String>,
+        storage: Option<String>,
+    },
+    /// Remove a mask from a layer (`[mask_off]`).
+    MaskOff {
+        layer: Option<String>,
+    },
+    /// Draw a primitive shape on a layer (`[graph]`).
+    Graph {
+        layer: Option<String>,
+        shape: Option<String>,
+        x: Option<f32>,
+        y: Option<f32>,
+        width: Option<f32>,
+        height: Option<f32>,
+        color: Option<String>,
+    },
 
     // ── Audio ─────────────────────────────────────────────────────────────────
     Bgm {
@@ -67,6 +172,24 @@ pub enum ResolvedTag {
     Stopbgm {
         fadetime: Option<u64>,
     },
+    Pausebgm {
+        buf: Option<u32>,
+    },
+    Resumebgm {
+        buf: Option<u32>,
+    },
+    Fadebgm {
+        time: Option<u64>,
+        volume: Option<f32>,
+    },
+    Xchgbgm {
+        storage: Option<String>,
+        time: Option<u64>,
+    },
+    Bgmopt {
+        looping: Option<bool>,
+        seek: Option<String>,
+    },
     Se {
         storage: Option<String>,
         buf: Option<u32>,
@@ -76,13 +199,73 @@ pub enum ResolvedTag {
     Stopse {
         buf: Option<u32>,
     },
+    Pausese {
+        buf: Option<u32>,
+    },
+    Resumese {
+        buf: Option<u32>,
+    },
+    Seopt {
+        buf: Option<u32>,
+        looping: Option<bool>,
+    },
     Vo {
         storage: Option<String>,
         buf: Option<u32>,
     },
-    Fadebgm {
+    Changevol {
+        target: Option<String>,
+        vol: Option<f32>,
         time: Option<u64>,
+    },
+
+    // ── Animation ─────────────────────────────────────────────────────────────
+    /// Play a preset animation on a named layer (`[anim]`).
+    Anim {
+        layer: Option<String>,
+        preset: Option<String>,
+        time: Option<u64>,
+        looping: bool,
+        delay: Option<u64>,
+    },
+    /// Stop the animation on a layer (`[stopanim]`).
+    StopAnim {
+        layer: Option<String>,
+    },
+    /// Play a keyframe animation on a layer (`[kanim]`).
+    Kanim {
+        layer: Option<String>,
+        frames: Vec<FrameSpec>,
+        looping: bool,
+    },
+    /// Stop a keyframe animation on a layer (`[stop_kanim]`).
+    StopKanim {
+        layer: Option<String>,
+    },
+    /// Play a keyframe animation on a character layer (`[xanim]`).
+    Xanim {
+        layer: Option<String>,
+        frames: Vec<FrameSpec>,
+        looping: bool,
+    },
+    /// Stop a keyframe animation on a character layer (`[stop_xanim]`).
+    StopXanim {
+        layer: Option<String>,
+    },
+
+    // ── Video / Movie ─────────────────────────────────────────────────────────
+    Bgmovie {
+        storage: Option<String>,
+        looping: bool,
         volume: Option<f32>,
+    },
+    StopBgmovie,
+    Movie {
+        storage: Option<String>,
+        x: Option<f32>,
+        y: Option<f32>,
+        width: Option<f32>,
+        height: Option<f32>,
     },
 
     // ── Transition ────────────────────────────────────────────────────────────
@@ -161,30 +344,143 @@ pub enum ResolvedTag {
     },
 
     // ── Character sprites ─────────────────────────────────────────────────────
-    Chara {
+    /// Show a character on screen with a resolved image path (`[chara_show]`).
+    CharaShow {
+        /// Character identifier.
         name: Option<String>,
-        id: Option<String>,
+        /// Resolved image path (face already looked up in the registry).
         storage: Option<String>,
-        slot: Option<String>,
         x: Option<f32>,
         y: Option<f32>,
+        time: Option<u64>,
+        method: Option<String>,
     },
+    /// Hide a character with an optional exit transition (`[chara_hide]`).
     CharaHide {
         name: Option<String>,
-        id: Option<String>,
-        slot: Option<String>,
+        time: Option<u64>,
+        method: Option<String>,
     },
+    /// Hide all visible characters at once (`[chara_hide_all]`).
+    CharaHideAll {
+        time: Option<u64>,
+        method: Option<String>,
+    },
+    /// Unload a character sprite from memory (`[chara_free]`).
     CharaFree {
         name: Option<String>,
-        id: Option<String>,
-        slot: Option<String>,
     },
+    /// Remove a character definition from the registry (`[chara_delete]`).
+    CharaDelete {
+        name: Option<String>,
+    },
+    /// Change the expression/pose of an on-screen character (`[chara_mod]`).
     CharaMod {
         name: Option<String>,
-        id: Option<String>,
+        /// Resolved image path after face/pose lookup.
+        storage: Option<String>,
         face: Option<String>,
         pose: Option<String>,
+    },
+    /// Animate a character to a new position (`[chara_move]`).
+    CharaMove {
+        name: Option<String>,
+        x: Option<f32>,
+        y: Option<f32>,
+        time: Option<u64>,
+    },
+    /// Assign a character to a z-layer (`[chara_layer]`).
+    CharaLayer {
+        name: Option<String>,
+        layer: Option<String>,
+    },
+    /// Modify layer-level properties of a character (`[chara_layer_mod]`).
+    CharaLayerMod {
+        name: Option<String>,
+        opacity: Option<f32>,
+        visible: Option<bool>,
+    },
+    /// Set a compositable part on a character (`[chara_part]`).
+    CharaPart {
+        name: Option<String>,
+        part: Option<String>,
         storage: Option<String>,
+    },
+    /// Reset all parts of a character to defaults (`[chara_part_reset]`).
+    CharaPartReset {
+        name: Option<String>,
+    },
+
+    // ── Skip / Key config ─────────────────────────────────────────────────────
+    /// Enable or disable skip mode (`[skipstart]` / `[skipstop]` / `[cancelskip]`).
+    SkipMode {
+        enabled: bool,
+    },
+    /// Open or close the key-binding configuration UI.
+    KeyConfig {
+        open: bool,
+    },
+
+    // ── UI ────────────────────────────────────────────────────────────────────
+    /// Spawn a clickable button widget (`[button]`).
+    Button {
+        text: Option<String>,
+        graphic: Option<String>,
+        x: Option<f32>,
+        y: Option<f32>,
+        width: Option<f32>,
+        height: Option<f32>,
+        bg: Option<String>,
+        hover_bg: Option<String>,
+        press_bg: Option<String>,
+        color: Option<String>,
+        font_size: Option<f32>,
+        target: Option<String>,
+        storage: Option<String>,
+        exp: Option<String>,
+        key: Option<String>,
+        visible: Option<bool>,
+        opacity: Option<f32>,
+    },
+    /// Make a layer respond to click events (`[clickable]`).
+    Clickable {
+        layer: Option<String>,
+        target: Option<String>,
+        storage: Option<String>,
+        exp: Option<String>,
+    },
+    /// Open a built-in UI panel (`[showmenu]`, `[showload]`, etc.).
+    OpenPanel {
+        kind: String,
+    },
+    /// Display a modal dialog box (`[dialog]`).
+    Dialog {
+        text: Option<String>,
+        title: Option<String>,
+    },
+    /// Change the mouse cursor image (`[cursor]`).
+    Cursor {
+        storage: Option<String>,
+    },
+    /// Toggle the speaker name box visibility (`[speak_on]` / `[speak_off]`).
+    SetSpeakerBoxVisible {
+        visible: bool,
+    },
+    /// Configure a click-wait glyph image (`[glyph]`, `[glyph_auto]`, `[glyph_skip]`).
+    SetGlyph {
+        kind: String,
+        storage: Option<String>,
+    },
+    /// Visual effect for mode changes (`[mode_effect]`).
+    ModeEffect {
+        mode: Option<String>,
+        effect: Option<String>,
+    },
+
+    // ── Web ───────────────────────────────────────────────────────────────────
+    /// Open a URL in the system browser (`[web]`).
+    Web {
+        url: Option<String>,
     },
 
     /// A tag not handled by the engine's built-in dispatch — either an
@@ -212,8 +508,14 @@ pub enum KagEvent {
     /// `speaker` is set when a preceding `#name` shorthand was encountered.
     /// `speed` is the per-character delay in ms (`None` = host default).
     /// `log` indicates whether this text should be recorded in the backlog.
+    ///
+    /// `text` holds the plain text (XML markup stripped) for backward compatibility.
+    /// `spans` holds the same content split into styled runs parsed from XML inline markup.
+    /// The concatenation of all `spans[i].text` equals `text`.
     DisplayText {
         text: String,
+        /// Styled spans derived from XML inline markup (`<b>`, `<ruby>`, …).
+        spans: Vec<TextSpan>,
         speaker: Option<String>,
         /// Per-character display delay in ms set by `[delay]`, or `None` for default.
         speed: Option<u64>,

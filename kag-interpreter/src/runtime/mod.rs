@@ -574,25 +574,35 @@ async fn run_interpreter(
 
                 // ── Click waits ────────────────────────────────────────────
                 KagEvent::WaitForClick { clear_after } => {
-                    let _ = event_tx.send(KagEvent::WaitForClick { clear_after }).await;
-                    loop {
-                        match input_rx.recv().await {
-                            Some(event) => {
-                                if let Some(event) = try_side_band(&mut ctx, event) {
-                                    match event {
-                                        HostEvent::Clicked => break,
-                                        HostEvent::TakeSnapshot => {
-                                            emit_snapshot(&ctx, &event_tx).await;
+                    // Skip mode: auto-advance without waiting for a real click.
+                    if ctx.skip_mode {
+                        let _ = event_tx.send(KagEvent::WaitForClick { clear_after }).await;
+                        // Brief yield so the host receives the event before we continue.
+                        tokio::task::yield_now().await;
+                        if clear_after {
+                            let _ = event_tx.send(KagEvent::ClearMessage).await;
+                        }
+                    } else {
+                        let _ = event_tx.send(KagEvent::WaitForClick { clear_after }).await;
+                        loop {
+                            match input_rx.recv().await {
+                                Some(event) => {
+                                    if let Some(event) = try_side_band(&mut ctx, event) {
+                                        match event {
+                                            HostEvent::Clicked => break,
+                                            HostEvent::TakeSnapshot => {
+                                                emit_snapshot(&ctx, &event_tx).await;
+                                            }
+                                            _ => {}
                                         }
-                                        _ => {}
                                     }
                                 }
+                                None => return,
                             }
-                            None => return,
                         }
-                    }
-                    if clear_after {
-                        let _ = event_tx.send(KagEvent::ClearMessage).await;
+                        if clear_after {
+                            let _ = event_tx.send(KagEvent::ClearMessage).await;
+                        }
                     }
                 }
 

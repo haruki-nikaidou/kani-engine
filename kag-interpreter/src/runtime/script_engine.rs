@@ -142,25 +142,10 @@ impl ScriptEngine {
     /// the persistent scope because Rhai's `eval_with_scope` shares the scope
     /// reference.
     pub fn exec(&mut self, script: &str) -> Result<Dynamic, String> {
-        // #region agent log
-        {
-            use std::io::Write;
-            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/home/haruki/repos/kani-engine/.cursor/debug-28bf1a.log") {
-                let _ = writeln!(f, "{{\"sessionId\":\"28bf1a\",\"hypothesisId\":\"A-B-C\",\"location\":\"script_engine.rs:exec\",\"message\":\"exec called\",\"data\":{{\"script\":{}}},\"timestamp\":{}}}", serde_json::to_string(script).unwrap_or_default(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
-            }
-        }
-        // #endregion
-        let result = self.engine
+        let result = self
+            .engine
             .eval_with_scope::<Dynamic>(&mut self.scope, script)
             .map_err(|e| rhai_error_msg(&e));
-        // #region agent log
-        if let Err(ref e) = result {
-            use std::io::Write;
-            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/home/haruki/repos/kani-engine/.cursor/debug-28bf1a.log") {
-                let _ = writeln!(f, "{{\"sessionId\":\"28bf1a\",\"hypothesisId\":\"A-B-C\",\"location\":\"script_engine.rs:exec-err\",\"message\":\"exec error\",\"data\":{{\"error\":{}}},\"timestamp\":{}}}", serde_json::to_string(e).unwrap_or_default(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
-            }
-        }
-        // #endregion
         result
     }
 

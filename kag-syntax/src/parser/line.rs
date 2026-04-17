@@ -148,16 +148,6 @@ fn parse_chara_line(p: &mut Parser<'_>) {
     p.start_node(SyntaxKind::CHARA_LINE);
     p.bump(); // HASH
 
-    // #region agent log
-    {
-        use std::io::Write;
-        let kind = p.current();
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/home/haruki/repos/kani-engine/.cursor/debug-28bf1a.log") {
-            let _ = writeln!(f, "{{\"sessionId\":\"28bf1a\",\"hypothesisId\":\"E-F-G\",\"location\":\"line.rs:parse_chara_line\",\"message\":\"token after hash\",\"data\":{{\"kind\":\"{:?}\",\"is_ident\":{},\"is_text\":{}}},\"timestamp\":{}}}", kind, kind == SyntaxKind::IDENT, kind == SyntaxKind::TEXT, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
-        }
-    }
-    // #endregion
-
     // Accept IDENT (ASCII names), TEXT (Japanese/Unicode names, `?`, etc.),
     // or nothing (bare `#` = narrator / clear displayed name).
     if p.at(SyntaxKind::IDENT) || p.at(SyntaxKind::TEXT) {
