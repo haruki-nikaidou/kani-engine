@@ -3,9 +3,12 @@ use thiserror::Error;
 /// All runtime errors that can occur during KAG script interpretation.
 #[derive(Debug, Error)]
 pub enum InterpreterError {
-    /// Wraps a syntax-level error from parsing.
-    #[error(transparent)]
-    Syntax(#[from] kag_syntax::SyntaxError),
+    /// One or more syntax diagnostics from parsing a `.ks` file.
+    #[error("syntax errors in '{source_name}': {diagnostics:?}")]
+    Syntax {
+        source_name: String,
+        diagnostics: Vec<kag_syntax::SyntaxDiagnostic>,
+    },
 
     /// Rhai script evaluation failed.
     #[error("script evaluation error: {0}")]

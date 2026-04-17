@@ -97,7 +97,7 @@ pub use snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSn
 pub use parser::parse_script;
 
 /// Non-fatal diagnostic emitted during parsing.
-pub use kag_syntax::error::SyntaxWarning;
+pub use kag_syntax::error::SyntaxDiagnostic;
 
 /// Severity level for a [`SyntaxWarning`].
 pub use kag_syntax::error::Severity;

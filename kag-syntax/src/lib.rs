@@ -52,7 +52,7 @@ pub mod tag_defs;
 // ── Semantic AST re-exports ───────────────────────────────────────────────────
 
 pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
-pub use error::{Severity, SyntaxError, SyntaxWarning};
+pub use error::{Severity, SyntaxDiagnostic};
 pub use tag_defs::{AttributeString, KnownTag, MaybeResolved, TagName};
 
 // ── Parser entry points ───────────────────────────────────────────────────────

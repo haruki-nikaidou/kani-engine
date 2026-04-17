@@ -1,7 +1,7 @@
 //! Conversions between Rowan byte offsets / `TextRange` and LSP
 //! `Position` / `Range` / `Diagnostic` types.
 
-use kag_syntax::error::{Severity, SyntaxWarning};
+use kag_syntax::error::{Severity, SyntaxDiagnostic};
 use rowan::TextRange;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
@@ -88,10 +88,9 @@ pub fn text_range_to_lsp_range(source: &str, range: TextRange) -> Range {
     Range::new(start, end)
 }
 
-// ─── SyntaxWarning → Diagnostic ──────────────────────────────────────────────
-
-/// Convert a [`SyntaxWarning`] to an LSP [`Diagnostic`].
-pub fn parse_diagnostic_to_lsp(source: &str, diag: &SyntaxWarning) -> Diagnostic {
+// ─── SyntaxDiagnostic → Diagnostic ──────────────────────────────────────────────
+/// Convert a [`SyntaxDiagnostic`] to an LSP [`Diagnostic`].
+pub fn parse_diagnostic_to_lsp(source: &str, diag: &SyntaxDiagnostic) -> Diagnostic {
     let start = offset_to_position(source, diag.span.offset());
     let end = offset_to_position(source, diag.span.offset() + diag.span.len());
     let range = Range::new(start, end);

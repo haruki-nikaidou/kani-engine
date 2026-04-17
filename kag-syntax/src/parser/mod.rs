@@ -16,7 +16,7 @@ use rowan::{GreenNode, GreenNodeBuilder};
 
 use crate::ast::Script;
 use crate::cst::{AstNode, Root};
-use crate::error::SyntaxWarning;
+use crate::error::SyntaxDiagnostic;
 use crate::lexer::{Spanned, Token, tokenize};
 use crate::lower::lower_root;
 use crate::syntax_kind::{KagLanguage, SyntaxKind, SyntaxNode};
@@ -31,12 +31,12 @@ use rowan::Language as _;
 /// or [`Parse::syntax_node`] for the raw [`SyntaxNode`].
 pub struct Parse<T> {
     green: GreenNode,
-    pub errors: Vec<SyntaxWarning>,
+    pub errors: Vec<SyntaxDiagnostic>,
     _ty: PhantomData<fn() -> T>,
 }
 
 impl<T: AstNode> Parse<T> {
-    fn new(green: GreenNode, errors: Vec<SyntaxWarning>) -> Self {
+    fn new(green: GreenNode, errors: Vec<SyntaxDiagnostic>) -> Self {
         Self {
             green,
             errors,
@@ -56,7 +56,7 @@ impl<T: AstNode> Parse<T> {
     }
 
     /// Diagnostics collected during parsing (may be empty on clean input).
-    pub fn errors(&self) -> &[SyntaxWarning] {
+    pub fn errors(&self) -> &[SyntaxDiagnostic] {
         &self.errors
     }
 }
@@ -72,7 +72,7 @@ pub(crate) struct Parser<'src> {
     /// Rowan green tree builder.
     pub(crate) builder: GreenNodeBuilder<'static>,
     /// Non-fatal diagnostics collected so far.
-    pub(crate) errors: Vec<SyntaxWarning>,
+    pub(crate) errors: Vec<SyntaxDiagnostic>,
     /// Original source text (for span computations and error messages).
     pub(crate) source: &'src str,
     /// Set by the tag dispatcher when an `iscript` tag is parsed; the line
@@ -191,20 +191,20 @@ impl<'src> Parser<'src> {
 
     // ── Error recovery ──────────────────────────────────────────────────────
 
-    /// Record a `SyntaxWarning` at the current position.
+    /// Record a `SyntaxDiagnostic` at the current position.
     pub(crate) fn push_error(&mut self, message: impl Into<String>) {
         self.errors
-            .push(SyntaxWarning::error(message, self.current_span()));
+            .push(SyntaxDiagnostic::error(message, self.current_span()));
     }
 
-    /// Record a `SyntaxWarning` at an explicit span.
+    /// Record a `SyntaxDiagnostic` at an explicit span.
     pub(crate) fn push_error_at(&mut self, message: impl Into<String>, span: SourceSpan) {
-        self.errors.push(SyntaxWarning::error(message, span));
+        self.errors.push(SyntaxDiagnostic::error(message, span));
     }
 
     /// Record a warning diagnostic at an explicit span.
     pub(crate) fn push_warning_at(&mut self, message: impl Into<String>, span: SourceSpan) {
-        self.errors.push(SyntaxWarning::warning(message, span));
+        self.errors.push(SyntaxDiagnostic::warning(message, span));
     }
 
     /// Emit an ERROR node wrapping every token until (but not including) a
@@ -302,7 +302,7 @@ pub fn parse_cst(source: &str, _source_name: &str) -> Parse<Root> {
 
     // Surface lex errors as diagnostics (don't abort).
     for e in &lex_errors {
-        parser.errors.push(SyntaxWarning::error(
+        parser.errors.push(SyntaxDiagnostic::error(
             "unexpected character",
             (e.start, e.len()).into(),
         ));
@@ -320,7 +320,7 @@ pub fn parse_cst(source: &str, _source_name: &str) -> Parse<Root> {
 /// Returns the script together with any diagnostics; a non-empty diagnostics
 /// `Vec` does **not** mean the script is unusable — the interpreter will
 /// still see a best-effort op stream.
-pub fn parse_script(source: &str, source_name: &str) -> (Script<'static>, Vec<SyntaxWarning>) {
+pub fn parse_script(source: &str, source_name: &str) -> (Script<'static>, Vec<SyntaxDiagnostic>) {
     let parse = parse_cst(source, source_name);
     let root = parse.tree();
     let mut errors = parse.errors;

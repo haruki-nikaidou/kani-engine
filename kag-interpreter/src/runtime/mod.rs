@@ -22,7 +22,7 @@ use crate::error::InterpreterError;
 use crate::events::{HostEvent, KagEvent, VarScope, VariableSnapshot};
 use crate::parser::parse_script;
 use crate::snapshot::InterpreterSnapshot;
-use kag_syntax::error::SyntaxWarning;
+use kag_syntax::error::SyntaxDiagnostic;
 
 use context::RuntimeContext;
 use executor::execute_op;
@@ -81,14 +81,14 @@ impl KagInterpreter {
     /// The source is borrowed during parsing and then converted to owned data
     /// before the async task starts.
     ///
-    /// Any [`SyntaxWarning`]s produced during parsing are returned alongside
+    /// Any [`SyntaxDiagnostic`]s produced during parsing are returned alongside
     /// the handle and join-handle so callers can inspect or log them.  A
     /// non-empty diagnostics list does **not** mean the script is unusable —
     /// the interpreter still receives a best-effort op stream.
     pub fn spawn_from_source(
         source: &str,
         source_name: &str,
-    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<SyntaxWarning>), InterpreterError> {
+    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<SyntaxDiagnostic>), InterpreterError> {
         let (script, diags) = parse_script(source, source_name);
         let (handle, task) = Self::spawn(script);
         Ok((handle, task, diags))
@@ -110,7 +110,7 @@ impl KagInterpreter {
     pub fn spawn_from_snapshot(
         snapshot: InterpreterSnapshot,
         source: &str,
-    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<SyntaxWarning>), InterpreterError> {
+    ) -> Result<(Self, tokio::task::JoinHandle<()>, Vec<SyntaxDiagnostic>), InterpreterError> {
         let source_name = snapshot.storage.clone();
         let (script, diags) = parse_script(source, &source_name);
 

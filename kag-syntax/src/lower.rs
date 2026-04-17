@@ -11,11 +11,11 @@ use miette::SourceSpan;
 
 use crate::ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 use crate::cst::{self, Item};
-use crate::error::SyntaxWarning;
+use crate::error::SyntaxDiagnostic;
 use crate::tag_defs::KnownTag;
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
-pub fn lower_root(root: cst::Root, source_name: &str) -> (Script<'static>, Vec<SyntaxWarning>) {
+pub fn lower_root(root: cst::Root, source_name: &str) -> (Script<'static>, Vec<SyntaxDiagnostic>) {
     let mut ctx = LowerCtx::new(source_name);
     ctx.lower_items(root.items());
     let LowerCtx {
@@ -43,7 +43,7 @@ struct LowerCtx {
     macro_map: HashMap<Cow<'static, str>, MacroDef>,
     macro_stack: Vec<Cow<'static, str>>,
     source_name: String,
-    errors: Vec<SyntaxWarning>,
+    errors: Vec<SyntaxDiagnostic>,
 }
 
 impl LowerCtx {
@@ -63,11 +63,11 @@ impl LowerCtx {
     }
 
     fn push_error(&mut self, message: impl Into<String>, span: SourceSpan) {
-        self.errors.push(SyntaxWarning::error(message, span));
+        self.errors.push(SyntaxDiagnostic::error(message, span));
     }
 
     fn push_warning(&mut self, message: impl Into<String>, span: SourceSpan) {
-        self.errors.push(SyntaxWarning::warning(message, span));
+        self.errors.push(SyntaxDiagnostic::warning(message, span));
     }
 }
 
@@ -245,7 +245,7 @@ impl LowerCtx {
     /// or emit as `Op::Tag`).
     ///
     /// Before emitting the op, the tag is validated against its known parameter
-    /// requirements.  Any resulting [`SyntaxWarning`]s are appended to the
+    /// requirements.  Any resulting [`SyntaxDiagnostic`]s are appended to the
     /// lowering context's error list so callers receive them alongside the
     /// (possibly partial) [`Script`].
     fn handle_tag(&mut self, tag: Tag<'static>) {

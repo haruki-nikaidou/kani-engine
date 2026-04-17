@@ -162,7 +162,7 @@ macro_rules! define_tags {
             /// Parse and validate a raw [`Tag`] into a typed [`KnownTag`].
             pub fn from_tag(
                 tag: &$crate::ast::Tag<'src>,
-                diags: &mut Vec<$crate::error::SyntaxWarning>,
+                diags: &mut Vec<$crate::error::SyntaxDiagnostic>,
             ) -> Self {
                 let name = tag.name.as_ref();
                 let span = tag.span;

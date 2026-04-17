@@ -39,7 +39,7 @@ use std::str::FromStr;
 use miette::SourceSpan;
 
 use crate::ast::{ParamValue, Tag};
-use crate::error::SyntaxWarning;
+use crate::error::SyntaxDiagnostic;
 
 // ─── AttributeString ─────────────────────────────────────────────────────────
 
@@ -83,13 +83,13 @@ fn parse_typed_attr<'src, T: FromStr>(
     tag_name: &str,
     attr: &str,
     span: SourceSpan,
-    diags: &mut Vec<SyntaxWarning>,
+    diags: &mut Vec<SyntaxDiagnostic>,
 ) -> MaybeResolved<'src, T> {
     if let ParamValue::Literal(s) = &pv {
         if let Ok(v) = s.parse::<T>() {
             return MaybeResolved::Literal(v);
         }
-        diags.push(SyntaxWarning::warning(
+        diags.push(SyntaxDiagnostic::warning(
             format!("[{tag_name}] attribute `{attr}=` has an unrecognised value"),
             span,
         ));
@@ -98,9 +98,9 @@ fn parse_typed_attr<'src, T: FromStr>(
 }
 
 /// Emit an **error** diagnostic when `key` is absent from `tag`.
-fn require_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
+fn require_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxDiagnostic>) {
     if tag.param(key).is_none() {
-        diags.push(SyntaxWarning::error(
+        diags.push(SyntaxDiagnostic::error(
             format!("[{}] is missing required attribute `{key}=`", tag.name),
             tag.span,
         ));
@@ -108,9 +108,9 @@ fn require_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
 }
 
 /// Emit a **warning** diagnostic when `key` is absent from `tag`.
-fn recommend_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
+fn recommend_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxDiagnostic>) {
     if tag.param(key).is_none() {
-        diags.push(SyntaxWarning::warning(
+        diags.push(SyntaxDiagnostic::warning(
             format!(
                 "[{}] is missing `{key}=`; tag will have no effect",
                 tag.name
@@ -121,14 +121,14 @@ fn recommend_attr(tag: &Tag<'_>, key: &str, diags: &mut Vec<SyntaxWarning>) {
 }
 
 /// Emit a **warning** diagnostic when *none* of the given `keys` are present.
-fn recommend_any_attr(tag: &Tag<'_>, keys: &[&str], diags: &mut Vec<SyntaxWarning>) {
+fn recommend_any_attr(tag: &Tag<'_>, keys: &[&str], diags: &mut Vec<SyntaxDiagnostic>) {
     if !keys.iter().any(|k| tag.param(k).is_some()) {
         let keys_fmt = keys
             .iter()
             .map(|k| format!("`{k}=`"))
             .collect::<Vec<_>>()
             .join(", ");
-        diags.push(SyntaxWarning::warning(
+        diags.push(SyntaxDiagnostic::warning(
             format!(
                 "[{}] should specify at least one of {keys_fmt}; tag will have no effect",
                 tag.name
