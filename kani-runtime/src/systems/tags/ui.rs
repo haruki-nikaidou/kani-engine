@@ -18,16 +18,56 @@ pub fn handle_ui_tags(
     for tag in reader.read() {
         match tag.0.clone() {
             ResolvedTag::Button {
-                text, graphic, x, y, width, height, bg, hover_bg, press_bg,
-                color, font_size, target, storage, exp, key, visible, opacity,
+                text,
+                graphic,
+                x,
+                y,
+                width,
+                height,
+                bg,
+                hover_bg,
+                press_bg,
+                color,
+                font_size,
+                target,
+                storage,
+                exp,
+                key,
+                visible,
+                opacity,
             } => {
                 ev_ui.write(EvUiTag::SpawnButton {
-                    text, graphic, x, y, width, height, bg, hover_bg, press_bg,
-                    color, font_size, target, storage, exp, key, visible, opacity,
+                    text,
+                    graphic,
+                    x,
+                    y,
+                    width,
+                    height,
+                    bg,
+                    hover_bg,
+                    press_bg,
+                    color,
+                    font_size,
+                    target,
+                    storage,
+                    exp,
+                    key,
+                    visible,
+                    opacity,
                 });
             }
-            ResolvedTag::Clickable { layer, target, storage, exp } => {
-                ev_ui.write(EvUiTag::SetClickable { layer, target, storage, exp });
+            ResolvedTag::Clickable {
+                layer,
+                target,
+                storage,
+                exp,
+            } => {
+                ev_ui.write(EvUiTag::SetClickable {
+                    layer,
+                    target,
+                    storage,
+                    exp,
+                });
             }
             ResolvedTag::OpenPanel { kind } => {
                 ev_ui.write(EvUiTag::OpenPanel { kind });

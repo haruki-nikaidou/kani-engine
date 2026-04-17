@@ -13,7 +13,7 @@ pub use kag_interpreter::FrameSpec;
 // ─── 1. Interpreter → Bevy ───────────────────────────────────────────────────
 
 #[derive(Message, Debug, Clone)]
-pub enum EvCallback {
+pub enum EvInterpreterCall {
     /// Display a chunk of text in the message window.
     ///
     /// `text` holds the plain text (XML tags stripped) for simple consumers.
@@ -51,6 +51,7 @@ pub enum EvCallback {
         join: bool,
     },
     Snapshot(Box<InterpreterSnapshot>),
+    TagRouted(EvTagRouted)
 }
 
 #[derive(Message, Debug, Clone)]

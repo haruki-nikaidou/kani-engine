@@ -8,7 +8,7 @@ use tokio::sync::mpsc::error::TryRecvError;
 
 use crate::asset::AssetBackend;
 use crate::bridge::{BridgeState, InterpreterBridge};
-use crate::events::*;
+use crate::events::{EvInterpreterCall, EvTagRouted};
 use crate::systems::scenario::load_and_send;
 
 /// Bevy system — called every `Update` frame.
@@ -19,20 +19,10 @@ use crate::systems::scenario::load_and_send;
 /// `Jump` and `Return` events that reference a different scenario file are
 /// handled here via `load_and_send`: the `.ks` source is read synchronously
 /// from `AssetBackend` and immediately queued back as `HostEvent::ScenarioLoaded`.
-#[allow(clippy::too_many_arguments)]
 pub fn poll_interpreter(
     mut bridge: ResMut<InterpreterBridge>,
     backend: Res<AssetBackend>,
-    mut ev_text: MessageWriter<EvDisplayText>,
-    mut ev_br: MessageWriter<EvInsertLineBreak>,
-    mut ev_clear: MessageWriter<EvClearMessage>,
-    mut ev_clear_cur: MessageWriter<EvClearCurrentMessage>,
-    mut ev_choices: MessageWriter<EvBeginChoices>,
-    mut ev_input: MessageWriter<EvInputRequested>,
-    mut ev_embed: MessageWriter<EvEmbedText>,
-    mut ev_backlog: MessageWriter<EvPushBacklog>,
-    mut ev_snap: MessageWriter<EvSnapshot>,
-    mut ev_tag: MessageWriter<EvTagRouted>,
+    mut ev: MessageWriter<EvInterpreterCall>,
 ) {
     loop {
         let event = match bridge.event_rx.try_recv() {
@@ -53,7 +43,7 @@ pub fn poll_interpreter(
                 speed,
                 log,
             } => {
-                ev_text.write(EvDisplayText {
+                ev.write(EvInterpreterCall::DisplayText {
                     text,
                     spans,
                     speaker,
@@ -62,13 +52,13 @@ pub fn poll_interpreter(
                 });
             }
             KagEvent::InsertLineBreak => {
-                ev_br.write(EvInsertLineBreak);
+                ev.write(EvInterpreterCall::InsertLineBreak);
             }
             KagEvent::ClearMessage => {
-                ev_clear.write(EvClearMessage);
+                ev.write(EvInterpreterCall::ClearMessage);
             }
             KagEvent::ClearCurrentMessage => {
-                ev_clear_cur.write(EvClearCurrentMessage);
+                ev.write(EvInterpreterCall::ClearCurrentMessage);
             }
 
             // ── Input waits ───────────────────────────────────────────────────
@@ -105,7 +95,7 @@ pub fn poll_interpreter(
                 bridge.state = BridgeState::WaitingInput {
                     var_name: name.clone(),
                 };
-                ev_input.write(EvInputRequested {
+                ev.write(EvInterpreterCall::InputRequested {
                     name,
                     prompt,
                     title,
@@ -138,23 +128,23 @@ pub fn poll_interpreter(
             // ── Choices ───────────────────────────────────────────────────────
             KagEvent::BeginChoices(opts) => {
                 bridge.state = BridgeState::WaitingChoice;
-                ev_choices.write(EvBeginChoices(opts));
+                ev.write(EvInterpreterCall::BeginChoice(opts));
             }
 
             // ── Misc output ───────────────────────────────────────────────────
             KagEvent::EmbedText(text) => {
-                ev_embed.write(EvEmbedText(text));
+                ev.write(EvInterpreterCall::EmbedTest(text));
             }
             KagEvent::Trace(msg) => {
                 info!("[kag trace] {msg}");
             }
             KagEvent::PushBacklog { text, join } => {
-                ev_backlog.write(EvPushBacklog { text, join });
+                ev.write(EvInterpreterCall::PushBacklog { text, join });
             }
 
             // ── Passthrough tags ──────────────────────────────────────────────
             KagEvent::Tag(resolved_tag) => {
-                ev_tag.write(EvTagRouted(resolved_tag));
+                ev.write(EvInterpreterCall::TagRouted(EvTagRouted(resolved_tag)));
             }
 
             // ── Lifecycle ─────────────────────────────────────────────────────
@@ -170,7 +160,7 @@ pub fn poll_interpreter(
                 }
             }
             KagEvent::Snapshot(snap) => {
-                ev_snap.write(EvSnapshot(snap));
+                ev.write(EvInterpreterCall::Snapshot(snap));
             }
         }
     }

@@ -977,9 +977,10 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
                 y: resolve_typed_field(ctx, y),
             };
             if let Some(name) = &ctx.current_keyframe_name
-                && let Some(seq) = ctx.keyframe_defs.get_mut(name) {
-                    seq.push(frame);
-                }
+                && let Some(seq) = ctx.keyframe_defs.get_mut(name)
+            {
+                seq.push(frame);
+            }
             vec![]
         }
         KnownTag::Endkeyframe {} => {
@@ -1166,14 +1167,14 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
                 resolve_str_field(ctx, name),
                 resolve_str_field(ctx, face),
                 resolve_str_field(ctx, storage),
-            )
-                && let Some(def) = ctx.chara_registry.get_mut(&n) {
-                    def.faces.retain(|v| v.face != f);
-                    def.faces.push(crate::runtime::context::FaceVariant {
-                        face: f,
-                        storage: s,
-                    });
-                }
+            ) && let Some(def) = ctx.chara_registry.get_mut(&n)
+            {
+                def.faces.retain(|v| v.face != f);
+                def.faces.push(crate::runtime::context::FaceVariant {
+                    face: f,
+                    storage: s,
+                });
+            }
             vec![]
         }
         KnownTag::CharaConfig { name } => {

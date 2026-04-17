@@ -21,7 +21,11 @@ pub fn handle_image_tags(
                 time,
                 method,
             } => {
-                ev.write(EvLayerTag::SetBackground { storage, time, method });
+                ev.write(EvLayerTag::SetBackground {
+                    storage,
+                    time,
+                    method,
+                });
             }
             ResolvedTag::Image {
                 storage: Some(storage),
@@ -30,14 +34,24 @@ pub fn handle_image_tags(
                 y,
                 visible,
             } => {
-                ev.write(EvLayerTag::SetImageLayer { storage, layer, x, y, visible });
+                ev.write(EvLayerTag::SetImageLayer {
+                    storage,
+                    layer,
+                    x,
+                    y,
+                    visible,
+                });
             }
             ResolvedTag::Layopt {
                 layer: Some(layer),
                 visible,
                 opacity,
             } => {
-                ev.write(EvLayerTag::SetLayerOpt { layer, visible, opacity });
+                ev.write(EvLayerTag::SetLayerOpt {
+                    layer,
+                    visible,
+                    opacity,
+                });
             }
             ResolvedTag::Free { layer: Some(layer) } => {
                 ev.write(EvLayerTag::FreeLayer { layer });
@@ -79,8 +93,24 @@ pub fn handle_image_tags(
             ResolvedTag::MaskOff { layer } => {
                 ev.write(EvLayerTag::RemoveMask { layer });
             }
-            ResolvedTag::Graph { layer, shape, x, y, width, height, color } => {
-                ev.write(EvLayerTag::DrawGraph { layer, shape, x, y, width, height, color });
+            ResolvedTag::Graph {
+                layer,
+                shape,
+                x,
+                y,
+                width,
+                height,
+                color,
+            } => {
+                ev.write(EvLayerTag::DrawGraph {
+                    layer,
+                    shape,
+                    x,
+                    y,
+                    width,
+                    height,
+                    color,
+                });
             }
             _ => {}
         }
