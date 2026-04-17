@@ -39,7 +39,7 @@ pub use bridge::{BridgeState, InterpreterBridge, spawn_interpreter};
 
 use bevy::prelude::*;
 
-use systems::input::{handle_click_input, handle_completion, handle_timer, handle_ui_inputs};
+use systems::input::{handle_click_input, handle_timer, handle_ui_inputs};
 use systems::poll::poll_interpreter;
 use systems::tags::{
     animation::handle_animation_tags, audio::handle_audio_tags, chara::handle_chara_tags,
@@ -78,113 +78,38 @@ impl Plugin for KaniRuntimePlugin {
         // 3. Register all events
         app
             // core interpreter → Bevy
-            .add_message::<events::EvDisplayText>()
-            .add_message::<events::EvInsertLineBreak>()
-            .add_message::<events::EvClearMessage>()
-            .add_message::<events::EvClearCurrentMessage>()
-            .add_message::<events::EvBeginChoices>()
-            .add_message::<events::EvInputRequested>()
-            .add_message::<events::EvEmbedText>()
-            .add_message::<events::EvPushBacklog>()
-            .add_message::<events::EvSnapshot>()
-            // internal tag routing (ResolvedTag variants; game code matches Extension)
-            .add_message::<events::EvTagRouted>()
+            .add_message::<events::EvInterpreterCall>()
             // image / layer
-            .add_message::<events::EvSetBackground>()
-            .add_message::<events::EvSetImageLayer>()
-            .add_message::<events::EvSetLayerOpt>()
-            .add_message::<events::EvFreeLayer>()
-            .add_message::<events::EvSetLayerPosition>()
-            .add_message::<events::EvBacklay>()
-            .add_message::<events::EvSetCurrentLayer>()
-            .add_message::<events::EvLocateCursor>()
-            .add_message::<events::EvSetLayerMode>()
-            .add_message::<events::EvResetLayerMode>()
-            .add_message::<events::EvSetFilter>()
-            .add_message::<events::EvFreeFilter>()
-            .add_message::<events::EvPositionFilter>()
-            .add_message::<events::EvSetMask>()
-            .add_message::<events::EvRemoveMask>()
-            .add_message::<events::EvDrawGraph>()
+            .add_message::<events::EvLayerTag>()
             // audio
-            .add_message::<events::EvPlayBgm>()
-            .add_message::<events::EvStopBgm>()
-            .add_message::<events::EvPauseBgm>()
-            .add_message::<events::EvResumeBgm>()
-            .add_message::<events::EvFadeBgm>()
-            .add_message::<events::EvCrossFadeBgm>()
-            .add_message::<events::EvSetBgmOpt>()
-            .add_message::<events::EvPlaySe>()
-            .add_message::<events::EvStopSe>()
-            .add_message::<events::EvPauseSe>()
-            .add_message::<events::EvResumeSe>()
-            .add_message::<events::EvSetSeOpt>()
-            .add_message::<events::EvPlayVoice>()
-            .add_message::<events::EvChangeVol>()
+            .add_message::<events::EvAudioTag>()
             // animation
-            .add_message::<events::EvPlayAnim>()
-            .add_message::<events::EvStopAnim>()
-            .add_message::<events::EvPlayKanim>()
-            .add_message::<events::EvStopKanim>()
-            .add_message::<events::EvPlayXanim>()
-            .add_message::<events::EvStopXanim>()
+            .add_message::<events::EvAnimTag>()
             // video
-            .add_message::<events::EvPlayBgMovie>()
-            .add_message::<events::EvStopBgMovie>()
-            .add_message::<events::EvPlayMovie>()
+            .add_message::<events::EvVideoTag>()
             // transition
-            .add_message::<events::EvRunTransition>()
-            .add_message::<events::EvFadeScreen>()
-            .add_message::<events::EvMoveLayerTransition>()
+            .add_message::<events::EvTransitionTag>()
             // effect
-            .add_message::<events::EvQuake>()
-            .add_message::<events::EvShake>()
-            .add_message::<events::EvFlash>()
+            .add_message::<events::EvEffectTag>()
             // message window
-            .add_message::<events::EvMessageWindow>()
-            .add_message::<events::EvWindowControl>()
-            .add_message::<events::EvResetFont>()
-            .add_message::<events::EvSetFont>()
-            .add_message::<events::EvSetRuby>()
-            .add_message::<events::EvSetNowrap>()
+            .add_message::<events::EvMessageWindowTag>()
             // character sprites
-            .add_message::<events::EvShowCharacter>()
-            .add_message::<events::EvHideCharacter>()
-            .add_message::<events::EvHideAllCharacters>()
-            .add_message::<events::EvFreeCharacter>()
-            .add_message::<events::EvDeleteCharacter>()
-            .add_message::<events::EvModCharacter>()
-            .add_message::<events::EvMoveCharacter>()
-            .add_message::<events::EvSetCharacterLayer>()
-            .add_message::<events::EvModCharacterLayer>()
-            .add_message::<events::EvSetCharacterPart>()
-            .add_message::<events::EvResetCharacterParts>()
-            // misc
-            .add_message::<events::EvOpenUrl>()
+            .add_message::<events::EvCharacterTag>()
             // skip + key config
-            .add_message::<events::EvSkipMode>()
-            .add_message::<events::EvKeyConfig>()
+            .add_message::<events::EvControlTag>()
             // ui
-            .add_message::<events::EvSpawnButton>()
-            .add_message::<events::EvSetClickable>()
-            .add_message::<events::EvOpenPanel>()
-            .add_message::<events::EvShowDialog>()
-            .add_message::<events::EvSetCursor>()
-            .add_message::<events::EvSetSpeakerBoxVisible>()
-            .add_message::<events::EvSetGlyph>()
-            .add_message::<events::EvModeEffect>()
+            .add_message::<events::EvUiTag>()
+            // misc
+            .add_message::<events::EvMiscTag>()
             // host → interpreter
-            .add_message::<events::EvSelectChoice>()
-            .add_message::<events::EvSubmitInput>()
-            .add_message::<events::EvFireTrigger>()
-            .add_message::<events::EvCompletionSignal>();
+            .add_message::<events::EvHostInput>();
 
         // 4. Add systems
         //
         // Order:
-        //   poll_interpreter  – drains channel, emits EvTagRouted(ResolvedTag)
-        //   tag handlers      – read EvTagRouted, dispatch typed action events
-        //   input systems     – translate Bevy input → HostEvent
+        //   poll_interpreter  – drains channel, emits EvCallback variants
+        //   tag handlers      – read EvCallback::TagRouted, dispatch typed action events
+        //   input systems     – translate Bevy input / EvHostInput → HostEvent
         app.add_systems(
             Update,
             (
@@ -202,13 +127,7 @@ impl Plugin for KaniRuntimePlugin {
                     handle_misc_tags,
                 )
                     .after(poll_interpreter),
-                (
-                    handle_click_input,
-                    handle_timer,
-                    handle_ui_inputs,
-                    handle_completion,
-                )
-                    .after(poll_interpreter),
+                (handle_click_input, handle_timer, handle_ui_inputs).after(poll_interpreter),
             ),
         );
     }
