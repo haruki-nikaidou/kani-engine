@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import markdoc from "@astrojs/markdoc";
 import starlightThemeFlexoki from "starlight-theme-flexoki";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,7 @@ export default defineConfig({
   site: "https://haruki-nikaidou.github.io/kani-engine",
   redirects: { "/": "/en" },
   integrations: [
+    markdoc(),
     starlight({
       plugins: [starlightThemeFlexoki()],
       title: "Kani Game Engine",

@@ -3,7 +3,11 @@ title: KAG-Rhai Reference
 description: Complete reference for scripting KAG scenarios with embedded Rhai expressions.
 ---
 
-KAG scenarios are plain text files (`.ks`) that can embed [Rhai](https://rhai.rs/) expressions for conditional logic, variable mutation, and dynamic text. This page is the authoritative reference for the KAG tag set and the Rhai integration layer.
+import { Tabs, TabItem, Aside, Badge, Steps } from '@astrojs/starlight/components';
+
+KAG scenarios are plain text files (`.ks`) that can embed [Rhai](https://rhai.rs/) expressions for
+conditional logic, variable mutation, and dynamic text. This page is the authoritative reference for
+the KAG tag set and the Rhai integration layer.
 
 ---
 
@@ -19,6 +23,10 @@ A `.ks` file is processed line-by-line. Each line is one of:
 | **Block tag** | `[wait time=500]` | Inline tag (must be the only content on the line) |
 | **Line tag** | `@jump target=*start` | `@` is syntactic sugar for `[…]` |
 | **Comment** | `; this is a comment` | Ignored by the interpreter |
+
+{% aside type="tip" title="Line tag shorthand" %}
+`@tag attr=value` is exactly equivalent to `[tag attr=value]`. Prefer `@` for tags that occupy a whole line; prefer `[…]` when a tag is embedded mid-line.
+{% /aside %}
 
 ### Labels
 
@@ -58,6 +66,10 @@ sf.bgm_volume = 0.8;
 tf.temp_counter = tf.temp_counter + 1;
 ```
 
+{% aside type="caution" title="Save/Load behaviour" %}
+`tf` (transient flags) are **not** persisted across saves. Never store information that must survive a save/load cycle in `tf`.
+{% /aside %}
+
 ### Clearing variables
 
 | Tag | Effect |
@@ -69,7 +81,8 @@ tf.temp_counter = tf.temp_counter + 1;
 
 ## Rhai Expression Embedding
 
-### `[eval exp=…]` — Execute a statement
+{% tabs %}
+{% tabitem label="[eval] — Execute" %}
 
 Runs a Rhai script without producing any output.
 
@@ -80,7 +93,8 @@ Runs a Rhai script without producing any output.
 
 Side-effects (variable mutations) are persisted into the scope.
 
-### `[emb exp=…]` — Embed result as text
+{% /tabitem %}
+{% tabitem label="[emb] — Embed as text" %}
 
 Evaluates the expression and injects the result into the current message stream.
 
@@ -88,15 +102,21 @@ Evaluates the expression and injects the result into the current message stream.
 Your score is [emb exp="f.score"] points!
 ```
 
+{% aside type="note" %}
 If evaluation fails, an empty string is substituted (errors are swallowed).
+{% /aside %}
 
-### `[trace exp=…]` — Debug logging
+{% /tabitem %}
+{% tabitem label="[trace] — Debug log" %}
 
 Evaluates the expression and writes the result to the debug log. No visible output.
 
 ```ks
 [trace exp="f.score"]
 ```
+
+{% /tabitem %}
+{% /tabs %}
 
 ### Entity expressions (`&expr`)
 
@@ -123,7 +143,7 @@ Hello, %name|stranger!
 
 ## Conditional Branching
 
-### `[if exp=…]` / `[elsif exp=…]` / `[else]` / `[endif]`
+### `[if]` / `[elsif]` / `[else]` / `[endif]`
 
 ```ks
 [if exp="f.score >= 100"]
@@ -137,10 +157,12 @@ Better luck next time.
 
 `exp=` is a Rhai expression evaluated to a boolean. Truthy rules:
 
-- `bool` — direct value
-- `int` — `0` is false, anything else true
-- `string` — empty string is false
-- all other types — non-unit is true
+| Type | Falsy when… |
+|------|------------|
+| `bool` | `false` |
+| `int` | `0` |
+| `string` | empty string `""` |
+| other types | unit value |
 
 ### `[ignore exp=…]` / `[endignore]`
 
@@ -156,7 +178,8 @@ Skips everything between `[ignore]` and `[endignore]` when `exp=` is truthy. Use
 
 ## Navigation
 
-### `[jump storage=… target=…]`
+{% tabs %}
+{% tabitem label="[jump]" %}
 
 Unconditionally jump to a label. `storage=` changes the current file; `target=` names the label (include the `*` prefix).
 
@@ -165,7 +188,8 @@ Unconditionally jump to a label. `storage=` changes the current file; `target=` 
 [jump storage=scene02.ks target=*start]
 ```
 
-### `[call storage=… target=…]`
+{% /tabitem %}
+{% tabitem label="[call] / [return]" %}
 
 Like `[jump]`, but pushes the current position onto the call stack so `[return]` can come back.
 
@@ -174,13 +198,10 @@ Like `[jump]`, but pushes the current position onto the call stack so `[return]`
 ; execution continues here after [return]
 ```
 
-### `[return]`
+Use `[clearstack]` to discard the entire call stack before a hard jump to a new scene.
 
-Return to the position saved by the most recent `[call]`.
-
-### `[clearstack]`
-
-Discard the entire call stack (and macro/if stacks). Useful before a hard jump to a new scene.
+{% /tabitem %}
+{% /tabs %}
 
 ---
 
@@ -188,7 +209,7 @@ Discard the entire call stack (and macro/if stacks). Useful before a hard jump t
 
 ### `[link]` / `[endlink]`
 
-Accumulate one or more choice buttons between `[link]` and `[endlink]`. Each `[link]` tag defines one option.
+Accumulate one or more choice buttons. Each `[link]` tag defines one option.
 
 ```ks
 [link target=*choice_a]
@@ -206,7 +227,9 @@ Attributes:
 | `target=` | string | Target label |
 | `text=` | string | Button label text (alternative to inline text) |
 
+{% aside type="note" %}
 At least one of `storage=` or `target=` should be provided.
+{% /aside %}
 
 ### `[glink]` — Graphical link button
 
@@ -313,7 +336,8 @@ Register a jump that fires automatically after `N` milliseconds while at `[s]`.
 
 ## Image / Layer System
 
-### `[bg storage=… time=… method=…]`
+{% tabs %}
+{% tabitem label="[bg]" %}
 
 Set the background image.
 
@@ -327,7 +351,8 @@ Set the background image.
 [bg storage=bg/forest.jpg time=1000 method=crossfade]
 ```
 
-### `[image storage=… layer=… x=… y=… visible=…]`
+{% /tabitem %}
+{% tabitem label="[image]" %}
 
 Display an image on a named layer.
 
@@ -339,7 +364,8 @@ Display an image on a named layer.
 | `y=` | float | No | Vertical position |
 | `visible=` | bool | No | Initial visibility |
 
-### `[layopt layer=… visible=… opacity=…]`
+{% /tabitem %}
+{% tabitem label="[layopt]" %}
 
 Change options on an existing layer.
 
@@ -349,17 +375,21 @@ Change options on an existing layer.
 | `visible=` | bool | No | Show / hide |
 | `opacity=` | float | No | Transparency (0.0–1.0) |
 
-### `[free layer=…]`
+{% /tabitem %}
+{% tabitem label="[free] / [position]" %}
 
-Remove a layer entirely.
+- **`[free layer=…]`** — Remove a layer entirely.
+- **`[position layer=… x=… y=…]`** — Move a layer to a new position.
 
-### `[position layer=… x=… y=…]`
-
-Move a layer to a new position.
+{% /tabitem %}
+{% /tabs %}
 
 ---
 
 ## Audio
+
+{% tabs %}
+{% tabitem label="BGM" %}
 
 ### `[bgm storage=… loop=… volume=… fadetime=…]`
 
@@ -380,6 +410,9 @@ Stop BGM, optionally with a fade-out.
 
 Smoothly change BGM volume.
 
+{% /tabitem %}
+{% tabitem label="SE" %}
+
 ### `[se storage=… buf=… volume=… loop=…]`
 
 Play a sound effect. Alias: `[playSe]`.
@@ -395,9 +428,15 @@ Play a sound effect. Alias: `[playSe]`.
 
 Stop a sound effect buffer.
 
+{% /tabitem %}
+{% tabitem label="Voice" %}
+
 ### `[vo storage=… buf=…]`
 
 Play a voice clip. Alias: `[voice]`.
+
+{% /tabitem %}
+{% /tabs %}
 
 ---
 
@@ -413,13 +452,9 @@ Apply a visual scene transition.
 | `time=` | ms | Duration |
 | `rule=` | string | Rule image for custom transitions |
 
-### `[fadein time=… color=…]`
+### `[fadein time=… color=…]` / `[fadeout time=… color=…]`
 
-Fade in from a solid colour.
-
-### `[fadeout time=… color=…]`
-
-Fade out to a solid colour.
+Fade in from or out to a solid colour.
 
 ### `[movetrans layer=… time=… x=… y=…]`
 
@@ -429,17 +464,11 @@ Move a layer to `(x, y)` over `time` ms as a transition.
 
 ## Effects
 
-### `[quake time=… hmax=… vmax=…]`
-
-Screen quake effect. `hmax`/`vmax` are maximum pixel displacement.
-
-### `[shake time=… amount=… axis=…]`
-
-Screen shake. `axis=` is `"h"` (horizontal), `"v"` (vertical), or omitted for both.
-
-### `[flash time=… color=…]`
-
-Flash the screen with a colour.
+| Tag | Description |
+|-----|-------------|
+| `[quake time=… hmax=… vmax=…]` | Screen quake. `hmax`/`vmax` are maximum pixel displacement. |
+| `[shake time=… amount=… axis=…]` | Screen shake. `axis=` is `"h"`, `"v"`, or omitted for both. |
+| `[flash time=… color=…]` | Flash the screen with a colour. |
 
 ---
 
@@ -535,41 +564,45 @@ Display a character sprite. At least one of `name=` or `id=` is required.
 | `slot=` | string | Display slot |
 | `x=` / `y=` | float | Position |
 
-### `[chara_hide name=… id=… slot=…]`
-
-Hide a character sprite (keeps it loaded).
-
-### `[chara_free name=… id=… slot=…]`
-
-Unload a character sprite.
-
-### `[chara_mod name=… id=… face=… pose=… storage=…]`
-
-Modify an already-displayed character sprite's expression/pose.
-
-### `[chara_ptext name=…]`
-
-Set the character name shown in the `ptext` name box.
+| Tag | Description |
+|-----|-------------|
+| `[chara_hide name=… id=… slot=…]` | Hide a character sprite (keeps it loaded). |
+| `[chara_free name=… id=… slot=…]` | Unload a character sprite. |
+| `[chara_mod name=… id=… face=… pose=… storage=…]` | Modify an already-displayed sprite's expression/pose. |
+| `[chara_ptext name=…]` | Set the character name shown in the `ptext` name box. |
 
 ---
 
 ## Macro System
 
-### `[macro name=…]` / `[endmacro]`
+{% steps %}
 
-Define a reusable block of script. The macro body runs each time the macro is invoked by its name.
+1. **Define** the macro with `[macro name=…]` … `[endmacro]`:
 
-```ks
-[macro name=fade_to_black]
-[fadeout time=500 color=0x000000]
-[wf]
-[endmacro]
+   ```ks
+   [macro name=fade_to_black]
+   [fadeout time=500 color=0x000000]
+   [wf]
+   [endmacro]
+   ```
 
-; invoke:
-[fade_to_black]
-```
+2. **Invoke** it anywhere by its name:
 
-Inside a macro body, parameters passed at the call site are available as `%key` or via the `mp` Rhai map.
+   ```ks
+   [fade_to_black]
+   ```
+
+3. **Pass parameters** at the call site; access them with `%key` or the `mp` Rhai map inside the body:
+
+   ```ks
+   [macro name=say_hello]
+   Hello, %name|stranger!
+   [endmacro]
+
+   [say_hello name=Alice]
+   ```
+
+{% /steps %}
 
 ### `[erasemacro name=…]`
 
@@ -583,7 +616,7 @@ Delete a macro definition at runtime.
 
 Enable or disable click-to-skip mode for transitions and animations.
 
-### `[clearvar]` / `[clearsysvar]` / `[clearstack]`
+### Variable / stack clearing
 
 | Tag | Clears |
 |-----|--------|
