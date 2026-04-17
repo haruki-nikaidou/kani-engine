@@ -1,3 +1,7 @@
+#![deny(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+
 use tower_lsp::{LspService, Server};
 
 mod analysis;

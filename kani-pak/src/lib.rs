@@ -1,3 +1,7 @@
+#![deny(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+
 //! `kani-pak` — custom binary package format for kani-engine.
 //!
 //! A `.pak` file is a flat archive with a memory-mappable, sorted index.

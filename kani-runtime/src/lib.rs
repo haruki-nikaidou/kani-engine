@@ -1,3 +1,7 @@
+#![deny(clippy::panic)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+
 //! `kani-runtime` — Bevy runtime bridge for the KAG interpreter.
 //!
 //! # Quick start
