@@ -11,7 +11,6 @@ use crate::bridge::{BridgeState, InterpreterBridge};
 use crate::events::{EvInterpreterCall, EvTagRouted};
 use crate::systems::scenario::load_and_send;
 
-
 /// Bevy system — called every `Update` frame.
 ///
 /// Drains `InterpreterBridge::event_rx` in a tight loop and maps each
