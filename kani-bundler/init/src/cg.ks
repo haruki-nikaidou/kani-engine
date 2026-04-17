@@ -37,7 +37,7 @@
 [endscript]
 
 [iscript]
-	tf.target_page = "page_"+tf.page;
+	tf.target_page = "page_" + tf.page.to_string();
 [endscript]
 
 *cgview
@@ -64,12 +64,12 @@
 @jump storage=title.ks
 
 *nextpage
-[emb exp="tf.page++;"]
+[eval exp="tf.page += 1;"]
 @jump target="*cgpage"
 
 
 *backpage
-[emb exp="tf.page--;"]
+[eval exp="tf.page -= 1;"]
 @jump target="*cgpage"
 
 *clickcg
@@ -85,9 +85,9 @@
 [l]
 [bg storage="../../tyrano/images/system/bg_base.png" time=10]
 
-[eval exp="tf.cg_index++"]
+[eval exp="tf.cg_index += 1;"]
 
-@jump target="cg_next_image" cond="tf.selected_cg_image.length > tf.cg_index"
+@jump target="cg_next_image" cond="tf.selected_cg_image.len() > tf.cg_index"
 
 
 @jump  target=*cgpage

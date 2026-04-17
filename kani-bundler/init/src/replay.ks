@@ -27,7 +27,7 @@
 [button graphic="config/menu_button_close.png" enterimg="config/menu_button_close2.png"  target="*backtitle" x=1150 y=40 ]
 
 [iscript]
-	tf.target_page = "page_"+tf.page;
+	tf.target_page = "page_" + tf.page.to_string();
 [endscript]
 
 *replayview
@@ -51,25 +51,25 @@
 [freeimage layer=1]
 
 [iscript]
-tf.system.flag_replay = false;
+tf.flag_replay = false;
 [endscript]
 
 @jump storage=title.ks
 
 *nextpage
-[emb exp="tf.page++;"]
+[eval exp="tf.page += 1;"]
 @jump target="*replaypage"
 
 
 *backpage
-[emb exp="tf.page--;"]
+[eval exp="tf.page -= 1;"]
 @jump target="*replaypage"
 
 *clickcg
 [cm]
 
 [iscript]
-    tf.system.flag_replay = true;
+    tf.flag_replay = true;
 [endscript]
 
 [free layer=1 name="label_replay"]
