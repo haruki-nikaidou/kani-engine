@@ -377,7 +377,7 @@ define_tags! {
     },
     /// Set layer position.
     Position("position") {
-        layer: required<str>,
+        layer: optional<str>,
         x: optional<f32>,
         y: optional<f32>,
     },
@@ -825,11 +825,10 @@ mod tests {
     }
 
     #[test]
-    fn position_without_layer_is_error() {
+    fn position_without_layer_is_ok() {
         let mut diags = vec![];
         KnownTag::from_tag(&tag_no_params("position"), &mut diags);
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].severity, Severity::Error);
+        assert_eq!(diags.len(), 0);
     }
 
     #[test]

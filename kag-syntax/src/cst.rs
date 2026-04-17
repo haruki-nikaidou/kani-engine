@@ -506,6 +506,9 @@ ast_node!(CharaLine, CHARA_LINE);
 
 impl CharaLine {
     /// The character name (after `#`).
+    ///
+    /// Returns `None` for a bare `#` (narrator / clear name) with no name token.
+    /// Accepts both `IDENT` (ASCII) and `TEXT` (Japanese/Unicode, `?`, etc.) tokens.
     pub fn name(&self) -> Option<String> {
         let mut found_hash = false;
         self.0
@@ -516,13 +519,16 @@ impl CharaLine {
                     found_hash = true;
                     false
                 } else {
-                    found_hash && t.kind() == SyntaxKind::IDENT
+                    found_hash
+                        && (t.kind() == SyntaxKind::IDENT || t.kind() == SyntaxKind::TEXT)
                 }
             })
             .map(|t| t.text().to_owned())
     }
 
     /// The face name (after `:`), if present.
+    ///
+    /// Accepts both `IDENT` and `TEXT` tokens.
     pub fn face(&self) -> Option<String> {
         let mut found_colon = false;
         self.0
@@ -533,7 +539,8 @@ impl CharaLine {
                     found_colon = true;
                     false
                 } else {
-                    found_colon && t.kind() == SyntaxKind::IDENT
+                    found_colon
+                        && (t.kind() == SyntaxKind::IDENT || t.kind() == SyntaxKind::TEXT)
                 }
             })
             .map(|t| t.text().to_owned())
