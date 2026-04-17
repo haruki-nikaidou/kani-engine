@@ -153,8 +153,7 @@ pub fn dispatch_tags(
             }
 
             // ── Control ────────────────────────────────────────────────
-            resolved @ (ResolvedTag::SkipMode { .. }
-            | ResolvedTag::KeyConfig { .. }) => {
+            resolved @ (ResolvedTag::SkipMode { .. } | ResolvedTag::KeyConfig { .. }) => {
                 ui::dispatch_control(resolved, &mut ev_ctrl);
             }
 
