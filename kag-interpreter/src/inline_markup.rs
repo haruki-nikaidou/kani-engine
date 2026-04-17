@@ -48,8 +48,11 @@ pub fn parse_inline_markup(input: &str) -> Vec<TextSpan> {
                 } else {
                     // Opening (or self-closing) tag
                     let (tag_name, attrs) = split_tag_name(tag_content);
-                    let new_style =
-                        apply_opening_tag(tag_name, &attrs, style_stack.last().unwrap_or(&TextStyle::default()));
+                    let new_style = apply_opening_tag(
+                        tag_name,
+                        &attrs,
+                        style_stack.last().unwrap_or(&TextStyle::default()),
+                    );
                     if tag_name == "ruby" {
                         pending_ruby = parse_attr(tag_content, "rt");
                     }
@@ -59,7 +62,11 @@ pub fn parse_inline_markup(input: &str) -> Vec<TextSpan> {
                 i = end;
             } else {
                 // No closing `>` found — treat `<` as literal text
-                push_char(&mut spans, style_stack.last().unwrap_or(&TextStyle::default()), '<');
+                push_char(
+                    &mut spans,
+                    style_stack.last().unwrap_or(&TextStyle::default()),
+                    '<',
+                );
                 i += 1;
             }
         } else {

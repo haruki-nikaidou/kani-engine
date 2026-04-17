@@ -89,8 +89,16 @@ pub fn handle_chara_tags(
                     visible,
                 });
             }
-            ResolvedTag::CharaPart { name, part, storage } => {
-                ev_part.write(EvSetCharacterPart { name, part, storage });
+            ResolvedTag::CharaPart {
+                name,
+                part,
+                storage,
+            } => {
+                ev_part.write(EvSetCharacterPart {
+                    name,
+                    part,
+                    storage,
+                });
             }
             ResolvedTag::CharaPartReset { name } => {
                 ev_part_reset.write(EvResetCharacterParts { name });

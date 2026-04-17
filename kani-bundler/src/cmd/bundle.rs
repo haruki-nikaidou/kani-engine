@@ -25,7 +25,6 @@ use walkdir::WalkDir;
 
 use crate::config::{AssetsConfig, asset_base, load_config};
 
-
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 pub fn run(project_dir: &Path, target_override: Option<&str>) -> Result<()> {
@@ -78,18 +77,20 @@ pub fn run(project_dir: &Path, target_override: Option<&str>) -> Result<()> {
     let pak_bytes = writer.finish();
     std::fs::write(&pak_path, &pak_bytes)
         .with_context(|| format!("writing pak to '{}'", pak_path.display()))?;
-    println!("bundler: wrote '{}' ({} bytes).", pak_path.display(), pak_bytes.len());
+    println!(
+        "bundler: wrote '{}' ({} bytes).",
+        pak_path.display(),
+        pak_bytes.len()
+    );
 
     // ── Step 6: install kani-init from crates.io ─────────────────────────────
-    let target = target_override
-        .map(str::to_owned)
-        .or_else(|| {
-            if cfg.build.target.is_empty() {
-                None
-            } else {
-                Some(cfg.build.target.clone())
-            }
-        });
+    let target = target_override.map(str::to_owned).or_else(|| {
+        if cfg.build.target.is_empty() {
+            None
+        } else {
+            Some(cfg.build.target.clone())
+        }
+    });
 
     let (binary_path, _tmp) = install_kani_init(target.as_deref())?;
 
@@ -102,12 +103,17 @@ pub fn run(project_dir: &Path, target_override: Option<&str>) -> Result<()> {
     let init_path = output_dir.join("init");
     std::fs::write(&init_path, cfg.entry.start.as_bytes())
         .with_context(|| format!("writing init file '{}'", init_path.display()))?;
-    println!("bundler: binary at '{}', init file written.", dest.display());
+    println!(
+        "bundler: binary at '{}', init file written.",
+        dest.display()
+    );
 
     // ── Step 8: zip the output directory ─────────────────────────────────────
     let zip_path = {
         let mut p = output_dir.clone();
-        let stem = p.file_name().map(|n| n.to_string_lossy().into_owned())
+        let stem = p
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "dist".to_owned());
         p.pop();
         p.join(format!("{stem}.zip"))
@@ -135,16 +141,12 @@ fn build_path_map(asset_base: &Path) -> Result<HashMap<String, String>> {
             continue; // Scripts are handled separately.
         }
 
-        let data = std::fs::read(path)
-            .with_context(|| format!("reading '{}'", path.display()))?;
+        let data = std::fs::read(path).with_context(|| format!("reading '{}'", path.display()))?;
 
         let hash = blake3::hash(&data);
         let hex = hash.to_hex();
 
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         let pak_key = if ext.is_empty() {
             hex.to_string()
@@ -289,14 +291,15 @@ fn install_kani_init(target: Option<&str>) -> Result<(PathBuf, TempDir)> {
     let tmp_path = tmp.path();
 
     let mut cmd = Command::new("cargo");
-    cmd.args(["install", "kani-init", "--root"])
-        .arg(tmp_path);
+    cmd.args(["install", "kani-init", "--root"]).arg(tmp_path);
 
     if let Some(t) = target {
         cmd.args(["--target", t]);
     }
 
-    let status = cmd.status().context("failed to invoke cargo — is it in PATH?")?;
+    let status = cmd
+        .status()
+        .context("failed to invoke cargo — is it in PATH?")?;
     if !status.success() {
         bail!("cargo install kani-init exited with status {status}");
     }
@@ -306,7 +309,11 @@ fn install_kani_init(target: Option<&str>) -> Result<(PathBuf, TempDir)> {
         let is_windows = target
             .map(|t| t.contains("windows"))
             .unwrap_or(cfg!(target_os = "windows"));
-        if is_windows { "kani-init.exe" } else { "kani-init" }
+        if is_windows {
+            "kani-init.exe"
+        } else {
+            "kani-init"
+        }
     };
     let binary_path = tmp_path.join("bin").join(binary_name);
 
@@ -319,7 +326,6 @@ fn install_kani_init(target: Option<&str>) -> Result<(PathBuf, TempDir)> {
 
     Ok((binary_path, tmp))
 }
-
 
 // ─── Distribution zip ─────────────────────────────────────────────────────────
 
@@ -347,8 +353,7 @@ fn create_zip(dir: &Path, zip_path: &Path) -> Result<()> {
 
         zip.start_file(&rel, options)
             .with_context(|| format!("adding '{rel}' to zip"))?;
-        let data = std::fs::read(path)
-            .with_context(|| format!("reading '{}'", path.display()))?;
+        let data = std::fs::read(path).with_context(|| format!("reading '{}'", path.display()))?;
         zip.write_all(&data)
             .with_context(|| format!("writing '{rel}' to zip"))?;
     }

@@ -224,7 +224,10 @@ impl Resource for AssetBackend {}
 /// Constructs a Bevy [`App`] with [`DefaultPlugins`] and [`KaniRuntimePlugin`],
 /// then blocks until the application exits.  Returns an error if the pak file
 /// cannot be opened.
-pub fn run_release(pak_path: impl AsRef<std::path::Path>, entry_script: &str) -> anyhow::Result<()> {
+pub fn run_release(
+    pak_path: impl AsRef<std::path::Path>,
+    entry_script: &str,
+) -> anyhow::Result<()> {
     let backend = AssetBackend::from_pak(pak_path)?;
     build_app(backend, entry_script).run();
     Ok(())
@@ -251,9 +254,10 @@ pub fn run_develop(
 
 fn build_app(backend: AssetBackend, entry_script: &str) -> App {
     let mut app = App::new();
-    app.add_plugins(DefaultPlugins).add_plugins(KaniRuntimePlugin {
-        asset_backend: backend,
-        entry_script: entry_script.to_owned(),
-    });
+    app.add_plugins(DefaultPlugins)
+        .add_plugins(KaniRuntimePlugin {
+            asset_backend: backend,
+            entry_script: entry_script.to_owned(),
+        });
     app
 }

@@ -62,8 +62,6 @@ fn main() -> anyhow::Result<()> {
         Commands::New { name } => cmd::new::run(&name),
         Commands::Run { project } => cmd::run::run(&project),
         Commands::Check { project } => cmd::check::run(&project),
-        Commands::Bundle { project, target } => {
-            cmd::bundle::run(&project, target.as_deref())
-        }
+        Commands::Bundle { project, target } => cmd::bundle::run(&project, target.as_deref()),
     }
 }

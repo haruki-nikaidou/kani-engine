@@ -69,6 +69,5 @@ fn extract_dir(dir: &Dir<'_>, dest: &Path) -> Result<()> {
 }
 
 fn write_file(path: &Path, content: &str) -> Result<()> {
-    std::fs::write(path, content)
-        .with_context(|| format!("writing '{}'", path.display()))
+    std::fs::write(path, content).with_context(|| format!("writing '{}'", path.display()))
 }
