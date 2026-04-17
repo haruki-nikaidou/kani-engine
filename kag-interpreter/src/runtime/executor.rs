@@ -410,13 +410,14 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             ctx.pending_choices
                 .push(crate::runtime::context::PendingChoice {
                     text: String::new(),
-                    storage,
-                    target,
-                    exp,
+                    storage: storage.clone(),
+                    target: target.clone(),
+                    exp: exp.clone(),
                 });
-            vec![KagEvent::Tag(Box::new(ResolvedTag::Extension {
-                name: "link".to_owned(),
-                params: resolve_raw_params(ctx, &tag.params),
+            vec![KagEvent::Tag(Box::new(ResolvedTag::Link {
+                storage,
+                target,
+                exp,
             }))]
         }
 
@@ -435,10 +436,7 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
                     .collect();
                 vec![KagEvent::BeginChoices(choices)]
             } else {
-                vec![KagEvent::Tag(Box::new(ResolvedTag::Extension {
-                    name: "endlink".to_owned(),
-                    params: vec![],
-                }))]
+                vec![KagEvent::Tag(Box::new(ResolvedTag::Endlink))]
             }
         }
 
@@ -461,12 +459,12 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
 
         // ── Character nameplate ───────────────────────────────────────────
         KnownTag::CharaPtext { name } => {
-            if let Some(name_val) = resolve_str_field(ctx, name) {
-                ctx.current_speaker = Some(name_val);
+            let name_val = resolve_str_field(ctx, name);
+            if let Some(ref n) = name_val {
+                ctx.current_speaker = Some(n.clone());
             }
-            vec![KagEvent::Tag(Box::new(ResolvedTag::Extension {
-                name: "chara_ptext".to_owned(),
-                params: resolve_raw_params(ctx, &tag.params),
+            vec![KagEvent::Tag(Box::new(ResolvedTag::CharaPtext {
+                name: name_val,
             }))]
         }
 
@@ -561,10 +559,7 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         // ── Message-layer clear variants ──────────────────────────────────
         KnownTag::Ct {} => vec![
             KagEvent::ClearMessage,
-            KagEvent::Tag(Box::new(ResolvedTag::Extension {
-                name: "ct".to_owned(),
-                params: vec![],
-            })),
+            KagEvent::Tag(Box::new(ResolvedTag::Ct)),
         ],
 
         KnownTag::Er {} => vec![KagEvent::ClearCurrentMessage],
@@ -585,11 +580,10 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         }
 
         KnownTag::Hch { text } => {
-            let text_val = resolve_str_field(ctx, text).unwrap_or_default();
-            let mut ev = vec![KagEvent::Tag(Box::new(ResolvedTag::Extension {
-                name: "hch".to_owned(),
-                params: resolve_raw_params(ctx, &tag.params),
+            let mut ev = vec![KagEvent::Tag(Box::new(ResolvedTag::Hch {
+                text: resolve_str_field(ctx, text.clone()),
             }))];
+            let text_val = resolve_str_field(ctx, text).unwrap_or_default();
             if !text_val.is_empty() {
                 ev.push(plain_display_text(
                     text_val,
@@ -636,9 +630,8 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         KnownTag::Clickskip { enabled } => {
             let enabled_val = resolve_typed_field(ctx, enabled).unwrap_or(true);
             ctx.clickskip_enabled = enabled_val;
-            vec![KagEvent::Tag(Box::new(ResolvedTag::Extension {
-                name: "clickskip".to_owned(),
-                params: resolve_raw_params(ctx, &tag.params),
+            vec![KagEvent::Tag(Box::new(ResolvedTag::Clickskip {
+                enabled: Some(enabled_val),
             }))]
         }
 
@@ -1179,13 +1172,9 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         }
         KnownTag::CharaConfig { name } => {
             let name_val = resolve_str_field(ctx, name);
-            vec![KagEvent::Tag(Box::new(ResolvedTag::Extension {
-                name: "chara_config".to_owned(),
-                params: if let Some(n) = name_val {
-                    vec![("name".to_owned(), n)]
-                } else {
-                    vec![]
-                },
+            vec![KagEvent::Tag(Box::new(ResolvedTag::CharaConfig {
+                name: name_val,
+                params: resolve_raw_params(ctx, &tag.params),
             }))]
         }
         KnownTag::CharaShow {
@@ -1415,8 +1404,7 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             kind: "skip".to_owned(),
             storage: resolve_str_field(ctx, storage),
         }))],
-        KnownTag::GlinkConfig { .. } => vec![KagEvent::Tag(Box::new(ResolvedTag::Extension {
-            name: "glink_config".to_owned(),
+        KnownTag::GlinkConfig { .. } => vec![KagEvent::Tag(Box::new(ResolvedTag::GlinkConfig {
             params: resolve_raw_params(ctx, &tag.params),
         }))],
         KnownTag::ModeEffect { mode, effect } => {
@@ -1774,6 +1762,14 @@ mod tests {
             ResolvedTag::SetGlyph { .. } => "set_glyph",
             ResolvedTag::ModeEffect { .. } => "mode_effect",
             ResolvedTag::Web { .. } => "web",
+            ResolvedTag::Ct => "ct",
+            ResolvedTag::Clickskip { .. } => "clickskip",
+            ResolvedTag::CharaConfig { .. } => "chara_config",
+            ResolvedTag::CharaPtext { .. } => "chara_ptext",
+            ResolvedTag::GlinkConfig { .. } => "glink_config",
+            ResolvedTag::Link { .. } => "link",
+            ResolvedTag::Endlink => "endlink",
+            ResolvedTag::Hch { .. } => "hch",
             ResolvedTag::Extension { name, .. } => {
                 // Leak to get a &'static str for test output — only used in tests.
                 Box::leak(name.clone().into_boxed_str())
