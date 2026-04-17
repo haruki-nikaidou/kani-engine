@@ -19,26 +19,23 @@ pub fn handle_image_tags(
     for tag in reader.read() {
         match tag.0.clone() {
             ResolvedTag::Bg {
-                storage,
+                storage: Some(storage),
                 time,
                 method,
             } => {
-                if let Some(storage) = storage {
                     ev_bg.write(EvSetBackground {
                         storage,
                         time,
                         method,
                     });
-                }
             }
             ResolvedTag::Image {
-                storage,
+                storage: Some(storage),
                 layer,
                 x,
                 y,
                 visible,
             } => {
-                if let Some(storage) = storage {
                     ev_image.write(EvSetImageLayer {
                         storage,
                         layer,
@@ -46,30 +43,27 @@ pub fn handle_image_tags(
                         y,
                         visible,
                     });
-                }
             }
             ResolvedTag::Layopt {
-                layer,
+                layer: Some(layer),
                 visible,
                 opacity,
             } => {
-                if let Some(layer) = layer {
-                    ev_layopt.write(EvSetLayerOpt {
-                        layer,
-                        visible,
-                        opacity,
-                    });
-                }
+                ev_layopt.write(EvSetLayerOpt {
+                    layer,
+                    visible,
+                    opacity,
+                });
             }
-            ResolvedTag::Free { layer } => {
-                if let Some(layer) = layer {
-                    ev_free.write(EvFreeLayer { layer });
-                }
+            ResolvedTag::Free { layer: Some(layer) } => {
+                ev_free.write(EvFreeLayer { layer });
             }
-            ResolvedTag::Position { layer, x, y } => {
-                if let Some(layer) = layer {
-                    ev_pos.write(EvSetLayerPosition { layer, x, y });
-                }
+            ResolvedTag::Position {
+                layer: Some(layer),
+                x,
+                y,
+            } => {
+                ev_pos.write(EvSetLayerPosition { layer, x, y });
             }
             _ => {}
         }

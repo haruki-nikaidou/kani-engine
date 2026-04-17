@@ -20,45 +20,42 @@ pub fn handle_audio_tags(
     for tag in reader.read() {
         match tag.0.clone() {
             ResolvedTag::Bgm {
-                storage,
+                storage: Some(storage),
                 looping,
                 volume,
                 fadetime,
             } => {
-                if let Some(storage) = storage {
-                    ev_bgm.write(EvPlayBgm {
-                        storage,
-                        looping,
-                        volume,
-                        fadetime,
-                    });
-                }
+                ev_bgm.write(EvPlayBgm {
+                    storage,
+                    looping,
+                    volume,
+                    fadetime,
+                });
             }
             ResolvedTag::Stopbgm { fadetime } => {
                 ev_stop_bgm.write(EvStopBgm { fadetime });
             }
             ResolvedTag::Se {
-                storage,
+                storage: Some(storage),
                 buf,
                 volume,
                 looping,
             } => {
-                if let Some(storage) = storage {
-                    ev_se.write(EvPlaySe {
-                        storage,
-                        buf,
-                        volume,
-                        looping,
-                    });
-                }
+                ev_se.write(EvPlaySe {
+                    storage,
+                    buf,
+                    volume,
+                    looping,
+                });
             }
             ResolvedTag::Stopse { buf } => {
                 ev_stop_se.write(EvStopSe { buf });
             }
-            ResolvedTag::Vo { storage, buf } => {
-                if let Some(storage) = storage {
-                    ev_voice.write(EvPlayVoice { storage, buf });
-                }
+            ResolvedTag::Vo {
+                storage: Some(storage),
+                buf,
+            } => {
+                ev_voice.write(EvPlayVoice { storage, buf });
             }
             ResolvedTag::Fadebgm { time, volume } => {
                 ev_fade.write(EvFadeBgm { time, volume });
