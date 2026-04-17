@@ -1,0 +1,196 @@
+---
+title: クイックリファレンス — 全タグ一覧
+description: すべての KAG タグの完全な属性テーブル。
+sidebar:
+  order: 8
+---
+
+| タグ | 必須属性 | 任意属性 |
+|------|---------|---------|
+| **制御フロー** | | |
+| `[if]` | `exp=` | — |
+| `[elsif]` | `exp=` | — |
+| `[else]` | — | — |
+| `[endif]` | — | — |
+| `[ignore]` | `exp=` | — |
+| `[endignore]` | — | — |
+| **ナビゲーション** | | |
+| `[jump]` | `storage=` または `target=` | 両方 |
+| `[call]` | `storage=` または `target=` | 両方 |
+| `[return]` | — | — |
+| `[clearstack]` | — | — |
+| **選択肢リンク** | | |
+| `[link]` | `storage=` または `target=` | `text=` |
+| `[endlink]` | — | — |
+| `[glink]` | `storage=` または `target=` | `text=` |
+| **Rhai** | | |
+| `[eval]` | `exp=` | — |
+| `[emb]` | `exp=` | — |
+| `[trace]` | `exp=` | — |
+| `[iscript]` / `[endscript]` | — | — |
+| **表示** | | |
+| `[l]` | — | — |
+| `[p]` | — | — |
+| `[r]` | — | — |
+| `[s]` | — | — |
+| `[cm]` | — | — |
+| `[er]` | — | — |
+| `[ch]` | `text=` | — |
+| `[hch]` | `text=` | — |
+| **タイムドウェイト** | | |
+| `[wait]` | `time=` | `canskip=` |
+| `[wc]` | `time=` | — |
+| `[ct]` | — | — |
+| `[wa]`〜`[wp]` | — | `canskip=`・`buf=` |
+| `[wbgm]` | — | — |
+| `[wse]` | — | `buf=` |
+| **イベントハンドラ** | | |
+| `[timeout]` | `time=` | `storage=`・`target=` |
+| `[waitclick]` | — | — |
+| `[click]` | `storage=`・`target=`・`exp=` のいずれか | 3 つすべて |
+| `[wheel]` | `storage=`・`target=`・`exp=` のいずれか | 3 つすべて |
+| `[cclick]` | — | — |
+| `[ctimeout]` | — | — |
+| `[cwheel]` | — | — |
+| **スキップ制御** | | |
+| `[skipstart]` | — | — |
+| `[skipstop]` | — | — |
+| `[cancelskip]` | — | — |
+| `[clickskip]` | — | `enabled=` |
+| **表示速度** | | |
+| `[nowait]` | — | — |
+| `[endnowait]` | — | — |
+| `[delay]` | `speed=` | — |
+| `[configdelay]` | `speed=` | — |
+| `[resetdelay]` | — | — |
+| `[autowc]` | — | `time=` |
+| `[resetwait]` | — | — |
+| **バックログ** | | |
+| `[nolog]` | — | — |
+| `[endnolog]` | — | — |
+| `[pushlog]` | `text=` | `join=` |
+| **プレイヤー入力** | | |
+| `[input]` | `name=` | `prompt=`・`title=` |
+| `[waittrig]` | `name=` | — |
+| **マクロ** | | |
+| `[macro]` | — | `name=` |
+| `[erasemacro]` | `name=` | — |
+| `[endmacro]` | — | — |
+| **変数** | | |
+| `[clearvar]` | — | — |
+| `[clearsysvar]` | — | — |
+| **画像・レイヤー** | | |
+| `[bg]` | `storage=` | `time=`・`method=` |
+| `[image]` | `storage=` | `layer=`・`x=`・`y=`・`visible=` |
+| `[layopt]` | `layer=` | `visible=`・`opacity=` |
+| `[free]` / `[freeimage]` / `[freelayer]` | `layer=` | — |
+| `[position]` | `layer=` | `x=`・`y=` |
+| `[backlay]` | — | — |
+| `[current]` | `layer=` | — |
+| `[locate]` | — | `x=`・`y=` |
+| `[layermode]` | `layer=`・`mode=` | — |
+| `[free_layermode]` | `layer=` | — |
+| `[filter]` | `layer=`・`type=` | 種類によって異なる |
+| `[free_filter]` | `layer=` | — |
+| `[position_filter]` | `layer=` | `x=`・`y=` |
+| `[mask]` | `layer=`・`storage=` | — |
+| `[mask_off]` | `layer=` | — |
+| `[graph]` | `layer=`・`shape=` | `x=`・`y=`・`width=`・`height=`・`color=` |
+| **オーディオ — BGM** | | |
+| `[bgm]` / `[playbgm]` | `storage=` | `loop=`・`volume=`・`fadetime=` |
+| `[fadeinbgm]` | `storage=` | `time=` |
+| `[stopbgm]` | — | `fadetime=` |
+| `[fadeoutbgm]` | — | `time=` |
+| `[fadebgm]` | — | `time=`・`volume=` |
+| `[pausebgm]` | — | — |
+| `[resumebgm]` | — | — |
+| `[xchgbgm]` | `storage=` | `time=` |
+| `[bgmopt]` | — | `loop=`・`seek=` |
+| `[wb]` / `[wbgm]` | — | `canskip=` |
+| **オーディオ — SE** | | |
+| `[se]` / `[playSe]` | `storage=` | `buf=`・`volume=`・`loop=` |
+| `[stopse]` | — | `buf=` |
+| `[pausese]` | — | `buf=` |
+| `[resumese]` | — | `buf=` |
+| `[seopt]` | — | `buf=`・`loop=` |
+| `[ws]` / `[wse]` | — | `buf=`・`canskip=` |
+| **オーディオ — ボイス** | | |
+| `[vo]` / `[voice]` | `storage=` | `buf=` |
+| `[wv]` | — | `canskip=`・`buf=` |
+| **オーディオ — 音量** | | |
+| `[changevol]` | `target=` | `vol=`・`time=` |
+| **動画** | | |
+| `[bgmovie]` | `storage=` | `loop=`・`volume=` |
+| `[stop_bgmovie]` | — | — |
+| `[wait_bgmovie]` | — | — |
+| `[movie]` | `storage=` | `x=`・`y=`・`width=`・`height=` |
+| **トランジション** | | |
+| `[trans]` | — | `method=`・`time=`・`rule=` |
+| `[fadein]` | — | `time=`・`color=` |
+| `[fadeout]` | — | `time=`・`color=` |
+| `[movetrans]` | — | `layer=`・`time=`・`x=`・`y=` |
+| **エフェクト** | | |
+| `[quake]` | — | `time=`・`hmax=`・`vmax=` |
+| `[shake]` | — | `time=`・`amount=`・`axis=` |
+| `[flash]` | — | `time=`・`color=` |
+| **アニメーション** | | |
+| `[anim]` | `layer=`・`preset=` | `time=`・`loop=`・`delay=` |
+| `[stopanim]` | `layer=` | — |
+| `[keyframe]` | `name=` | — |
+| `[frame]` | `time=` | `opacity=`・`x=`・`y=` |
+| `[endkeyframe]` | — | — |
+| `[kanim]` | `layer=`・`name=` | `loop=` |
+| `[stop_kanim]` | `layer=` | — |
+| `[xanim]` | `layer=`・`name=` | `loop=` |
+| `[stop_xanim]` | `layer=` | — |
+| **メッセージウィンドウ** | | |
+| `[msgwnd]` | — | `visible=`・`layer=` |
+| `[wndctrl]` | — | `x=`・`y=`・`width=`・`height=` |
+| `[resetfont]` | — | — |
+| `[font]` | — | `face=`・`size=`・`bold=`・`italic=` |
+| `[size]` | — | `value=` |
+| `[bold]` | — | `value=` |
+| `[italic]` | — | `value=` |
+| `[ruby]` | — | `text=` |
+| `[nowrap]` | — | — |
+| `[endnowrap]` | — | — |
+| **キャラクター** | | |
+| `[chara_new]` | `name=` | `storage=`・`width=`・`height=` |
+| `[chara_face]` | `name=`・`face=`・`storage=` | — |
+| `[chara_config]` | `name=` | 種類によって異なる |
+| `[chara_show]` | `name=` | `face=`・`x=`・`y=`・`time=`・`method=` |
+| `[chara_hide]` | `name=` | `time=`・`method=` |
+| `[chara_hide_all]` | — | `time=`・`method=` |
+| `[chara_free]` | `name=` | — |
+| `[chara_delete]` | `name=` | — |
+| `[chara_mod]` | `name=` | `face=`・`pose=`・`storage=` |
+| `[chara_move]` | `name=` | `x=`・`y=`・`time=` |
+| `[chara_layer]` | `name=`・`layer=` | — |
+| `[chara_layer_mod]` | `name=` | `opacity=`・`visible=` |
+| `[chara_part]` | `name=`・`part=`・`storage=` | — |
+| `[chara_part_reset]` | `name=` | — |
+| `[chara_ptext]` | `name=` | — |
+| **UI** | | |
+| `[button]` | — | `text=`・`x=`・`y=`・`width=`・`height=`・`bg=`・`hover_bg=`・`press_bg=`・`exp=`・`target=`・`storage=`・`key=`・`visible=`・`opacity=` |
+| `[clickable]` | `layer=` | `target=`・`storage=`・`exp=` |
+| `[showmenu]` | — | — |
+| `[showload]` | — | — |
+| `[showsave]` | — | — |
+| `[showlog]` | — | — |
+| `[hidemessage]` | — | — |
+| `[showmenubutton]` | — | — |
+| `[hidemenubutton]` | — | — |
+| `[dialog]` | — | `text=`・`title=` |
+| `[cursor]` | — | `storage=` |
+| `[speak_on]` | — | — |
+| `[speak_off]` | — | — |
+| `[glyph]` | — | `storage=` |
+| `[glyph_auto]` | — | `storage=` |
+| `[glyph_skip]` | — | `storage=` |
+| `[glink_config]` | — | 種類によって異なる |
+| `[mode_effect]` | `mode=` | `effect=` |
+| **キーコンフィグ** | | |
+| `[start_keyconfig]` | — | — |
+| `[stop_keyconfig]` | — | — |
+| **その他** | | |
+| `[web]` | `url=` | — |

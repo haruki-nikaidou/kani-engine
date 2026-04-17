@@ -1,0 +1,104 @@
+---
+title: Control Flow & Navigation
+description: Conditional branching, scene navigation, and choice links.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+---
+
+## Conditional Branching
+
+### `[if]` / `[elsif]` / `[else]` / `[endif]`
+
+```ks
+[if exp="f.score >= 100"]
+You achieved a perfect score!
+[elsif exp="f.score >= 50"]
+Not bad — keep going!
+[else]
+Better luck next time.
+[endif]
+```
+
+`exp=` is a Rhai expression evaluated to a boolean. Truthy rules:
+
+| Type | Falsy when… |
+|------|------------|
+| `bool` | `false` |
+| `int` | `0` |
+| `string` | empty string `""` |
+| other types | unit value |
+
+### `[ignore exp=…]` / `[endignore]`
+
+Skips everything between `[ignore]` and `[endignore]` when `exp=` is truthy. Use this to comment out large blocks conditionally:
+
+```ks
+[ignore exp="sf.debug == false"]
+[trace exp="f.current_scene"]
+[endignore]
+```
+
+---
+
+## Navigation
+
+{% tabs %}
+{% tabitem label="[jump]" %}
+
+Unconditionally jump to a label. `storage=` changes the current file; `target=` names the label (include the `*` prefix).
+
+```ks
+[jump target=*game_over]
+[jump storage=scene02.ks target=*start]
+```
+
+{% /tabitem %}
+{% tabitem label="[call] / [return]" %}
+
+Like `[jump]`, but pushes the current position onto the call stack so `[return]` can come back.
+
+```ks
+[call target=*show_inventory]
+; execution continues here after [return]
+```
+
+Use `[clearstack]` to discard the entire call stack before a hard jump to a new scene.
+
+{% /tabitem %}
+{% /tabs %}
+
+---
+
+## Choice Links
+
+### `[link]` / `[endlink]`
+
+Accumulate one or more choice buttons. Each `[link]` tag defines one option.
+
+```ks
+[link target=*choice_a]
+Option A
+[link target=*choice_b]
+Option B
+[endlink]
+```
+
+Attributes:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `storage=` | string | Target scenario file |
+| `target=` | string | Target label |
+| `text=` | string | Button label text (alternative to inline text) |
+
+{% aside type="note" %}
+At least one of `storage=` or `target=` should be provided.
+{% /aside %}
+
+### `[glink]` — Graphical link button
+
+Same semantics as `[link]` but intended for an image-based button rather than a text span.

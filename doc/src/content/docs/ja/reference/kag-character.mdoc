@@ -1,0 +1,164 @@
+---
+title: キャラクターシステム
+description: キャラクタースプライトの定義・表示・アニメーション。
+sidebar:
+  order: 5
+---
+
+---
+
+## キャラクターシステムの概要
+
+キャラクターシステムは**定義**と**表示**を分離しています：
+
+1. `[chara_new]` で一度キャラクターを**定義**し、`[chara_face]` で表情バリアントを登録します。
+2. `[chara_show]` で定義済みキャラクターをいつでも**表示**できます。表示する表情を指定できます。
+3. `[chara_mod]` で画面上のキャラクターの外見を**変更**します。
+
+{% aside type="note" title="永続性" %}
+キャラクター定義は `RuntimeContext` に保存され、シーンファイルをまたいで保持されます。通常、ゲーム開始時や共有初期化ファイルですべてのキャラクターを定義します。
+{% /aside %}
+
+---
+
+## キャラクターの定義
+
+### `[chara_new name=… storage=… width=… height=…]`
+
+新しいキャラクターを登録します。視覚的な出力はなく、定義のみを保存します。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `name=` | string | **はい** | 他のすべての `chara_*` タグで使用するキャラクター識別子 |
+| `storage=` | string | いいえ | デフォルトのスプライト画像パス |
+| `width=` / `height=` | float | いいえ | スプライトのサイズ |
+
+### `[chara_face name=… face=… storage=…]`
+
+登録済みキャラクターに表情バリアントを追加します。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `name=` | string | **はい** | キャラクター識別子 |
+| `face=` | string | **はい** | 表情バリアント名（例：`normal`・`happy`・`angry`） |
+| `storage=` | string | **はい** | この表情の画像パス |
+
+### `[chara_config name=… …]`
+
+登録済みキャラクターの設定（デフォルト位置・レイヤーなど）を更新します。
+
+### `[chara_delete name=…]`
+
+レジストリからキャラクター定義とすべての表情バリアントを削除します。
+
+---
+
+## キャラクターの表示
+
+### `[chara_show name=… face=… x=… y=… time=… method=…]`
+
+登録済みキャラクターを画面に表示します。
+
+| 属性 | 型 | 必須 | 説明 |
+|------|----|------|------|
+| `name=` | string | **はい** | キャラクター識別子 |
+| `face=` | string | いいえ | 表情バリアント（省略時はデフォルト） |
+| `x=` / `y=` | float | いいえ | 画面上の位置 |
+| `time=` | ms | いいえ | 登場トランジション時間 |
+| `method=` | string | いいえ | 登場トランジション方法 |
+
+### `[chara_hide name=… time=… method=…]`
+
+任意の退場トランジションでキャラクターを非表示にします。キャラクターはロードされたまま保持されます。
+
+### `[chara_hide_all time=… method=…]`
+
+現在表示中のすべてのキャラクターを一度に非表示にします。
+
+### `[chara_free name=…]`
+
+キャラクタースプライトをメモリからアンロードします（定義は削除されません）。
+
+---
+
+## 画面上のキャラクターを変更する
+
+### `[chara_mod name=… face=… pose=… storage=…]`
+
+画面上にいるキャラクターの表情またはポーズを変更します。
+
+| 属性 | 型 | 説明 |
+|------|----|------|
+| `name=` | string | キャラクター識別子 |
+| `face=` | string | 新しい表情バリアント |
+| `pose=` | string | 新しいポーズバリアント |
+| `storage=` | string | 直接指定する画像パス（レジストリ参照をオーバーライド） |
+
+### `[chara_move name=… x=… y=… time=…]`
+
+キャラクターを新しい画面位置にアニメーションで移動させます。
+
+---
+
+## レイヤーとコンポジット
+
+### `[chara_layer name=… layer=…]`
+
+描画順のために特定の Z レイヤーにキャラクターを割り当てます。
+
+### `[chara_layer_mod name=… opacity=… visible=…]`
+
+画面上のキャラクターのレイヤーレベルプロパティを変更します。
+
+### `[chara_part name=… part=… storage=…]`
+
+キャラクターのコンポジットパーツ（髪色・衣装・アクセサリーなど）を設定します。
+
+### `[chara_part_reset name=…]`
+
+すべてのパーツをデフォルト値にリセットします。
+
+---
+
+## ネームボックス
+
+### `[chara_ptext name=…]`
+
+メッセージウィンドウ上部の `ptext` ネームボックスに表示するキャラクター名を設定します。
+
+---
+
+## 使用例
+
+{% steps %}
+
+1. 初期化ファイルで**キャラクターを定義**します：
+
+   ```ks
+   [chara_new name=alice storage=chara/alice/default.png]
+   [chara_face name=alice face=normal storage=chara/alice/normal.png]
+   [chara_face name=alice face=happy storage=chara/alice/happy.png]
+   [chara_face name=alice face=sad storage=chara/alice/sad.png]
+   ```
+
+2. シーン開始時にキャラクターを**表示**します：
+
+   ```ks
+   [chara_show name=alice face=normal x=200 y=100 time=500]
+   ```
+
+3. 会話中に**表情を変更**します：
+
+   ```ks
+   #Alice
+   信じられない！
+   [chara_mod name=alice face=surprised]
+   ```
+
+4. シーン終了時に**非表示**にします：
+
+   ```ks
+   [chara_hide name=alice time=300]
+   ```
+
+{% /steps %}

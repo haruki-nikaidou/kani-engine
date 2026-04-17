@@ -1,0 +1,166 @@
+---
+title: Character System
+description: Defining, displaying, and animating character sprites.
+sidebar:
+  order: 5
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+---
+
+## Character System Overview
+
+The character system separates **definition** from **display**:
+
+1. **Define** a character once with `[chara_new]` and register face/expression variants with `[chara_face]`.
+2. **Display** a defined character at any time with `[chara_show]`, specifying which face to use.
+3. **Modify** an on-screen character's appearance with `[chara_mod]`.
+
+{% aside type="note" title="Persistence" %}
+Character definitions are stored in `RuntimeContext` and persist across scene files. You typically define all characters at the start of the game or in a shared initialization file.
+{% /aside %}
+
+---
+
+## Defining Characters
+
+### `[chara_new name=… storage=… width=… height=…]`
+
+Register a new character. No visual output — this only stores the definition.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name=` | string | **Yes** | Character identifier used in all other `chara_*` tags |
+| `storage=` | string | No | Default sprite image path |
+| `width=` / `height=` | float | No | Sprite dimensions |
+
+### `[chara_face name=… face=… storage=…]`
+
+Add a named face/expression variant to a registered character.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name=` | string | **Yes** | Character identifier |
+| `face=` | string | **Yes** | Face variant name (e.g. `normal`, `happy`, `angry`) |
+| `storage=` | string | **Yes** | Image path for this face |
+
+### `[chara_config name=… …]`
+
+Update configuration for a registered character (position defaults, layer, etc.).
+
+### `[chara_delete name=…]`
+
+Remove a character definition and all its face variants from the registry.
+
+---
+
+## Displaying Characters
+
+### `[chara_show name=… face=… x=… y=… time=… method=…]`
+
+Display a registered character on screen.
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name=` | string | **Yes** | Character identifier |
+| `face=` | string | No | Face variant (uses default if omitted) |
+| `x=` / `y=` | float | No | Screen position |
+| `time=` | ms | No | Entrance transition duration |
+| `method=` | string | No | Entrance transition method |
+
+### `[chara_hide name=… time=… method=…]`
+
+Hide a character with an optional exit transition. The character stays loaded.
+
+### `[chara_hide_all time=… method=…]`
+
+Hide all currently-visible characters at once.
+
+### `[chara_free name=…]`
+
+Unload a character sprite from memory (does not remove the definition).
+
+---
+
+## Modifying On-Screen Characters
+
+### `[chara_mod name=… face=… pose=… storage=…]`
+
+Change the expression or pose of a character already on screen.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `name=` | string | Character identifier |
+| `face=` | string | New face variant |
+| `pose=` | string | New pose variant |
+| `storage=` | string | Direct image path (overrides registry lookup) |
+
+### `[chara_move name=… x=… y=… time=…]`
+
+Animate a character to a new screen position.
+
+---
+
+## Layer & Compositing
+
+### `[chara_layer name=… layer=…]`
+
+Assign a character to a specific z-layer for draw ordering.
+
+### `[chara_layer_mod name=… opacity=… visible=…]`
+
+Modify layer-level properties of an on-screen character.
+
+### `[chara_part name=… part=… storage=…]`
+
+Set a compositable part (hair colour, outfit, accessories, etc.) on a character.
+
+### `[chara_part_reset name=…]`
+
+Reset all parts to their default values.
+
+---
+
+## Name Box
+
+### `[chara_ptext name=…]`
+
+Set the character name displayed in the `ptext` name box above the message window.
+
+---
+
+## Example
+
+{% steps %}
+
+1. **Define characters** in an initialization file:
+
+   ```ks
+   [chara_new name=alice storage=chara/alice/default.png]
+   [chara_face name=alice face=normal storage=chara/alice/normal.png]
+   [chara_face name=alice face=happy storage=chara/alice/happy.png]
+   [chara_face name=alice face=sad storage=chara/alice/sad.png]
+   ```
+
+2. **Show a character** when entering a scene:
+
+   ```ks
+   [chara_show name=alice face=normal x=200 y=100 time=500]
+   ```
+
+3. **Change expression** mid-dialogue:
+
+   ```ks
+   #Alice
+   I can't believe it!
+   [chara_mod name=alice face=surprised]
+   ```
+
+4. **Hide** when leaving the scene:
+
+   ```ks
+   [chara_hide name=alice time=300]
+   ```
+
+{% /steps %}

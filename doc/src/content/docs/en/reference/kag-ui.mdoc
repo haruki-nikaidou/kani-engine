@@ -1,0 +1,174 @@
+---
+title: UI & Message Window
+description: Message window control, buttons, menus, dialogs, and other UI tags.
+sidebar:
+  order: 6
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+---
+
+## Message Window
+
+### `[msgwnd visible=… layer=…]`
+
+Show or hide the message window.
+
+### `[wndctrl x=… y=… width=… height=…]`
+
+Set the position and size of the message window.
+
+### Font control
+
+| Tag | Description |
+|-----|-------------|
+| `[font face=… size=… bold=… italic=…]` | Set multiple font properties at once |
+| `[size value=…]` | Font size in points |
+| `[bold value=…]` | Bold on/off |
+| `[italic value=…]` | Italic on/off |
+| `[resetfont]` | Reset all font properties to defaults |
+| `[ruby text=…]` | Set ruby (furigana) annotation for the next characters |
+
+### Word wrap
+
+| Tag | Description |
+|-----|-------------|
+| `[nowrap]` | Disable word wrapping |
+| `[endnowrap]` | Re-enable word wrapping |
+
+---
+
+## Rich Text (Inline Markup)
+
+Inside message text, XML-style inline tags control character-level formatting:
+
+```ks
+This is <b>bold</b> and <i>italic</i>.
+The word <color value="#ff4444">danger</color> is highlighted.
+<size value="32">Large text.</size>
+<ruby rt="かんじ">漢字</ruby>
+```
+
+| Tag | Description |
+|-----|-------------|
+| `<b>…</b>` | Bold |
+| `<i>…</i>` | Italic |
+| `<size value="N">…</size>` | Font size in points |
+| `<color value="#rrggbb">…</color>` | Text colour |
+| `<ruby rt="reading">base</ruby>` | Furigana annotation |
+| `<shadow>…</shadow>` | Drop shadow |
+| `<outline>…</outline>` | Text outline |
+| `<nowrap>…</nowrap>` | Disable word-wrap for the region |
+
+---
+
+## Speaker Name Box
+
+### `[speak_on]` / `[speak_off]`
+
+Toggle display of the speaker name box above the message window.
+
+### `[chara_ptext name=…]`
+
+Set the character name shown in the `ptext` name box.
+
+---
+
+## Buttons
+
+### `[button]`
+
+Spawn a clickable button widget on screen.
+
+```ks
+[button text="Continue" x=100 y=400 width=200 height=48
+        bg=ui/btn.png hover_bg=ui/btn_hover.png
+        exp="f.choice = 1" target=*next key=Return]
+```
+
+| Attribute group | Attributes |
+|---|---|
+| Content | `text=` (label), `graphic=` (icon image path) |
+| Geometry | `x=`, `y=`, `width=`, `height=` |
+| Appearance | `bg=`, `hover_bg=`, `press_bg=`, `color=`, `font_size=` |
+| Action | `target=` (label to jump to), `storage=` (scenario), `exp=` (Rhai expression on click) |
+| Keyboard | `key=` (key name, e.g. `Return`, `Space`) |
+| Visibility | `visible=`, `opacity=` |
+
+Buttons are automatically removed when the script navigates to a new label or file.
+
+### `[clickable layer=… target=… exp=…]`
+
+Make an existing image layer respond to click events.
+
+---
+
+## Menus & Panels
+
+The following tags signal the host to open built-in UI panels. The host is responsible for rendering each panel.
+
+| Tag | Description |
+|-----|-------------|
+| `[showmenu]` | Open the main menu |
+| `[showload]` | Open the load screen |
+| `[showsave]` | Open the save screen |
+| `[showlog]` | Open the backlog viewer |
+| `[hidemessage]` | Temporarily hide the message window |
+| `[showmenubutton]` | Show the persistent menu button |
+| `[hidemenubutton]` | Hide the persistent menu button |
+
+---
+
+## Dialog
+
+### `[dialog text=… title=…]`
+
+Display a modal dialog box. Execution blocks until the player dismisses it.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `text=` | string | Dialog body text |
+| `title=` | string | Dialog title |
+
+---
+
+## Cursor
+
+### `[cursor storage=…]`
+
+Change the mouse cursor to a custom image.
+
+---
+
+## Glyph Configuration
+
+Configure the images used for the click-wait glyphs.
+
+| Tag | Description |
+|-----|-------------|
+| `[glyph storage=… …]` | Set the default click-wait glyph |
+| `[glyph_auto …]` | Set the glyph shown during auto mode |
+| `[glyph_skip …]` | Set the glyph shown during skip mode |
+
+---
+
+## Mode Effect
+
+### `[mode_effect mode=… effect=…]`
+
+Play a visual effect when skip or auto mode starts or stops.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `mode=` | string | `"skip"` or `"auto"` |
+| `effect=` | string | Effect name |
+
+---
+
+## Key Config
+
+| Tag | Description |
+|-----|-------------|
+| `[start_keyconfig]` | Open the key-binding configuration UI (blocks until closed) |
+| `[stop_keyconfig]` | Close the key-binding UI programmatically |

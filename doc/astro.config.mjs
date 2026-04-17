@@ -70,8 +70,8 @@ export default defineConfig({
           ],
         },
         {
-          label: "Reference",
-          translations: { ja: "リファレンス" },
+          label: "KAG-Rhai Reference",
+          translations: { ja: "KAG-Rhai リファレンス" },
           autogenerate: { directory: "reference" },
         },
       ],
