@@ -4,7 +4,7 @@
 
 //! `kani-runtime` — Bevy runtime bridge for the KAG interpreter.
 //!
-//! # Quick start
+//! # Quick start (plugin API)
 //!
 //! ```rust,no_run
 //! use bevy::prelude::*;
@@ -21,6 +21,13 @@
 //!     })
 //!     .run();
 //! ```
+//!
+//! # Launch functions (preferred for most callers)
+//!
+//! | Function | When to use |
+//! |----------|-------------|
+//! | [`run_release`] | Ship to players — reads assets from a `.pak` archive |
+//! | [`run_develop`] | Dev tooling — reads assets from the filesystem (requires `develop` feature) |
 
 mod asset;
 mod bridge;
@@ -152,3 +159,44 @@ impl Plugin for KaniRuntimePlugin {
 
 // Make AssetBackend a Bevy Resource so poll.rs can access it.
 impl Resource for AssetBackend {}
+
+// ─── Launch functions ─────────────────────────────────────────────────────────
+
+/// Run the game from a `.pak` archive.
+///
+/// Constructs a Bevy [`App`] with [`DefaultPlugins`] and [`KaniRuntimePlugin`],
+/// then blocks until the application exits.  Returns an error if the pak file
+/// cannot be opened.
+pub fn run_release(pak_path: impl AsRef<std::path::Path>, entry_script: &str) -> anyhow::Result<()> {
+    let backend = AssetBackend::from_pak(pak_path)?;
+    build_app(backend, entry_script).run();
+    Ok(())
+}
+
+/// Run the game directly from the filesystem (developer mode).
+///
+/// Assets are read from `base_path` on disk.  Bevy's built-in asset watcher
+/// (enabled via the workspace `dev` feature) provides hot-reload for binary
+/// assets.  Script (`.ks`) hot-reload is deferred to a future version.
+///
+/// Blocks until the Bevy application exits.
+#[cfg(feature = "develop")]
+pub fn run_develop(
+    base_path: impl AsRef<std::path::Path>,
+    entry_script: &str,
+) -> anyhow::Result<()> {
+    let backend = AssetBackend::FileSystem {
+        base: base_path.as_ref().to_owned(),
+    };
+    build_app(backend, entry_script).run();
+    Ok(())
+}
+
+fn build_app(backend: AssetBackend, entry_script: &str) -> App {
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins).add_plugins(KaniRuntimePlugin {
+        asset_backend: backend,
+        entry_script: entry_script.to_owned(),
+    });
+    app
+}
