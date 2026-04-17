@@ -25,10 +25,10 @@ version = "0.1.0"
 author  = ""
 
 [entry]
-start = "scenario/first.ks"
+start = "first.ks"
 
 [assets]
-base = "data"
+base = "src"
 
 [build]
 target      = ""
@@ -39,8 +39,8 @@ compression = "zstd"
     write_file(&dest.join("kani.toml"), &kani_toml)?;
 
     println!("Created project '{name}'.");
-    println!("  Assets and starter scripts are in data/");
-    println!("  Entry scenario: data/scenario/first.ks");
+    println!("  Assets and starter scripts are in src/");
+    println!("  Entry scenario: src/first.ks");
     println!("  Run with:  kani-bundler run --project {name}");
 
     Ok(())

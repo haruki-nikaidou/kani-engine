@@ -4,10 +4,10 @@ version = "0.1.0"
 author  = ""
 
 [entry]
-start = "scenario/first.ks"
+start = "first.ks"
 
 [assets]
-base = "data"
+base = "src"
 
 [build]
 target      = ""
