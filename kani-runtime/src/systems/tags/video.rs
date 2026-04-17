@@ -3,13 +3,11 @@
 use bevy::prelude::*;
 use kag_interpreter::ResolvedTag;
 
-use crate::events::{EvPlayBgMovie, EvPlayMovie, EvStopBgMovie, EvTagRouted};
+use crate::events::{EvTagRouted, EvVideoTag};
 
 pub fn handle_video_tags(
     mut reader: MessageReader<EvTagRouted>,
-    mut ev_bgmovie: MessageWriter<EvPlayBgMovie>,
-    mut ev_stop_bgmovie: MessageWriter<EvStopBgMovie>,
-    mut ev_movie: MessageWriter<EvPlayMovie>,
+    mut ev: MessageWriter<EvVideoTag>,
 ) {
     for tag in reader.read() {
         match tag.0.clone() {
@@ -18,14 +16,10 @@ pub fn handle_video_tags(
                 looping,
                 volume,
             } => {
-                ev_bgmovie.write(EvPlayBgMovie {
-                    storage,
-                    looping,
-                    volume,
-                });
+                ev.write(EvVideoTag::PlayBgMovie { storage, looping, volume });
             }
             ResolvedTag::StopBgmovie => {
-                ev_stop_bgmovie.write(EvStopBgMovie);
+                ev.write(EvVideoTag::StopBgMovie);
             }
             ResolvedTag::Movie {
                 storage: Some(storage),
@@ -34,13 +28,7 @@ pub fn handle_video_tags(
                 width,
                 height,
             } => {
-                ev_movie.write(EvPlayMovie {
-                    storage,
-                    x,
-                    y,
-                    width,
-                    height,
-                });
+                ev.write(EvVideoTag::PlayMovie { storage, x, y, width, height });
             }
             _ => {}
         }

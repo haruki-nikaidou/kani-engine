@@ -3,11 +3,11 @@
 use bevy::prelude::*;
 use kag_interpreter::ResolvedTag;
 
-use crate::events::{EvOpenUrl, EvTagRouted};
+use crate::events::{EvMiscTag, EvTagRouted};
 
 pub fn handle_misc_tags(
     mut reader: MessageReader<EvTagRouted>,
-    mut ev_url: MessageWriter<EvOpenUrl>,
+    mut ev: MessageWriter<EvMiscTag>,
 ) {
     for tag in reader.read() {
         if let ResolvedTag::Web { url: Some(url) } = tag.0.clone() {
@@ -15,7 +15,7 @@ pub fn handle_misc_tags(
             if let Err(e) = open::that(&url) {
                 warn!("[kani-runtime] [web] failed to open URL {url:?}: {e}");
             }
-            ev_url.write(EvOpenUrl { url });
+            ev.write(EvMiscTag::OpenUrl { url });
         }
     }
 }

@@ -4,19 +4,11 @@
 use bevy::prelude::*;
 use kag_interpreter::ResolvedTag;
 
-use crate::events::{
-    EvPlayAnim, EvPlayKanim, EvPlayXanim, EvStopAnim, EvStopKanim, EvStopXanim, EvTagRouted,
-};
+use crate::events::{EvAnimTag, EvTagRouted};
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_animation_tags(
     mut reader: MessageReader<EvTagRouted>,
-    mut ev_anim: MessageWriter<EvPlayAnim>,
-    mut ev_stop_anim: MessageWriter<EvStopAnim>,
-    mut ev_kanim: MessageWriter<EvPlayKanim>,
-    mut ev_stop_kanim: MessageWriter<EvStopKanim>,
-    mut ev_xanim: MessageWriter<EvPlayXanim>,
-    mut ev_stop_xanim: MessageWriter<EvStopXanim>,
+    mut ev: MessageWriter<EvAnimTag>,
 ) {
     for tag in reader.read() {
         match tag.0.clone() {
@@ -27,44 +19,22 @@ pub fn handle_animation_tags(
                 looping,
                 delay,
             } => {
-                ev_anim.write(EvPlayAnim {
-                    layer,
-                    preset,
-                    time,
-                    looping,
-                    delay,
-                });
+                ev.write(EvAnimTag::PlayAnim { layer, preset, time, looping, delay });
             }
             ResolvedTag::StopAnim { layer } => {
-                ev_stop_anim.write(EvStopAnim { layer });
+                ev.write(EvAnimTag::StopAnim { layer });
             }
-            ResolvedTag::Kanim {
-                layer,
-                frames,
-                looping,
-            } => {
-                ev_kanim.write(EvPlayKanim {
-                    layer,
-                    frames,
-                    looping,
-                });
+            ResolvedTag::Kanim { layer, frames, looping } => {
+                ev.write(EvAnimTag::PlayKanim { layer, frames, looping });
             }
             ResolvedTag::StopKanim { layer } => {
-                ev_stop_kanim.write(EvStopKanim { layer });
+                ev.write(EvAnimTag::StopKanim { layer });
             }
-            ResolvedTag::Xanim {
-                layer,
-                frames,
-                looping,
-            } => {
-                ev_xanim.write(EvPlayXanim {
-                    layer,
-                    frames,
-                    looping,
-                });
+            ResolvedTag::Xanim { layer, frames, looping } => {
+                ev.write(EvAnimTag::PlayXanim { layer, frames, looping });
             }
             ResolvedTag::StopXanim { layer } => {
-                ev_stop_xanim.write(EvStopXanim { layer });
+                ev.write(EvAnimTag::StopXanim { layer });
             }
             _ => {}
         }
