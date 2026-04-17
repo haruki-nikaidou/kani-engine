@@ -148,19 +148,25 @@ fn parse_chara_line(p: &mut Parser<'_>) {
     p.start_node(SyntaxKind::CHARA_LINE);
     p.bump(); // HASH
 
-    if !p.at(SyntaxKind::IDENT) {
-        p.error_recover_to_newline("expected character name after `#`");
-        if p.at(SyntaxKind::NEWLINE) {
-            p.bump();
+    // #region agent log
+    {
+        use std::io::Write;
+        let kind = p.current();
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/home/haruki/repos/kani-engine/.cursor/debug-28bf1a.log") {
+            let _ = writeln!(f, "{{\"sessionId\":\"28bf1a\",\"hypothesisId\":\"E-F-G\",\"location\":\"line.rs:parse_chara_line\",\"message\":\"token after hash\",\"data\":{{\"kind\":\"{:?}\",\"is_ident\":{},\"is_text\":{}}},\"timestamp\":{}}}", kind, kind == SyntaxKind::IDENT, kind == SyntaxKind::TEXT, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
         }
-        p.finish_node();
-        return;
     }
-    p.bump(); // name IDENT
+    // #endregion
+
+    // Accept IDENT (ASCII names), TEXT (Japanese/Unicode names, `?`, etc.),
+    // or nothing (bare `#` = narrator / clear displayed name).
+    if p.at(SyntaxKind::IDENT) || p.at(SyntaxKind::TEXT) {
+        p.bump(); // name
+    }
 
     if p.at(SyntaxKind::COLON) {
         p.bump(); // COLON
-        if !p.at(SyntaxKind::IDENT) {
+        if !p.at(SyntaxKind::IDENT) && !p.at(SyntaxKind::TEXT) {
             p.error_recover_to_newline("expected face name after `:` in `#name:face`");
             if p.at(SyntaxKind::NEWLINE) {
                 p.bump();
@@ -168,7 +174,7 @@ fn parse_chara_line(p: &mut Parser<'_>) {
             p.finish_node();
             return;
         }
-        p.bump(); // face IDENT
+        p.bump(); // face
     }
 
     if !p.at_end() && !p.at(SyntaxKind::NEWLINE) {
@@ -347,8 +353,11 @@ pub(crate) fn parse_iscript_block(p: &mut Parser<'_>) {
             break;
         }
         if is_tag_named(p, "endscript") {
+            // Close the ISCRIPT_BLOCK node before consuming [endscript] so
+            // the closing tag tokens are not included in the script content.
+            p.finish_node();
             consume_line(p);
-            break;
+            return;
         }
         // Raw content line.
         while !p.at_end() && !p.at(SyntaxKind::NEWLINE) {

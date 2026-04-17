@@ -302,6 +302,17 @@ pub fn parse_cst(source: &str, _source_name: &str) -> Parse<Root> {
 
     // Surface lex errors as diagnostics (don't abort).
     for e in &lex_errors {
+        // #region agent log
+        {
+            use std::io::Write;
+            let bad_bytes = source.get(e.clone()).unwrap_or("<oob>");
+            let hex: String = bad_bytes.bytes().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ");
+            let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/home/haruki/repos/kani-engine/.cursor/debug-28bf1a.log") {
+                let _ = writeln!(f, "{{\"sessionId\":\"28bf1a\",\"hypothesisId\":\"I\",\"location\":\"mod.rs:parse_cst\",\"message\":\"lex error\",\"data\":{{\"file\":\"{_source_name}\",\"offset\":{},\"len\":{},\"hex\":\"{hex}\",\"context\":\"{}\"}},\"timestamp\":{ts}}}", e.start, e.len(), source.get(e.start.saturating_sub(20)..e.start+e.len()+20).unwrap_or("").replace('"', "'").replace('\n', "\\n"));
+            }
+        }
+        // #endregion
         parser.errors.push(SyntaxDiagnostic::error(
             "unexpected character",
             (e.start, e.len()).into(),

@@ -79,18 +79,15 @@ tf.savetext = "<span style='font-size:10px'>"+tf.save_date+"</span><br />"+tf.ti
 ;/////////////拡張 CGモードなどを利用するための設定
 
 [iscript]
-	
-	if(sf.cg_view){
-    }else{
-    	sf.cg_view = {};
-    }
-	
-	if(sf.replay_view){
-    }else{
-    	sf.replay_view = {};
-    }
-	
-	
+
+	if !sf.contains("cg_view") {
+		sf.cg_view = #{};
+	}
+
+	if !sf.contains("replay_view") {
+		sf.replay_view = #{};
+	}
+
 [endscript]
 
 
@@ -98,19 +95,18 @@ tf.savetext = "<span style='font-size:10px'>"+tf.save_date+"</span><br />"+tf.ti
 [macro name="cg_image_button"]
 	
 	[iscript]
-		
+
 		mp.graphic = mp.graphic.split(',');
-		mp.tmp_graphic = mp.graphic.concat();
+		mp.tmp_graphic = mp.graphic.clone();
 		tf.is_cg_open = false;
-		if(sf.cg_view[mp.graphic[0]]){
+		if sf.cg_view.contains(mp.graphic[0]) {
 			tf.is_cg_open = true;
 		}
-		
-        if(typeof mp.thumb !="undefined"){
-            mp.tmp_graphic[0] = mp.thumb;
-        }
-	
-	
+
+		if mp.contains("thumb") {
+			mp.tmp_graphic[0] = mp.thumb;
+		}
+
 	[endscript]
 	
 	;渡された値を元に、CG状態を確認していく
@@ -140,7 +136,7 @@ tf.savetext = "<span style='font-size:10px'>"+tf.save_date+"</span><br />"+tf.ti
 	[iscript]
 		
 		tf.is_replay_open = false;
-		if(sf.replay_view[mp.name]){
+		if sf.replay_view.contains(mp.name) {
 			tf.is_replay_open = true;
 		}
 	
@@ -160,7 +156,7 @@ tf.savetext = "<span style='font-size:10px'>"+tf.save_date+"</span><br />"+tf.ti
 
     [iscript]
 
-        sf.replay_view[mp.name] = {storage:mp.storage, target:mp.target};
+        sf.replay_view[mp.name] = #{storage: mp.storage, target: mp.target};
     
     [endscript]
 
