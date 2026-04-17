@@ -1,11 +1,4 @@
-//! `kani-bundler` — project manager for kani-engine games.
-//!
-//! Subcommands:
-//! - `new <name>`                    scaffold a new project
-//! - `run [--project <dir>]`         launch in developer mode
-//! - `check [--project <dir>]`       validate scripts and asset references
-//! - `bundle [--project <dir>] [--target <triple>]`
-//!                                   build a distributable release
+//! `kani-bundler`: project manager for kani-engine games.
 
 mod cmd;
 mod config;
