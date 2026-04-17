@@ -142,11 +142,11 @@ impl ScriptEngine {
     /// the persistent scope because Rhai's `eval_with_scope` shares the scope
     /// reference.
     pub fn exec(&mut self, script: &str) -> Result<Dynamic, String> {
-        let result = self
+        
+        self
             .engine
             .eval_with_scope::<Dynamic>(&mut self.scope, script)
-            .map_err(|e| rhai_error_msg(&e));
-        result
+            .map_err(|e| rhai_error_msg(&e))
     }
 
     /// Evaluate an expression and coerce the result to `bool`.
