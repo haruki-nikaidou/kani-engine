@@ -23,11 +23,11 @@ pub fn handle_image_tags(
                 time,
                 method,
             } => {
-                    ev_bg.write(EvSetBackground {
-                        storage,
-                        time,
-                        method,
-                    });
+                ev_bg.write(EvSetBackground {
+                    storage,
+                    time,
+                    method,
+                });
             }
             ResolvedTag::Image {
                 storage: Some(storage),
@@ -36,13 +36,13 @@ pub fn handle_image_tags(
                 y,
                 visible,
             } => {
-                    ev_image.write(EvSetImageLayer {
-                        storage,
-                        layer,
-                        x,
-                        y,
-                        visible,
-                    });
+                ev_image.write(EvSetImageLayer {
+                    storage,
+                    layer,
+                    x,
+                    y,
+                    visible,
+                });
             }
             ResolvedTag::Layopt {
                 layer: Some(layer),
