@@ -18,7 +18,7 @@ pub mod script_engine;
 use tokio::sync::mpsc;
 
 use crate::ast::Script;
-use crate::error::{InterpreterDiagnostic, DiagnosticCategory, InterpreterError};
+use crate::error::{DiagnosticCategory, InterpreterDiagnostic, InterpreterError};
 use crate::events::{HostEvent, KagEvent, VarScope, VariableSnapshot};
 use crate::parser::parse_script;
 use crate::snapshot::InterpreterSnapshot;
@@ -234,9 +234,10 @@ async fn emit_snapshot(ctx: &RuntimeContext, event_tx: &mpsc::Sender<KagEvent>) 
         Err(e) => {
             tracing::error!("[kag] snapshot error: {e}");
             let _ = event_tx
-                .send(KagEvent::Diagnostic(
-                    InterpreterDiagnostic::error(DiagnosticCategory::Serialization, format!("snapshot error: {e}"))
-                ))
+                .send(KagEvent::Diagnostic(InterpreterDiagnostic::error(
+                    DiagnosticCategory::Serialization,
+                    format!("snapshot error: {e}"),
+                )))
                 .await;
         }
     }
@@ -256,9 +257,10 @@ async fn interpreter_task_from_snapshot(
     if let Err(e) = ctx.restore_from_snapshot(&snapshot) {
         tracing::error!("[kag] snapshot restore failed: {e}");
         let _ = event_tx
-            .send(KagEvent::Diagnostic(
-                InterpreterDiagnostic::error(DiagnosticCategory::Serialization, format!("restore error: {e}"))
-            ))
+            .send(KagEvent::Diagnostic(InterpreterDiagnostic::error(
+                DiagnosticCategory::Serialization,
+                format!("restore error: {e}"),
+            )))
             .await;
         return;
     }
@@ -328,10 +330,15 @@ async fn perform_jump(
                                     d.message
                                 ),
                             }
-                            let _ = event_tx.send(KagEvent::Diagnostic(
-                                InterpreterDiagnostic::warning(DiagnosticCategory::Syntax, d.message)
-                                    .in_file(&name)
-                            )).await;
+                            let _ = event_tx
+                                .send(KagEvent::Diagnostic(
+                                    InterpreterDiagnostic::warning(
+                                        DiagnosticCategory::Syntax,
+                                        d.message,
+                                    )
+                                    .in_file(&name),
+                                ))
+                                .await;
                         }
                         let idx = if let Some(ref t) = target {
                             let key = t.trim_start_matches('*');
@@ -355,7 +362,7 @@ async fn perform_jump(
                                                     script.label_map.len(),
                                                 ),
                                             )
-                                            .in_file(&ctx.current_storage)
+                                            .in_file(&ctx.current_storage),
                                         ))
                                         .await;
                                     0
@@ -387,7 +394,7 @@ async fn perform_jump(
                         DiagnosticCategory::LabelNotFound,
                         format!("label not found: '{key}' in '{}'", ctx.current_storage),
                     )
-                    .in_file(&ctx.current_storage)
+                    .in_file(&ctx.current_storage),
                 ))
                 .await;
             return false;
@@ -447,7 +454,10 @@ async fn run_interpreter(
                                                     );
                                                     let _ = event_tx
                                                         .send(KagEvent::Diagnostic(
-                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                            InterpreterDiagnostic::warning(
+                                                                DiagnosticCategory::ScriptEval,
+                                                                e.to_string(),
+                                                            ),
                                                         ))
                                                         .await;
                                                 }
@@ -489,7 +499,10 @@ async fn run_interpreter(
                                                     );
                                                     let _ = event_tx
                                                         .send(KagEvent::Diagnostic(
-                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                            InterpreterDiagnostic::warning(
+                                                                DiagnosticCategory::ScriptEval,
+                                                                e.to_string(),
+                                                            ),
                                                         ))
                                                         .await;
                                                 }
@@ -523,7 +536,10 @@ async fn run_interpreter(
                                                     );
                                                     let _ = event_tx
                                                         .send(KagEvent::Diagnostic(
-                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                            InterpreterDiagnostic::warning(
+                                                                DiagnosticCategory::ScriptEval,
+                                                                e.to_string(),
+                                                            ),
                                                         ))
                                                         .await;
                                                 }
@@ -649,10 +665,15 @@ async fn run_interpreter(
                                                 d.message
                                             ),
                                         }
-                                        let _ = event_tx.send(KagEvent::Diagnostic(
-                                            InterpreterDiagnostic::warning(DiagnosticCategory::Syntax, d.message)
-                                                .in_file(&ctx.current_storage)
-                                        )).await;
+                                        let _ = event_tx
+                                            .send(KagEvent::Diagnostic(
+                                                InterpreterDiagnostic::warning(
+                                                    DiagnosticCategory::Syntax,
+                                                    d.message,
+                                                )
+                                                .in_file(&ctx.current_storage),
+                                            ))
+                                            .await;
                                     }
                                     // ctx.pc was already set to return_pc by the
                                     // executor — do NOT override it here.
@@ -685,7 +706,10 @@ async fn run_interpreter(
                                                     tracing::warn!("[kag] choice exp failed: {e}");
                                                     let _ = event_tx
                                                         .send(KagEvent::Diagnostic(
-                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                            InterpreterDiagnostic::warning(
+                                                                DiagnosticCategory::ScriptEval,
+                                                                e.to_string(),
+                                                            ),
                                                         ))
                                                         .await;
                                                 }
@@ -808,7 +832,10 @@ async fn run_interpreter(
                                                     );
                                                     let _ = event_tx
                                                         .send(KagEvent::Diagnostic(
-                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                            InterpreterDiagnostic::warning(
+                                                                DiagnosticCategory::ScriptEval,
+                                                                e.to_string(),
+                                                            ),
                                                         ))
                                                         .await;
                                                 }

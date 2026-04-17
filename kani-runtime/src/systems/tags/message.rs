@@ -23,14 +23,34 @@ pub fn handle_message_tags(
             ResolvedTag::Msgwnd { visible, layer } => {
                 ev_msgwnd.write(EvMessageWindow { visible, layer });
             }
-            ResolvedTag::Wndctrl { x, y, width, height } => {
-                ev_wndctrl.write(EvWindowControl { x, y, width, height });
+            ResolvedTag::Wndctrl {
+                x,
+                y,
+                width,
+                height,
+            } => {
+                ev_wndctrl.write(EvWindowControl {
+                    x,
+                    y,
+                    width,
+                    height,
+                });
             }
             ResolvedTag::Resetfont => {
                 ev_resetfont.write(EvResetFont);
             }
-            ResolvedTag::Font { face, size, bold, italic } => {
-                ev_font.write(EvSetFont { face, size, bold, italic });
+            ResolvedTag::Font {
+                face,
+                size,
+                bold,
+                italic,
+            } => {
+                ev_font.write(EvSetFont {
+                    face,
+                    size,
+                    bold,
+                    italic,
+                });
             }
             ResolvedTag::Size { value } => {
                 ev_font.write(EvSetFont {

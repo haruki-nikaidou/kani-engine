@@ -81,8 +81,16 @@ pub fn poll_interpreter(
             KagEvent::Stop => {
                 bridge.state = BridgeState::Stopped;
             }
-            KagEvent::WaitForCompletion { which, canskip, buf } => {
-                bridge.state = BridgeState::WaitingCompletion { which, canskip, buf };
+            KagEvent::WaitForCompletion {
+                which,
+                canskip,
+                buf,
+            } => {
+                bridge.state = BridgeState::WaitingCompletion {
+                    which,
+                    canskip,
+                    buf,
+                };
             }
             KagEvent::WaitForRawClick => {
                 bridge.state = BridgeState::WaitingClick { clear_after: false };

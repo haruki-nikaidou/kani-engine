@@ -22,10 +22,7 @@ use super::context::{JumpTarget, RuntimeContext, TimeoutHandler};
 /// On return `ctx.pc` has already been advanced (or redirected).
 /// Always returns a list of events; fatal problems are emitted as
 /// `KagEvent::Diagnostic` with `Error` severity followed by `KagEvent::End`.
-pub fn execute_op<'s>(
-    script: &Script<'s>,
-    ctx: &mut RuntimeContext,
-) -> Vec<KagEvent> {
+pub fn execute_op<'s>(script: &Script<'s>, ctx: &mut RuntimeContext) -> Vec<KagEvent> {
     let pc = ctx.pc;
     if pc >= script.ops.len() {
         ctx.advance();
@@ -86,10 +83,7 @@ pub fn execute_op<'s>(
 
 // ─── Text op ─────────────────────────────────────────────────────────────────
 
-fn execute_text<'s>(
-    ctx: &mut RuntimeContext,
-    parts: &[TextPart<'s>],
-) -> Vec<KagEvent> {
+fn execute_text<'s>(ctx: &mut RuntimeContext, parts: &[TextPart<'s>]) -> Vec<KagEvent> {
     let mut events = Vec::new();
     let mut text_buf = String::new();
 
@@ -156,10 +150,7 @@ fn execute_text<'s>(
 
 // ─── Inline tag dispatch (occurs within text lines) ───────────────────────────
 
-fn execute_inline_tag(
-    ctx: &mut RuntimeContext,
-    tag: &Tag<'_>,
-) -> Vec<KagEvent> {
+fn execute_inline_tag(ctx: &mut RuntimeContext, tag: &Tag<'_>) -> Vec<KagEvent> {
     // Honour optional `cond=` guard on any inline tag
     let cond_expr = tag.param_str("cond").map(str::to_owned);
     if let Some(ref expr) = cond_expr
@@ -188,16 +179,20 @@ fn execute_inline_tag(
         KnownTag::Eval { exp } => {
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_default();
             if let Err(e) = ctx.script_engine.exec(&exp_str) {
-                vec![KagEvent::Diagnostic(
-                    InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e),
-                )]
+                vec![KagEvent::Diagnostic(InterpreterDiagnostic::warning(
+                    DiagnosticCategory::ScriptEval,
+                    e,
+                ))]
             } else {
                 vec![]
             }
         }
         KnownTag::Emb { exp } => {
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_default();
-            let result = ctx.script_engine.eval_to_string(&exp_str).unwrap_or_default();
+            let result = ctx
+                .script_engine
+                .eval_to_string(&exp_str)
+                .unwrap_or_default();
             vec![KagEvent::EmbedText(result)]
         }
         KnownTag::Delay { speed } | KnownTag::Configdelay { speed } => {
@@ -222,11 +217,7 @@ fn execute_inline_tag(
 
 // ─── Tag op dispatch ─────────────────────────────────────────────────────────
 
-fn execute_tag<'s>(
-    script: &Script<'s>,
-    ctx: &mut RuntimeContext,
-    tag: &Tag<'s>,
-) -> Vec<KagEvent> {
+fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>) -> Vec<KagEvent> {
     // Check optional `cond=` guard — if false, skip the tag entirely
     let cond_expr = tag.param_str("cond").map(str::to_owned);
     if let Some(ref expr) = cond_expr
@@ -253,10 +244,12 @@ fn execute_tag<'s>(
     let mut events: Vec<KagEvent> = parse_diags
         .into_iter()
         .filter(|d| d.severity == kag_syntax::error::Severity::Error)
-        .map(|d| KagEvent::Diagnostic(
-            InterpreterDiagnostic::warning(DiagnosticCategory::Syntax, d.message.clone())
-                .at(ctx.current_storage.clone(), pc),
-        ))
+        .map(|d| {
+            KagEvent::Diagnostic(
+                InterpreterDiagnostic::warning(DiagnosticCategory::Syntax, d.message.clone())
+                    .at(ctx.current_storage.clone(), pc),
+            )
+        })
         .collect();
 
     let mut tag_events: Vec<KagEvent> = match known {
@@ -355,12 +348,17 @@ fn execute_tag<'s>(
 
         KnownTag::Emb { exp } => {
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_default();
-            let result = ctx.script_engine.eval_to_string(&exp_str).unwrap_or_default();
+            let result = ctx
+                .script_engine
+                .eval_to_string(&exp_str)
+                .unwrap_or_default();
             vec![KagEvent::EmbedText(result)]
         }
 
         // ── Choice links ──────────────────────────────────────────────────
-        KnownTag::Link { storage, target, .. } => {
+        KnownTag::Link {
+            storage, target, ..
+        } => {
             ctx.in_link = true;
             let storage = resolve_str_field(ctx, storage);
             let target = resolve_str_field(ctx, target);
@@ -400,7 +398,11 @@ fn execute_tag<'s>(
             }
         }
 
-        KnownTag::Glink { storage, target, text } => {
+        KnownTag::Glink {
+            storage,
+            target,
+            text,
+        } => {
             let text_val = resolve_str_field(ctx, text).unwrap_or_default();
             let storage = resolve_str_field(ctx, storage);
             let target = resolve_str_field(ctx, target);
@@ -467,7 +469,10 @@ fn execute_tag<'s>(
         // ── Debug trace ───────────────────────────────────────────────────
         KnownTag::Trace { exp } => {
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_default();
-            let result = ctx.script_engine.eval_to_string(&exp_str).unwrap_or_default();
+            let result = ctx
+                .script_engine
+                .eval_to_string(&exp_str)
+                .unwrap_or_default();
             vec![KagEvent::Trace(result)]
         }
 
@@ -600,7 +605,11 @@ fn execute_tag<'s>(
         }
 
         // ── [click]/[cclick] — register/clear click handler at [s] ──────
-        KnownTag::Click { storage, target, exp } => {
+        KnownTag::Click {
+            storage,
+            target,
+            exp,
+        } => {
             let storage = resolve_str_field(ctx, storage);
             let target = resolve_str_field(ctx, target);
             let exp_val = resolve_str_field(ctx, exp);
@@ -617,7 +626,11 @@ fn execute_tag<'s>(
         }
 
         // ── [timeout]/[ctimeout] — register/clear timeout handler ────────
-        KnownTag::Timeout { time, storage, target } => {
+        KnownTag::Timeout {
+            time,
+            storage,
+            target,
+        } => {
             let time_ms = resolve_typed_field(ctx, time).unwrap_or(0);
             let storage = resolve_str_field(ctx, storage);
             let target = resolve_str_field(ctx, target);
@@ -636,7 +649,11 @@ fn execute_tag<'s>(
         }
 
         // ── [wheel]/[cwheel] — register/clear wheel handler ──────────────
-        KnownTag::Wheel { storage, target, exp } => {
+        KnownTag::Wheel {
+            storage,
+            target,
+            exp,
+        } => {
             let storage = resolve_str_field(ctx, storage);
             let target = resolve_str_field(ctx, target);
             let exp_val = resolve_str_field(ctx, exp);
@@ -653,7 +670,11 @@ fn execute_tag<'s>(
         }
 
         // ── Blocking wait tags ────────────────────────────────────────────
-        KnownTag::WaitForCompletion { which, canskip, buf } => {
+        KnownTag::WaitForCompletion {
+            which,
+            canskip,
+            buf,
+        } => {
             vec![KagEvent::WaitForCompletion {
                 which,
                 canskip: resolve_typed_field(ctx, canskip),
@@ -664,7 +685,11 @@ fn execute_tag<'s>(
         KnownTag::Waitclick {} => vec![KagEvent::WaitForRawClick],
 
         // ── [input] — text-input dialog ───────────────────────────────────
-        KnownTag::Input { name, prompt, title } => {
+        KnownTag::Input {
+            name,
+            prompt,
+            title,
+        } => {
             let var_name = resolve_str_field(ctx, name).unwrap_or_default();
             let prompt_val = resolve_str_field(ctx, prompt).unwrap_or_default();
             let title_val = resolve_str_field(ctx, title).unwrap_or_default();
@@ -682,12 +707,22 @@ fn execute_tag<'s>(
         }
 
         // ── Image / layer tags ────────────────────────────────────────────
-        KnownTag::Bg { storage, time, method } => vec![KagEvent::Tag(ResolvedTag::Bg {
+        KnownTag::Bg {
+            storage,
+            time,
+            method,
+        } => vec![KagEvent::Tag(ResolvedTag::Bg {
             storage: resolve_str_field(ctx, storage),
             time: resolve_typed_field(ctx, time),
             method: resolve_str_field(ctx, method),
         })],
-        KnownTag::Image { storage, layer, x, y, visible } => {
+        KnownTag::Image {
+            storage,
+            layer,
+            x,
+            y,
+            visible,
+        } => {
             vec![KagEvent::Tag(ResolvedTag::Image {
                 storage: resolve_str_field(ctx, storage),
                 layer: resolve_str_field(ctx, layer),
@@ -696,7 +731,11 @@ fn execute_tag<'s>(
                 visible: resolve_typed_field(ctx, visible),
             })]
         }
-        KnownTag::Layopt { layer, visible, opacity } => {
+        KnownTag::Layopt {
+            layer,
+            visible,
+            opacity,
+        } => {
             vec![KagEvent::Tag(ResolvedTag::Layopt {
                 layer: resolve_str_field(ctx, layer),
                 visible: resolve_typed_field(ctx, visible),
@@ -713,7 +752,12 @@ fn execute_tag<'s>(
         })],
 
         // ── Audio tags ────────────────────────────────────────────────────
-        KnownTag::Bgm { storage, r#loop, volume, fadetime } => {
+        KnownTag::Bgm {
+            storage,
+            r#loop,
+            volume,
+            fadetime,
+        } => {
             vec![KagEvent::Tag(ResolvedTag::Bgm {
                 storage: resolve_str_field(ctx, storage),
                 looping: resolve_typed_field(ctx, r#loop).unwrap_or(true),
@@ -724,7 +768,12 @@ fn execute_tag<'s>(
         KnownTag::Stopbgm { fadetime } => vec![KagEvent::Tag(ResolvedTag::Stopbgm {
             fadetime: resolve_typed_field(ctx, fadetime),
         })],
-        KnownTag::Se { storage, buf, volume, r#loop } => {
+        KnownTag::Se {
+            storage,
+            buf,
+            volume,
+            r#loop,
+        } => {
             vec![KagEvent::Tag(ResolvedTag::Se {
                 storage: resolve_str_field(ctx, storage),
                 buf: resolve_typed_field(ctx, buf),
@@ -788,7 +837,12 @@ fn execute_tag<'s>(
             visible: resolve_typed_field(ctx, visible),
             layer: resolve_str_field(ctx, layer),
         })],
-        KnownTag::Wndctrl { x, y, width, height } => {
+        KnownTag::Wndctrl {
+            x,
+            y,
+            width,
+            height,
+        } => {
             vec![KagEvent::Tag(ResolvedTag::Wndctrl {
                 x: resolve_typed_field(ctx, x),
                 y: resolve_typed_field(ctx, y),
@@ -797,7 +851,12 @@ fn execute_tag<'s>(
             })]
         }
         KnownTag::Resetfont {} => vec![KagEvent::Tag(ResolvedTag::Resetfont)],
-        KnownTag::Font { face, size, bold, italic } => {
+        KnownTag::Font {
+            face,
+            size,
+            bold,
+            italic,
+        } => {
             vec![KagEvent::Tag(ResolvedTag::Font {
                 face: resolve_str_field(ctx, face),
                 size: resolve_typed_field(ctx, size),
@@ -823,7 +882,14 @@ fn execute_tag<'s>(
         }
 
         // ── Character sprite tags ─────────────────────────────────────────
-        KnownTag::Chara { name, id, storage, slot, x, y } => {
+        KnownTag::Chara {
+            name,
+            id,
+            storage,
+            slot,
+            x,
+            y,
+        } => {
             vec![KagEvent::Tag(ResolvedTag::Chara {
                 name: resolve_str_field(ctx, name),
                 id: resolve_str_field(ctx, id),
@@ -847,7 +913,13 @@ fn execute_tag<'s>(
                 slot: resolve_str_field(ctx, slot),
             })]
         }
-        KnownTag::CharaMod { name, id, face, pose, storage } => {
+        KnownTag::CharaMod {
+            name,
+            id,
+            face,
+            pose,
+            storage,
+        } => {
             vec![KagEvent::Tag(ResolvedTag::CharaMod {
                 name: resolve_str_field(ctx, name),
                 id: resolve_str_field(ctx, id),
@@ -956,21 +1028,15 @@ fn execute_control_flow<'s>(
 
 // ─── Macro invocation ─────────────────────────────────────────────────────────
 
-fn invoke_macro<'s>(
-    script: &Script<'s>,
-    ctx: &mut RuntimeContext,
-    tag: &Tag<'s>,
-) -> Vec<KagEvent> {
+fn invoke_macro<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>) -> Vec<KagEvent> {
     let macro_name = tag.name.as_ref();
     let def = match script.macro_map.get(macro_name) {
         Some(d) => d.clone(),
         None => {
-            return vec![KagEvent::Diagnostic(
-                InterpreterDiagnostic::warning(
-                    DiagnosticCategory::Macro,
-                    format!("macro not found: {macro_name}"),
-                ),
-            )];
+            return vec![KagEvent::Diagnostic(InterpreterDiagnostic::warning(
+                DiagnosticCategory::Macro,
+                format!("macro not found: {macro_name}"),
+            ))];
         }
     };
 
@@ -1858,9 +1924,13 @@ mod tests {
     fn test_wa_emits_wait_for_completion() {
         let (events, _) = run_script("[wa layer=0 seg=1]\n");
         assert!(
-            events.iter().any(
-                |e| matches!(e, KagEvent::WaitForCompletion { which: TagName::Wa, .. })
-            ),
+            events.iter().any(|e| matches!(
+                e,
+                KagEvent::WaitForCompletion {
+                    which: TagName::Wa,
+                    ..
+                }
+            )),
             "wa must emit WaitForCompletion: {:?}",
             events
         );
@@ -1870,9 +1940,13 @@ mod tests {
     fn test_wt_emits_wait_for_completion() {
         let (events, _) = run_script("@wt\n");
         assert!(
-            events.iter().any(
-                |e| matches!(e, KagEvent::WaitForCompletion { which: TagName::Wt, .. })
-            ),
+            events.iter().any(|e| matches!(
+                e,
+                KagEvent::WaitForCompletion {
+                    which: TagName::Wt,
+                    ..
+                }
+            )),
             "wt must emit WaitForCompletion: {:?}",
             events
         );

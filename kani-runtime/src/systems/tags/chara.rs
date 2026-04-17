@@ -19,7 +19,14 @@ pub fn handle_chara_tags(
         // Both `name=` and `id=` are acceptable identifiers across KAG variants;
         // prefer `name` if present, fall back to `id`.
         match tag.0.clone() {
-            ResolvedTag::Chara { name, id, storage, slot, x, y } => {
+            ResolvedTag::Chara {
+                name,
+                id,
+                storage,
+                slot,
+                x,
+                y,
+            } => {
                 ev_set.write(EvSetCharacter {
                     id: name.or(id),
                     storage,
@@ -40,7 +47,13 @@ pub fn handle_chara_tags(
                     slot,
                 });
             }
-            ResolvedTag::CharaMod { name, id, face, pose, storage } => {
+            ResolvedTag::CharaMod {
+                name,
+                id,
+                face,
+                pose,
+                storage,
+            } => {
                 ev_mod.write(EvModCharacter {
                     id: name.or(id),
                     face,

@@ -1,8 +1,8 @@
 //! Hover provider — returns Markdown documentation for the token under cursor.
 
-use kag_syntax::tag_defs::TagName;
 use kag_syntax::SyntaxKind;
 use kag_syntax::cst::{self, AstNode as _};
+use kag_syntax::tag_defs::TagName;
 use rowan::{TextSize, TokenAtOffset};
 use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind};
 

@@ -19,7 +19,12 @@ pub fn handle_audio_tags(
 ) {
     for tag in reader.read() {
         match tag.0.clone() {
-            ResolvedTag::Bgm { storage, looping, volume, fadetime } => {
+            ResolvedTag::Bgm {
+                storage,
+                looping,
+                volume,
+                fadetime,
+            } => {
                 if let Some(storage) = storage {
                     ev_bgm.write(EvPlayBgm {
                         storage,
@@ -32,7 +37,12 @@ pub fn handle_audio_tags(
             ResolvedTag::Stopbgm { fadetime } => {
                 ev_stop_bgm.write(EvStopBgm { fadetime });
             }
-            ResolvedTag::Se { storage, buf, volume, looping } => {
+            ResolvedTag::Se {
+                storage,
+                buf,
+                volume,
+                looping,
+            } => {
                 if let Some(storage) = storage {
                     ev_se.write(EvPlaySe {
                         storage,

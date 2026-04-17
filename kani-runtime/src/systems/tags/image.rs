@@ -18,19 +18,47 @@ pub fn handle_image_tags(
 ) {
     for tag in reader.read() {
         match tag.0.clone() {
-            ResolvedTag::Bg { storage, time, method } => {
+            ResolvedTag::Bg {
+                storage,
+                time,
+                method,
+            } => {
                 if let Some(storage) = storage {
-                    ev_bg.write(EvSetBackground { storage, time, method });
+                    ev_bg.write(EvSetBackground {
+                        storage,
+                        time,
+                        method,
+                    });
                 }
             }
-            ResolvedTag::Image { storage, layer, x, y, visible } => {
+            ResolvedTag::Image {
+                storage,
+                layer,
+                x,
+                y,
+                visible,
+            } => {
                 if let Some(storage) = storage {
-                    ev_image.write(EvSetImageLayer { storage, layer, x, y, visible });
+                    ev_image.write(EvSetImageLayer {
+                        storage,
+                        layer,
+                        x,
+                        y,
+                        visible,
+                    });
                 }
             }
-            ResolvedTag::Layopt { layer, visible, opacity } => {
+            ResolvedTag::Layopt {
+                layer,
+                visible,
+                opacity,
+            } => {
                 if let Some(layer) = layer {
-                    ev_layopt.write(EvSetLayerOpt { layer, visible, opacity });
+                    ev_layopt.write(EvSetLayerOpt {
+                        layer,
+                        visible,
+                        opacity,
+                    });
                 }
             }
             ResolvedTag::Free { layer } => {

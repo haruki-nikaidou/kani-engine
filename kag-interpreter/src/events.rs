@@ -31,7 +31,11 @@ pub enum VarScope {
 #[derive(Debug, Clone)]
 pub enum ResolvedTag {
     // ── Image / layer ────────────────────────────────────────────────────────
-    Bg { storage: Option<String>, time: Option<u64>, method: Option<String> },
+    Bg {
+        storage: Option<String>,
+        time: Option<u64>,
+        method: Option<String>,
+    },
     Image {
         storage: Option<String>,
         layer: Option<String>,
@@ -39,9 +43,19 @@ pub enum ResolvedTag {
         y: Option<f32>,
         visible: Option<bool>,
     },
-    Layopt { layer: Option<String>, visible: Option<bool>, opacity: Option<f32> },
-    Free { layer: Option<String> },
-    Position { layer: Option<String>, x: Option<f32>, y: Option<f32> },
+    Layopt {
+        layer: Option<String>,
+        visible: Option<bool>,
+        opacity: Option<f32>,
+    },
+    Free {
+        layer: Option<String>,
+    },
+    Position {
+        layer: Option<String>,
+        x: Option<f32>,
+        y: Option<f32>,
+    },
 
     // ── Audio ─────────────────────────────────────────────────────────────────
     Bgm {
@@ -50,42 +64,101 @@ pub enum ResolvedTag {
         volume: Option<f32>,
         fadetime: Option<u64>,
     },
-    Stopbgm { fadetime: Option<u64> },
+    Stopbgm {
+        fadetime: Option<u64>,
+    },
     Se {
         storage: Option<String>,
         buf: Option<u32>,
         volume: Option<f32>,
         looping: bool,
     },
-    Stopse { buf: Option<u32> },
-    Vo { storage: Option<String>, buf: Option<u32> },
-    Fadebgm { time: Option<u64>, volume: Option<f32> },
+    Stopse {
+        buf: Option<u32>,
+    },
+    Vo {
+        storage: Option<String>,
+        buf: Option<u32>,
+    },
+    Fadebgm {
+        time: Option<u64>,
+        volume: Option<f32>,
+    },
 
     // ── Transition ────────────────────────────────────────────────────────────
-    Trans { method: Option<String>, time: Option<u64>, rule: Option<String> },
-    Fadein { time: Option<u64>, color: Option<String> },
-    Fadeout { time: Option<u64>, color: Option<String> },
-    Movetrans { layer: Option<String>, time: Option<u64>, x: Option<f32>, y: Option<f32> },
+    Trans {
+        method: Option<String>,
+        time: Option<u64>,
+        rule: Option<String>,
+    },
+    Fadein {
+        time: Option<u64>,
+        color: Option<String>,
+    },
+    Fadeout {
+        time: Option<u64>,
+        color: Option<String>,
+    },
+    Movetrans {
+        layer: Option<String>,
+        time: Option<u64>,
+        x: Option<f32>,
+        y: Option<f32>,
+    },
 
     // ── Effect ────────────────────────────────────────────────────────────────
-    Quake { time: Option<u64>, hmax: Option<f32>, vmax: Option<f32> },
-    Shake { time: Option<u64>, amount: Option<f32>, axis: Option<String> },
-    Flash { time: Option<u64>, color: Option<String> },
+    Quake {
+        time: Option<u64>,
+        hmax: Option<f32>,
+        vmax: Option<f32>,
+    },
+    Shake {
+        time: Option<u64>,
+        amount: Option<f32>,
+        axis: Option<String>,
+    },
+    Flash {
+        time: Option<u64>,
+        color: Option<String>,
+    },
 
     // ── Message window ────────────────────────────────────────────────────────
-    Msgwnd { visible: Option<bool>, layer: Option<String> },
-    Wndctrl { x: Option<f32>, y: Option<f32>, width: Option<f32>, height: Option<f32> },
+    Msgwnd {
+        visible: Option<bool>,
+        layer: Option<String>,
+    },
+    Wndctrl {
+        x: Option<f32>,
+        y: Option<f32>,
+        width: Option<f32>,
+        height: Option<f32>,
+    },
     Resetfont,
-    Font { face: Option<String>, size: Option<f32>, bold: Option<bool>, italic: Option<bool> },
+    Font {
+        face: Option<String>,
+        size: Option<f32>,
+        bold: Option<bool>,
+        italic: Option<bool>,
+    },
     /// `[size value=N]` — sets font size only.
-    Size { value: Option<f32> },
+    Size {
+        value: Option<f32>,
+    },
     /// `[bold value=true|false]` — sets bold style only. Defaults to `true` if absent.
-    Bold { value: Option<bool> },
+    Bold {
+        value: Option<bool>,
+    },
     /// `[italic value=true|false]` — sets italic style only. Defaults to `true` if absent.
-    Italic { value: Option<bool> },
-    Ruby { text: Option<String> },
+    Italic {
+        value: Option<bool>,
+    },
+    Ruby {
+        text: Option<String>,
+    },
     /// `[nowrap]` sets `enabled = true`; `[endnowrap]` sets `enabled = false`.
-    Nowrap { enabled: bool },
+    Nowrap {
+        enabled: bool,
+    },
 
     // ── Character sprites ─────────────────────────────────────────────────────
     Chara {
@@ -96,8 +169,16 @@ pub enum ResolvedTag {
         x: Option<f32>,
         y: Option<f32>,
     },
-    CharaHide { name: Option<String>, id: Option<String>, slot: Option<String> },
-    CharaFree { name: Option<String>, id: Option<String>, slot: Option<String> },
+    CharaHide {
+        name: Option<String>,
+        id: Option<String>,
+        slot: Option<String>,
+    },
+    CharaFree {
+        name: Option<String>,
+        id: Option<String>,
+        slot: Option<String>,
+    },
     CharaMod {
         name: Option<String>,
         id: Option<String>,
@@ -111,7 +192,10 @@ pub enum ResolvedTag {
     /// `[clickskip]`, `[chara_ptext]`) or a truly unknown game-specific tag.
     ///
     /// Game-specific systems should listen for this variant via `EvTagRouted`.
-    Extension { name: String, params: Vec<(String, String)> },
+    Extension {
+        name: String,
+        params: Vec<(String, String)>,
+    },
 }
 
 // ─── Events emitted by the interpreter ───────────────────────────────────────
