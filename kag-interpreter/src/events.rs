@@ -483,9 +483,41 @@ pub enum ResolvedTag {
         url: Option<String>,
     },
 
-    /// A tag not handled by the engine's built-in dispatch — either an
-    /// engine-internal tag forwarded for host information (e.g. `[ct]`,
-    /// `[clickskip]`, `[chara_ptext]`) or a truly unknown game-specific tag.
+    // ── Tags promoted from Extension ─────────────────────────────────────────
+    /// Cancel all async operations and clear the message layer (`[ct]`).
+    Ct,
+    /// Enable or disable click-to-skip (`[clickskip]`).
+    Clickskip {
+        enabled: Option<bool>,
+    },
+    /// Update configuration for a registered character (`[chara_config]`).
+    CharaConfig {
+        name: Option<String>,
+        params: Vec<(String, String)>,
+    },
+    /// Set the character name shown in the ptext name box (`[chara_ptext]`).
+    CharaPtext {
+        name: Option<String>,
+    },
+    /// Set visual defaults for glink buttons (`[glink_config]`).
+    GlinkConfig {
+        params: Vec<(String, String)>,
+    },
+    /// Begin a clickable link region (`[link]`).
+    Link {
+        storage: Option<String>,
+        target: Option<String>,
+        exp: Option<String>,
+    },
+    /// End a clickable link region (`[endlink]`).
+    Endlink,
+    /// Output a half-width character (`[hch]`).
+    Hch {
+        text: Option<String>,
+    },
+
+    /// A tag not handled by the engine's built-in dispatch — a truly unknown
+    /// game-specific tag.
     ///
     /// Game-specific systems should listen for this variant via `EvTagRouted`.
     Extension {
