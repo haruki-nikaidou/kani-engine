@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use kag_interpreter::ResolvedTag;
 
-use crate::events::{EvTransitionTag, EvTagRouted};
+use crate::events::{EvTagRouted, EvTransitionTag};
 
 pub fn handle_transition_tags(
     mut reader: MessageReader<EvTagRouted>,

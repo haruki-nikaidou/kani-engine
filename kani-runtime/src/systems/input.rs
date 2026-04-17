@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use kag_interpreter::HostEvent;
 
 use crate::bridge::{BridgeState, InterpreterBridge};
-use crate::events::{EvCompletionSignal, EvFireTrigger, EvSelectChoice, EvSubmitInput};
+use crate::events::EvHostInput;
 
 /// Left mouse-button click → `HostEvent::Clicked` when the interpreter is
 /// waiting for a click or is paused at `[s]`.
@@ -38,74 +38,60 @@ pub fn handle_timer(mut bridge: ResMut<InterpreterBridge>) {
     }
 }
 
-/// Forward `EvSelectChoice` → `HostEvent::ChoiceSelected` while waiting for a
-/// choice, `EvSubmitInput` → `HostEvent::InputResult` while waiting for input,
-/// and `EvFireTrigger` → `HostEvent::TriggerFired` while waiting for a trigger.
+/// Forward host input events to the interpreter while in the matching wait state.
+///
+/// - `EvHostInput::SelectChoice` → `HostEvent::ChoiceSelected`
+/// - `EvHostInput::SubmitInput`  → `HostEvent::InputResult`
+/// - `EvHostInput::FireTrigger`  → `HostEvent::TriggerFired`
+/// - `EvHostInput::CompletionSignal` → `HostEvent::CompletionSignal`
 pub fn handle_ui_inputs(
     mut bridge: ResMut<InterpreterBridge>,
-    mut choices: MessageReader<EvSelectChoice>,
-    mut inputs: MessageReader<EvSubmitInput>,
-    mut triggers: MessageReader<EvFireTrigger>,
+    mut events: MessageReader<EvHostInput>,
 ) {
-    // Choice selection
-    if matches!(bridge.state, BridgeState::WaitingChoice)
-        && let Some(&EvSelectChoice(idx)) = choices.read().next()
-        && bridge
-            .input_tx
-            .try_send(HostEvent::ChoiceSelected(idx))
-            .is_ok()
-    {
-        bridge.state = BridgeState::Running;
-        return;
-    }
-
-    // Text-input result
-    if matches!(bridge.state, BridgeState::WaitingInput { .. })
-        && let Some(EvSubmitInput(text)) = inputs.read().next().cloned()
-        && bridge
-            .input_tx
-            .try_send(HostEvent::InputResult(text))
-            .is_ok()
-    {
-        bridge.state = BridgeState::Running;
-        return;
-    }
-
-    // Named trigger
-    let expected = match &bridge.state {
-        BridgeState::WaitingTrigger { name } => Some(name.clone()),
-        _ => None,
-    };
-    if let Some(expected) = expected {
-        for EvFireTrigger { name } in triggers.read() {
-            if *name == expected
-                && bridge
-                    .input_tx
-                    .try_send(HostEvent::TriggerFired { name: name.clone() })
-                    .is_ok()
-            {
-                bridge.state = BridgeState::Running;
-                break;
+    for ev in events.read() {
+        match ev.clone() {
+            EvHostInput::SelectChoice(idx) => {
+                if matches!(bridge.state, BridgeState::WaitingChoice)
+                    && bridge
+                        .input_tx
+                        .try_send(HostEvent::ChoiceSelected(idx))
+                        .is_ok()
+                {
+                    bridge.state = BridgeState::Running;
+                }
+            }
+            EvHostInput::SubmitInput(text) => {
+                if matches!(bridge.state, BridgeState::WaitingInput { .. })
+                    && bridge
+                        .input_tx
+                        .try_send(HostEvent::InputResult(text))
+                        .is_ok()
+                {
+                    bridge.state = BridgeState::Running;
+                }
+            }
+            EvHostInput::FireTrigger { name } => {
+                if let BridgeState::WaitingTrigger { name: expected } = &bridge.state {
+                    if name == *expected
+                        && bridge
+                            .input_tx
+                            .try_send(HostEvent::TriggerFired { name })
+                            .is_ok()
+                    {
+                        bridge.state = BridgeState::Running;
+                    }
+                }
+            }
+            EvHostInput::CompletionSignal => {
+                if matches!(bridge.state, BridgeState::WaitingCompletion { .. })
+                    && bridge
+                        .input_tx
+                        .try_send(HostEvent::CompletionSignal)
+                        .is_ok()
+                {
+                    bridge.state = BridgeState::Running;
+                }
             }
         }
-    }
-}
-
-/// Forward `EvCompletionSignal` → `HostEvent::CompletionSignal` while the
-/// interpreter is blocked on a `WaitForCompletion` / `[wa]`-family wait.
-pub fn handle_completion(
-    mut bridge: ResMut<InterpreterBridge>,
-    mut signals: MessageReader<EvCompletionSignal>,
-) {
-    if !matches!(bridge.state, BridgeState::WaitingCompletion { .. }) {
-        return;
-    }
-    if signals.read().next().is_some()
-        && bridge
-            .input_tx
-            .try_send(HostEvent::CompletionSignal)
-            .is_ok()
-    {
-        bridge.state = BridgeState::Running;
     }
 }

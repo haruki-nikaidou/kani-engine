@@ -20,7 +20,12 @@ pub fn handle_audio_tags(
                 volume,
                 fadetime,
             } => {
-                ev.write(EvAudioTag::PlayBgm { storage, looping, volume, fadetime });
+                ev.write(EvAudioTag::PlayBgm {
+                    storage,
+                    looping,
+                    volume,
+                    fadetime,
+                });
             }
             ResolvedTag::Stopbgm { fadetime } => {
                 ev.write(EvAudioTag::StopBgm { fadetime });
@@ -49,7 +54,12 @@ pub fn handle_audio_tags(
                 volume,
                 looping,
             } => {
-                ev.write(EvAudioTag::PlaySe { storage, buf, volume, looping });
+                ev.write(EvAudioTag::PlaySe {
+                    storage,
+                    buf,
+                    volume,
+                    looping,
+                });
             }
             ResolvedTag::Stopse { buf } => {
                 ev.write(EvAudioTag::StopSe { buf });

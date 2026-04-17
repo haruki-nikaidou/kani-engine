@@ -16,7 +16,11 @@ pub fn handle_video_tags(
                 looping,
                 volume,
             } => {
-                ev.write(EvVideoTag::PlayBgMovie { storage, looping, volume });
+                ev.write(EvVideoTag::PlayBgMovie {
+                    storage,
+                    looping,
+                    volume,
+                });
             }
             ResolvedTag::StopBgmovie => {
                 ev.write(EvVideoTag::StopBgMovie);
@@ -28,7 +32,13 @@ pub fn handle_video_tags(
                 width,
                 height,
             } => {
-                ev.write(EvVideoTag::PlayMovie { storage, x, y, width, height });
+                ev.write(EvVideoTag::PlayMovie {
+                    storage,
+                    x,
+                    y,
+                    width,
+                    height,
+                });
             }
             _ => {}
         }

@@ -15,8 +15,22 @@ pub fn handle_chara_tags(
 ) {
     for tag in reader.read() {
         match tag.0.clone() {
-            ResolvedTag::CharaShow { name, storage, x, y, time, method } => {
-                ev.write(EvCharacterTag::ShowCharacter { name, storage, x, y, time, method });
+            ResolvedTag::CharaShow {
+                name,
+                storage,
+                x,
+                y,
+                time,
+                method,
+            } => {
+                ev.write(EvCharacterTag::ShowCharacter {
+                    name,
+                    storage,
+                    x,
+                    y,
+                    time,
+                    method,
+                });
             }
             ResolvedTag::CharaHide { name, time, method } => {
                 ev.write(EvCharacterTag::HideCharacter { name, time, method });
@@ -30,8 +44,18 @@ pub fn handle_chara_tags(
             ResolvedTag::CharaDelete { name } => {
                 ev.write(EvCharacterTag::DeleteCharacter { name });
             }
-            ResolvedTag::CharaMod { name, storage, face, pose } => {
-                ev.write(EvCharacterTag::ModCharacter { name, storage, face, pose });
+            ResolvedTag::CharaMod {
+                name,
+                storage,
+                face,
+                pose,
+            } => {
+                ev.write(EvCharacterTag::ModCharacter {
+                    name,
+                    storage,
+                    face,
+                    pose,
+                });
             }
             ResolvedTag::CharaMove { name, x, y, time } => {
                 ev.write(EvCharacterTag::MoveCharacter { name, x, y, time });
@@ -39,11 +63,27 @@ pub fn handle_chara_tags(
             ResolvedTag::CharaLayer { name, layer } => {
                 ev.write(EvCharacterTag::SetCharacterLayer { name, layer });
             }
-            ResolvedTag::CharaLayerMod { name, opacity, visible } => {
-                ev.write(EvCharacterTag::ModCharacterLayer { name, opacity, visible });
+            ResolvedTag::CharaLayerMod {
+                name,
+                opacity,
+                visible,
+            } => {
+                ev.write(EvCharacterTag::ModCharacterLayer {
+                    name,
+                    opacity,
+                    visible,
+                });
             }
-            ResolvedTag::CharaPart { name, part, storage } => {
-                ev.write(EvCharacterTag::SetCharacterPart { name, part, storage });
+            ResolvedTag::CharaPart {
+                name,
+                part,
+                storage,
+            } => {
+                ev.write(EvCharacterTag::SetCharacterPart {
+                    name,
+                    part,
+                    storage,
+                });
             }
             ResolvedTag::CharaPartReset { name } => {
                 ev.write(EvCharacterTag::ResetCharacterParts { name });
