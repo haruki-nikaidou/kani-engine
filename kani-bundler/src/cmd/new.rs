@@ -1,8 +1,12 @@
-//! `kani-bundler new <name>` — scaffold a new project.
+//! `kani-bundler new <name>` — scaffold a new project from the bundled template.
 
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
+use include_dir::{Dir, include_dir};
+
+/// The entire `init/` directory tree, embedded at compile time.
+static INIT_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/init");
 
 pub fn run(name: &str) -> Result<()> {
     let dest = Path::new(name);
@@ -10,20 +14,10 @@ pub fn run(name: &str) -> Result<()> {
         bail!("'{}' already exists", dest.display());
     }
 
-    let dirs = [
-        "data/scenario",
-        "data/bgimage",
-        "data/fgimage",
-        "data/bgm",
-        "data/image",
-    ];
-    for dir in &dirs {
-        let path = dest.join(dir);
-        std::fs::create_dir_all(&path)
-            .with_context(|| format!("creating directory '{}'", path.display()))?;
-    }
+    // Extract every embedded file, preserving the directory tree.
+    extract_dir(&INIT_DIR, dest)?;
 
-    // kani.toml
+    // Write the project manifest (kani.toml) at the project root.
     let kani_toml = format!(
         r#"[project]
 name    = "{name}"
@@ -44,18 +38,32 @@ compression = "zstd"
     );
     write_file(&dest.join("kani.toml"), &kani_toml)?;
 
-    // Minimal starter script
-    let first_ks = r#"; first.ks — entry scenario
-[bg storage="bgimage/placeholder.jpg"]
-[l]
-Here is the first line of your story.[l]
-[end]
-"#;
-    write_file(&dest.join("data/scenario/first.ks"), first_ks)?;
-
     println!("Created project '{name}'.");
-    println!("  Edit data/scenario/first.ks to get started.");
+    println!("  Assets and starter scripts are in data/");
+    println!("  Entry scenario: data/scenario/first.ks");
     println!("  Run with:  kani-bundler run --project {name}");
+
+    Ok(())
+}
+
+/// Recursively extract the contents of an embedded [`Dir`] into `dest`.
+fn extract_dir(dir: &Dir<'_>, dest: &Path) -> Result<()> {
+    for sub in dir.dirs() {
+        let target = dest.join(sub.path());
+        std::fs::create_dir_all(&target)
+            .with_context(|| format!("creating directory '{}'", target.display()))?;
+        extract_dir(sub, dest)?;
+    }
+
+    for file in dir.files() {
+        let target = dest.join(file.path());
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating directory '{}'", parent.display()))?;
+        }
+        std::fs::write(&target, file.contents())
+            .with_context(|| format!("writing '{}'", target.display()))?;
+    }
 
     Ok(())
 }
