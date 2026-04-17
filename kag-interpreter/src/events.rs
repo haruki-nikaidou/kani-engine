@@ -1,5 +1,6 @@
 use kag_syntax::tag_defs::TagName;
 
+use crate::error::InterpreterDiagnostic;
 use crate::snapshot::InterpreterSnapshot;
 
 /// The variable-scope identifiers used in KAG scripts.
@@ -237,11 +238,11 @@ pub enum KagEvent {
     /// The scenario has reached its end naturally.
     End,
 
-    /// A non-fatal warning (e.g. undefined tag, duplicate label).
-    Warning(String),
-
-    /// A fatal interpreter error.  The runtime will stop after emitting this.
-    Error(String),
+    /// A structured diagnostic (warning or error).
+    ///
+    /// When `diagnostic.severity == DiagnosticSeverity::Error` the interpreter
+    /// will emit `KagEvent::End` immediately after this event and shut down.
+    Diagnostic(InterpreterDiagnostic),
 
     /// A complete snapshot of the current interpreter state, emitted in
     /// response to `HostEvent::TakeSnapshot`.

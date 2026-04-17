@@ -86,8 +86,11 @@ pub use runtime::context::TimeoutHandler;
 /// The parsed scenario representation.
 pub use ast::{LabelDef, MacroDef, Op, Param, ParamValue, Script, Tag, TextPart};
 
-/// Runtime error type covering all interpreter failures.
+/// Runtime error type covering host ↔ interpreter communication failures.
 pub use error::InterpreterError;
+
+/// Structured diagnostic emitted during interpretation (warnings and errors).
+pub use error::{DiagnosticCategory, DiagnosticSeverity, InterpreterDiagnostic};
 
 /// Serialisable interpreter snapshot for save / load support.
 pub use snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSnap};

@@ -10,7 +10,7 @@
 use kag_syntax::tag_defs::{AttributeString, KnownTag, MaybeResolved, TagName};
 
 use crate::ast::{Op, Param, ParamValue, Script, Tag, TextPart};
-use crate::error::InterpreterError;
+use crate::error::{DiagnosticCategory, InterpreterDiagnostic};
 use crate::events::{ChoiceOption, KagEvent, ResolvedTag};
 
 use super::context::{JumpTarget, RuntimeContext, TimeoutHandler};
@@ -20,15 +20,16 @@ use super::context::{JumpTarget, RuntimeContext, TimeoutHandler};
 /// Execute one op at `ctx.pc`.
 ///
 /// On return `ctx.pc` has already been advanced (or redirected).
-/// Returns `Ok(events)` on success; `Err` only on unrecoverable errors.
+/// Always returns a list of events; fatal problems are emitted as
+/// `KagEvent::Diagnostic` with `Error` severity followed by `KagEvent::End`.
 pub fn execute_op<'s>(
     script: &Script<'s>,
     ctx: &mut RuntimeContext,
-) -> Result<Vec<KagEvent>, InterpreterError> {
+) -> Vec<KagEvent> {
     let pc = ctx.pc;
     if pc >= script.ops.len() {
         ctx.advance();
-        return Ok(vec![KagEvent::End]);
+        return vec![KagEvent::End];
     }
 
     let op = &script.ops[pc];
@@ -45,7 +46,7 @@ pub fn execute_op<'s>(
     // ── When inside a skipped conditional branch, skip everything else ────────
     if !ctx.is_executing() {
         ctx.advance();
-        return Ok(vec![]);
+        return vec![];
     }
 
     // ── Normal execution ──────────────────────────────────────────────────────
@@ -54,7 +55,7 @@ pub fn execute_op<'s>(
         Op::Tag(tag) => execute_tag(script, ctx, tag),
         Op::Label(_) => {
             ctx.advance();
-            Ok(vec![])
+            vec![]
         }
         Op::ScriptBlock {
             content: script_text,
@@ -62,20 +63,23 @@ pub fn execute_op<'s>(
         } => {
             let script_text = script_text.clone();
             ctx.advance();
-            ctx.script_engine
-                .exec(&script_text)
-                .map(|_| vec![])
-                .or_else(|e| {
+            match ctx.script_engine.exec(&script_text) {
+                Ok(_) => vec![],
+                Err(e) => {
                     tracing::error!("[kag] iscript block failed: {e}");
-                    Ok(vec![KagEvent::Error(e.to_string())])
-                })
+                    vec![KagEvent::Diagnostic(
+                        InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e)
+                            .at(ctx.current_storage.clone(), pc),
+                    )]
+                }
+            }
         }
         // Skip past the macro body to the op after [endmacro].  skip_to was
         // encoded at compile time for *this specific definition*, so duplicate
         // macro names each jump to their own correct target.
         Op::MacroDef { skip_to, .. } => {
             ctx.jump_to(*skip_to);
-            Ok(vec![])
+            vec![]
         }
     }
 }
@@ -85,7 +89,7 @@ pub fn execute_op<'s>(
 fn execute_text<'s>(
     ctx: &mut RuntimeContext,
     parts: &[TextPart<'s>],
-) -> Result<Vec<KagEvent>, InterpreterError> {
+) -> Vec<KagEvent> {
     let mut events = Vec::new();
     let mut text_buf = String::new();
 
@@ -121,7 +125,7 @@ fn execute_text<'s>(
                     }
                 }
                 // Execute the inline tag (may mutate ctx.text_speed / ctx.log_enabled)
-                let mut inline_events = execute_inline_tag(ctx, tag)?;
+                let mut inline_events = execute_inline_tag(ctx, tag);
                 events.append(&mut inline_events);
                 // Sync so subsequent segments see any speed/log change.
                 current_speed = ctx.text_speed;
@@ -147,7 +151,7 @@ fn execute_text<'s>(
     }
 
     ctx.advance();
-    Ok(events)
+    events
 }
 
 // ─── Inline tag dispatch (occurs within text lines) ───────────────────────────
@@ -155,62 +159,64 @@ fn execute_text<'s>(
 fn execute_inline_tag(
     ctx: &mut RuntimeContext,
     tag: &Tag<'_>,
-) -> Result<Vec<KagEvent>, InterpreterError> {
+) -> Vec<KagEvent> {
     // Honour optional `cond=` guard on any inline tag
     let cond_expr = tag.param_str("cond").map(str::to_owned);
     if let Some(ref expr) = cond_expr
         && !ctx.script_engine.eval_bool(expr).unwrap_or(true)
     {
-        return Ok(vec![]);
+        return vec![];
     }
 
     let mut diags = Vec::new();
     match KnownTag::from_tag(tag, &mut diags) {
-        KnownTag::R {} => Ok(vec![KagEvent::InsertLineBreak]),
+        KnownTag::R {} => vec![KagEvent::InsertLineBreak],
         KnownTag::L {} => {
             if ctx.nowait {
-                Ok(vec![])
+                vec![]
             } else {
-                Ok(vec![KagEvent::WaitForClick { clear_after: false }])
+                vec![KagEvent::WaitForClick { clear_after: false }]
             }
         }
         // Always emit the clear signal; the host auto-advances when nowait is set.
-        KnownTag::P {} => Ok(vec![KagEvent::WaitForClick { clear_after: true }]),
-        KnownTag::S {} => Ok(vec![KagEvent::Stop]),
+        KnownTag::P {} => vec![KagEvent::WaitForClick { clear_after: true }],
+        KnownTag::S {} => vec![KagEvent::Stop],
         KnownTag::Wait { time, .. } => {
             let ms = resolve_typed_field(ctx, time).unwrap_or(0);
-            Ok(vec![KagEvent::WaitMs(ms)])
+            vec![KagEvent::WaitMs(ms)]
         }
         KnownTag::Eval { exp } => {
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_default();
             if let Err(e) = ctx.script_engine.exec(&exp_str) {
-                Ok(vec![KagEvent::Warning(e.to_string())])
+                vec![KagEvent::Diagnostic(
+                    InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e),
+                )]
             } else {
-                Ok(vec![])
+                vec![]
             }
         }
         KnownTag::Emb { exp } => {
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_default();
             let result = ctx.script_engine.eval_to_string(&exp_str).unwrap_or_default();
-            Ok(vec![KagEvent::EmbedText(result)])
+            vec![KagEvent::EmbedText(result)]
         }
         KnownTag::Delay { speed } | KnownTag::Configdelay { speed } => {
             ctx.text_speed = Some(resolve_typed_field(ctx, speed).unwrap_or(0));
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Resetdelay {} => {
             ctx.text_speed = None;
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Nolog {} => {
             ctx.log_enabled = false;
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Endnolog {} => {
             ctx.log_enabled = true;
-            Ok(vec![])
+            vec![]
         }
-        known => Ok(vec![extension_event_from_tag(ctx, tag, &known)]),
+        known => vec![extension_event_from_tag(ctx, tag, &known)],
     }
 }
 
@@ -220,14 +226,14 @@ fn execute_tag<'s>(
     script: &Script<'s>,
     ctx: &mut RuntimeContext,
     tag: &Tag<'s>,
-) -> Result<Vec<KagEvent>, InterpreterError> {
+) -> Vec<KagEvent> {
     // Check optional `cond=` guard — if false, skip the tag entirely
     let cond_expr = tag.param_str("cond").map(str::to_owned);
     if let Some(ref expr) = cond_expr
         && !ctx.script_engine.eval_bool(expr).unwrap_or(true)
     {
         ctx.advance();
-        return Ok(vec![]);
+        return vec![];
     }
 
     let name = tag.name.as_ref();
@@ -238,52 +244,53 @@ fn execute_tag<'s>(
         return invoke_macro(script, ctx, tag);
     }
 
+    let pc = ctx.pc;
     ctx.advance();
 
-    let mut diags = Vec::new();
-    let known = KnownTag::from_tag(tag, &mut diags);
+    let mut parse_diags = Vec::new();
+    let known = KnownTag::from_tag(tag, &mut parse_diags);
 
-    let mut events: Vec<KagEvent> = diags
+    let mut events: Vec<KagEvent> = parse_diags
         .into_iter()
         .filter(|d| d.severity == kag_syntax::error::Severity::Error)
-        .map(|d| KagEvent::Warning(d.message.clone()))
+        .map(|d| KagEvent::Diagnostic(
+            InterpreterDiagnostic::warning(DiagnosticCategory::Syntax, d.message.clone())
+                .at(ctx.current_storage.clone(), pc),
+        ))
         .collect();
 
-    let result: Result<Vec<KagEvent>, InterpreterError> = match known {
+    let mut tag_events: Vec<KagEvent> = match known {
         // ── Text flow ──────────────────────────────────────────────────────
         KnownTag::L {} => {
             if ctx.nowait {
-                Ok(vec![])
+                vec![]
             } else {
-                Ok(vec![KagEvent::WaitForClick { clear_after: false }])
+                vec![KagEvent::WaitForClick { clear_after: false }]
             }
         }
         // Always emit the clear signal; the host auto-advances when nowait is set.
-        KnownTag::P {} => Ok(vec![KagEvent::WaitForClick { clear_after: true }]),
-        KnownTag::R {} => Ok(vec![KagEvent::InsertLineBreak]),
-        KnownTag::S {} => Ok(vec![KagEvent::Stop]),
-        KnownTag::Cm {} => Ok(vec![KagEvent::ClearMessage]),
+        KnownTag::P {} => vec![KagEvent::WaitForClick { clear_after: true }],
+        KnownTag::R {} => vec![KagEvent::InsertLineBreak],
+        KnownTag::S {} => vec![KagEvent::Stop],
+        KnownTag::Cm {} => vec![KagEvent::ClearMessage],
 
         // ── Timed wait ─────────────────────────────────────────────────────
         KnownTag::Wait { time, .. } => {
             let ms = resolve_typed_field(ctx, time).unwrap_or(0);
             let mode = tag.param_str("mode").unwrap_or("normal");
             if mode == "until" {
-                // mode=until: wait until `time` ms have elapsed *since the
-                // last [resetwait]*.  If the baseline is already past or was
-                // never set, emit a zero-duration wait (no-op).
                 let elapsed = ctx
                     .wait_base_time
                     .map(|t| t.elapsed().as_millis() as u64)
                     .unwrap_or(ms);
                 let remaining = ms.saturating_sub(elapsed);
                 if remaining == 0 {
-                    Ok(vec![])
+                    vec![]
                 } else {
-                    Ok(vec![KagEvent::WaitMs(remaining)])
+                    vec![KagEvent::WaitMs(remaining)]
                 }
             } else {
-                Ok(vec![KagEvent::WaitMs(ms)])
+                vec![KagEvent::WaitMs(ms)]
             }
         }
 
@@ -291,7 +298,7 @@ fn execute_tag<'s>(
         KnownTag::Jump { storage, target } => {
             let storage = resolve_str_field(ctx, storage);
             let target = resolve_str_field(ctx, target);
-            Ok(vec![KagEvent::Jump { storage, target }])
+            vec![KagEvent::Jump { storage, target }]
         }
 
         KnownTag::Call { storage, target } => {
@@ -299,24 +306,31 @@ fn execute_tag<'s>(
             ctx.push_call(return_pc);
             let storage = resolve_str_field(ctx, storage);
             let target = resolve_str_field(ctx, target);
-            Ok(vec![KagEvent::Jump { storage, target }])
+            vec![KagEvent::Jump { storage, target }]
         }
 
         KnownTag::Return {} => {
             if let Some(frame) = ctx.pop_call() {
                 ctx.jump_to(frame.return_pc);
                 if frame.return_storage != ctx.current_storage {
-                    // Cross-file return: host must reload the caller's script.
-                    // ctx.pc is already set to return_pc; the interpreter loop
-                    // must NOT override it after loading.
-                    Ok(vec![KagEvent::Return {
+                    vec![KagEvent::Return {
                         storage: frame.return_storage,
-                    }])
+                    }]
                 } else {
-                    Ok(vec![])
+                    vec![]
                 }
             } else {
-                Err(InterpreterError::CallStackUnderflow)
+                // Fatal: call stack underflow
+                vec![
+                    KagEvent::Diagnostic(
+                        InterpreterDiagnostic::error(
+                            DiagnosticCategory::CallStack,
+                            "[return] without matching [call]",
+                        )
+                        .at(ctx.current_storage.clone(), pc),
+                    ),
+                    KagEvent::End,
+                ]
             }
         }
 
@@ -328,19 +342,21 @@ fn execute_tag<'s>(
             let mut ev = Vec::new();
             if let Err(e) = result {
                 tracing::warn!("[kag] [eval] expression failed: {e}");
-                ev.push(KagEvent::Warning(e.to_string()));
+                ev.push(KagEvent::Diagnostic(
+                    InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e)
+                        .at(ctx.current_storage.clone(), pc),
+                ));
             }
             if next == "false" {
-                // Caller requested no advance — unusual, treat as stop
                 ev.push(KagEvent::Stop);
             }
-            Ok(ev)
+            ev
         }
 
         KnownTag::Emb { exp } => {
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_default();
             let result = ctx.script_engine.eval_to_string(&exp_str).unwrap_or_default();
-            Ok(vec![KagEvent::EmbedText(result)])
+            vec![KagEvent::EmbedText(result)]
         }
 
         // ── Choice links ──────────────────────────────────────────────────
@@ -356,16 +372,15 @@ fn execute_tag<'s>(
                     target,
                     exp,
                 });
-            Ok(vec![KagEvent::Tag(ResolvedTag::Extension {
+            vec![KagEvent::Tag(ResolvedTag::Extension {
                 name: "link".to_owned(),
                 params: resolve_raw_params(ctx, &tag.params),
-            })])
+            })]
         }
 
         KnownTag::Endlink {} => {
             ctx.in_link = false;
             if !ctx.pending_choices.is_empty() {
-                // Emit all accumulated choices as a choice prompt
                 let choices: Vec<ChoiceOption> = ctx
                     .pending_choices
                     .drain(..)
@@ -376,12 +391,12 @@ fn execute_tag<'s>(
                         exp: c.exp,
                     })
                     .collect();
-                Ok(vec![KagEvent::BeginChoices(choices)])
+                vec![KagEvent::BeginChoices(choices)]
             } else {
-                Ok(vec![KagEvent::Tag(ResolvedTag::Extension {
+                vec![KagEvent::Tag(ResolvedTag::Extension {
                     name: "endlink".to_owned(),
                     params: vec![],
-                })])
+                })]
             }
         }
 
@@ -390,12 +405,12 @@ fn execute_tag<'s>(
             let storage = resolve_str_field(ctx, storage);
             let target = resolve_str_field(ctx, target);
             let exp = tag.param_str("exp").map(str::to_owned);
-            Ok(vec![KagEvent::BeginChoices(vec![ChoiceOption {
+            vec![KagEvent::BeginChoices(vec![ChoiceOption {
                 text: text_val,
                 storage,
                 target,
                 exp,
-            }])])
+            }])]
         }
 
         // ── Character nameplate ───────────────────────────────────────────
@@ -403,44 +418,41 @@ fn execute_tag<'s>(
             if let Some(name_val) = resolve_str_field(ctx, name) {
                 ctx.current_speaker = Some(name_val);
             }
-            Ok(vec![KagEvent::Tag(ResolvedTag::Extension {
+            vec![KagEvent::Tag(ResolvedTag::Extension {
                 name: "chara_ptext".to_owned(),
                 params: resolve_raw_params(ctx, &tag.params),
-            })])
+            })]
         }
 
         KnownTag::Endmacro {} => {
-            // If inside a macro invocation, return
             if let Some(frame) = ctx.pop_macro() {
                 ctx.jump_to(frame.return_pc);
             }
-            Ok(vec![])
+            vec![]
         }
 
         // ── Variable clearing ─────────────────────────────────────────────
         KnownTag::Clearvar {} => {
             let exp = tag.param_str("exp").unwrap_or("").trim().to_owned();
             if exp.is_empty() {
-                // Clear all game (f) and transient (tf) variables
                 ctx.script_engine.clear_f();
                 ctx.script_engine.clear_tf();
             } else {
-                // Remove a specific variable: "f.key", "sf.key", or "tf.key"
                 remove_var_by_expr(ctx, &exp);
             }
-            Ok(vec![])
+            vec![]
         }
 
         KnownTag::Clearsysvar {} => {
             ctx.script_engine.clear_sf();
-            Ok(vec![])
+            vec![]
         }
 
         // ── Stack clearing ────────────────────────────────────────────────
         KnownTag::Clearstack {} => {
             let which = tag.param_str("stack").unwrap_or("").trim().to_owned();
             ctx.clear_stack(&which);
-            Ok(vec![])
+            vec![]
         }
 
         // ── Macro deletion ────────────────────────────────────────────────
@@ -449,87 +461,80 @@ fn execute_tag<'s>(
             if !name_val.is_empty() {
                 ctx.erased_macros.insert(name_val);
             }
-            Ok(vec![])
+            vec![]
         }
 
         // ── Debug trace ───────────────────────────────────────────────────
         KnownTag::Trace { exp } => {
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_default();
             let result = ctx.script_engine.eval_to_string(&exp_str).unwrap_or_default();
-            Ok(vec![KagEvent::Trace(result)])
+            vec![KagEvent::Trace(result)]
         }
 
         // ── Nowait mode ───────────────────────────────────────────────────
         KnownTag::Nowait {} => {
             ctx.nowait = true;
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Endnowait {} => {
             ctx.nowait = false;
-            Ok(vec![])
+            vec![]
         }
 
         // ── Text display speed ────────────────────────────────────────────
         KnownTag::Delay { speed } | KnownTag::Configdelay { speed } => {
             ctx.text_speed = Some(resolve_typed_field(ctx, speed).unwrap_or(0));
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Resetdelay {} => {
             ctx.text_speed = None;
-            Ok(vec![])
+            vec![]
         }
 
         // ── Backlog control ───────────────────────────────────────────────
         KnownTag::Nolog {} => {
             ctx.log_enabled = false;
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Endnolog {} => {
             ctx.log_enabled = true;
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Pushlog { text, join } => {
             let text_val = resolve_str_field(ctx, text).unwrap_or_default();
             let join_val = resolve_typed_field(ctx, join).unwrap_or(false);
-            Ok(vec![KagEvent::PushBacklog {
+            vec![KagEvent::PushBacklog {
                 text: text_val,
                 join: join_val,
-            }])
+            }]
         }
 
         // ── Message-layer clear variants ──────────────────────────────────
-        // [ct] resets the message layer position (like [cm] but with
-        // context-target semantics in the original KAG). Emit ClearMessage
-        // plus an Extension so the host can distinguish it from [cm].
-        KnownTag::Ct {} => Ok(vec![
+        KnownTag::Ct {} => vec![
             KagEvent::ClearMessage,
             KagEvent::Tag(ResolvedTag::Extension {
                 name: "ct".to_owned(),
                 params: vec![],
             }),
-        ]),
+        ],
 
-        // [er] clears only the text of the current layer, leaving font /
-        // style state intact.
-        KnownTag::Er {} => Ok(vec![KagEvent::ClearCurrentMessage]),
+        KnownTag::Er {} => vec![KagEvent::ClearCurrentMessage],
 
         // ── Single-character display ──────────────────────────────────────
         KnownTag::Ch { text } => {
             let text_val = resolve_str_field(ctx, text).unwrap_or_default();
             if text_val.is_empty() {
-                Ok(vec![])
+                vec![]
             } else {
-                Ok(vec![KagEvent::DisplayText {
+                vec![KagEvent::DisplayText {
                     text: text_val,
                     speaker: ctx.current_speaker.clone(),
                     speed: ctx.text_speed,
                     log: ctx.log_enabled,
-                }])
+                }]
             }
         }
 
-        // [hch] is the vertical equivalent of [ch]; forward to host for
-        // rendering, but also emit a DisplayText event so the backlog works.
         KnownTag::Hch { text } => {
             let text_val = resolve_str_field(ctx, text).unwrap_or_default();
             let mut ev = vec![KagEvent::Tag(ResolvedTag::Extension {
@@ -544,7 +549,7 @@ fn execute_tag<'s>(
                     log: ctx.log_enabled,
                 });
             }
-            Ok(ev)
+            ev
         }
 
         // ── [autowc] — configure automatic per-character waits ────────────
@@ -569,29 +574,29 @@ fn execute_tag<'s>(
             } else {
                 ctx.autowc_map.clear();
             }
-            Ok(vec![])
+            vec![]
         }
 
         // ── [wc] — wait for N characters of display time ──────────────────
         KnownTag::Wc { time } => {
             let time_ms = resolve_typed_field(ctx, time).unwrap_or(0);
-            Ok(vec![KagEvent::WaitMs(time_ms)])
+            vec![KagEvent::WaitMs(time_ms)]
         }
 
         // ── [clickskip] — toggle click-skip mode ─────────────────────────
         KnownTag::Clickskip { enabled } => {
             let enabled_val = resolve_typed_field(ctx, enabled).unwrap_or(true);
             ctx.clickskip_enabled = enabled_val;
-            Ok(vec![KagEvent::Tag(ResolvedTag::Extension {
+            vec![KagEvent::Tag(ResolvedTag::Extension {
                 name: "clickskip".to_owned(),
                 params: resolve_raw_params(ctx, &tag.params),
-            })])
+            })]
         }
 
         // ── [resetwait] — set wait baseline for mode=until ───────────────
         KnownTag::Resetwait {} => {
             ctx.wait_base_time = Some(std::time::Instant::now());
-            Ok(vec![])
+            vec![]
         }
 
         // ── [click]/[cclick] — register/clear click handler at [s] ──────
@@ -604,11 +609,11 @@ fn execute_tag<'s>(
                 target,
                 exp: exp_val,
             });
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Cclick {} => {
             ctx.pending_click = None;
-            Ok(vec![])
+            vec![]
         }
 
         // ── [timeout]/[ctimeout] — register/clear timeout handler ────────
@@ -623,11 +628,11 @@ fn execute_tag<'s>(
                 target,
                 exp: exp_val,
             });
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Ctimeout {} => {
             ctx.pending_timeout = None;
-            Ok(vec![])
+            vec![]
         }
 
         // ── [wheel]/[cwheel] — register/clear wheel handler ──────────────
@@ -640,250 +645,238 @@ fn execute_tag<'s>(
                 target,
                 exp: exp_val,
             });
-            Ok(vec![])
+            vec![]
         }
         KnownTag::Cwheel {} => {
             ctx.pending_wheel = None;
-            Ok(vec![])
+            vec![]
         }
 
         // ── Blocking wait tags ────────────────────────────────────────────
-        // All w* completion-wait tags carry canskip and buf.
         KnownTag::WaitForCompletion { which, canskip, buf } => {
-            Ok(vec![KagEvent::WaitForCompletion {
+            vec![KagEvent::WaitForCompletion {
                 which,
                 canskip: resolve_typed_field(ctx, canskip),
                 buf: resolve_typed_field(ctx, buf),
-            }])
+            }]
         }
 
-        KnownTag::Waitclick {} => Ok(vec![KagEvent::WaitForRawClick]),
+        KnownTag::Waitclick {} => vec![KagEvent::WaitForRawClick],
 
         // ── [input] — text-input dialog ───────────────────────────────────
         KnownTag::Input { name, prompt, title } => {
             let var_name = resolve_str_field(ctx, name).unwrap_or_default();
             let prompt_val = resolve_str_field(ctx, prompt).unwrap_or_default();
             let title_val = resolve_str_field(ctx, title).unwrap_or_default();
-            Ok(vec![KagEvent::InputRequested {
+            vec![KagEvent::InputRequested {
                 name: var_name,
                 prompt: prompt_val,
                 title: title_val,
-            }])
+            }]
         }
 
         // ── [waittrig] — wait for a named trigger ─────────────────────────
         KnownTag::Waittrig { name } => {
             let trig_name = resolve_str_field(ctx, name).unwrap_or_default();
-            Ok(vec![KagEvent::WaitForTrigger { name: trig_name }])
+            vec![KagEvent::WaitForTrigger { name: trig_name }]
         }
 
         // ── Image / layer tags ────────────────────────────────────────────
-        KnownTag::Bg { storage, time, method } => Ok(vec![KagEvent::Tag(ResolvedTag::Bg {
+        KnownTag::Bg { storage, time, method } => vec![KagEvent::Tag(ResolvedTag::Bg {
             storage: resolve_str_field(ctx, storage),
             time: resolve_typed_field(ctx, time),
             method: resolve_str_field(ctx, method),
-        })]),
+        })],
         KnownTag::Image { storage, layer, x, y, visible } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::Image {
+            vec![KagEvent::Tag(ResolvedTag::Image {
                 storage: resolve_str_field(ctx, storage),
                 layer: resolve_str_field(ctx, layer),
                 x: resolve_typed_field(ctx, x),
                 y: resolve_typed_field(ctx, y),
                 visible: resolve_typed_field(ctx, visible),
-            })])
+            })]
         }
         KnownTag::Layopt { layer, visible, opacity } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::Layopt {
+            vec![KagEvent::Tag(ResolvedTag::Layopt {
                 layer: resolve_str_field(ctx, layer),
                 visible: resolve_typed_field(ctx, visible),
                 opacity: resolve_typed_field(ctx, opacity),
-            })])
+            })]
         }
-        KnownTag::Free { layer } => Ok(vec![KagEvent::Tag(ResolvedTag::Free {
+        KnownTag::Free { layer } => vec![KagEvent::Tag(ResolvedTag::Free {
             layer: resolve_str_field(ctx, layer),
-        })]),
-        KnownTag::Position { layer, x, y } => Ok(vec![KagEvent::Tag(ResolvedTag::Position {
+        })],
+        KnownTag::Position { layer, x, y } => vec![KagEvent::Tag(ResolvedTag::Position {
             layer: resolve_str_field(ctx, layer),
             x: resolve_typed_field(ctx, x),
             y: resolve_typed_field(ctx, y),
-        })]),
+        })],
 
         // ── Audio tags ────────────────────────────────────────────────────
         KnownTag::Bgm { storage, r#loop, volume, fadetime } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::Bgm {
+            vec![KagEvent::Tag(ResolvedTag::Bgm {
                 storage: resolve_str_field(ctx, storage),
                 looping: resolve_typed_field(ctx, r#loop).unwrap_or(true),
                 volume: resolve_typed_field(ctx, volume),
                 fadetime: resolve_typed_field(ctx, fadetime),
-            })])
+            })]
         }
-        KnownTag::Stopbgm { fadetime } => Ok(vec![KagEvent::Tag(ResolvedTag::Stopbgm {
+        KnownTag::Stopbgm { fadetime } => vec![KagEvent::Tag(ResolvedTag::Stopbgm {
             fadetime: resolve_typed_field(ctx, fadetime),
-        })]),
+        })],
         KnownTag::Se { storage, buf, volume, r#loop } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::Se {
+            vec![KagEvent::Tag(ResolvedTag::Se {
                 storage: resolve_str_field(ctx, storage),
                 buf: resolve_typed_field(ctx, buf),
                 volume: resolve_typed_field(ctx, volume),
                 looping: resolve_typed_field(ctx, r#loop).unwrap_or(false),
-            })])
+            })]
         }
-        KnownTag::Stopse { buf } => Ok(vec![KagEvent::Tag(ResolvedTag::Stopse {
+        KnownTag::Stopse { buf } => vec![KagEvent::Tag(ResolvedTag::Stopse {
             buf: resolve_typed_field(ctx, buf),
-        })]),
-        KnownTag::Vo { storage, buf } => Ok(vec![KagEvent::Tag(ResolvedTag::Vo {
+        })],
+        KnownTag::Vo { storage, buf } => vec![KagEvent::Tag(ResolvedTag::Vo {
             storage: resolve_str_field(ctx, storage),
             buf: resolve_typed_field(ctx, buf),
-        })]),
-        KnownTag::Fadebgm { time, volume } => Ok(vec![KagEvent::Tag(ResolvedTag::Fadebgm {
+        })],
+        KnownTag::Fadebgm { time, volume } => vec![KagEvent::Tag(ResolvedTag::Fadebgm {
             time: resolve_typed_field(ctx, time),
             volume: resolve_typed_field(ctx, volume),
-        })]),
+        })],
 
         // ── Transition tags ───────────────────────────────────────────────
-        KnownTag::Trans { method, time, rule } => Ok(vec![KagEvent::Tag(ResolvedTag::Trans {
+        KnownTag::Trans { method, time, rule } => vec![KagEvent::Tag(ResolvedTag::Trans {
             method: resolve_str_field(ctx, method),
             time: resolve_typed_field(ctx, time),
             rule: resolve_str_field(ctx, rule),
-        })]),
-        KnownTag::Fadein { time, color } => Ok(vec![KagEvent::Tag(ResolvedTag::Fadein {
+        })],
+        KnownTag::Fadein { time, color } => vec![KagEvent::Tag(ResolvedTag::Fadein {
             time: resolve_typed_field(ctx, time),
             color: resolve_str_field(ctx, color),
-        })]),
-        KnownTag::Fadeout { time, color } => Ok(vec![KagEvent::Tag(ResolvedTag::Fadeout {
+        })],
+        KnownTag::Fadeout { time, color } => vec![KagEvent::Tag(ResolvedTag::Fadeout {
             time: resolve_typed_field(ctx, time),
             color: resolve_str_field(ctx, color),
-        })]),
+        })],
         KnownTag::Movetrans { layer, time, x, y } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::Movetrans {
+            vec![KagEvent::Tag(ResolvedTag::Movetrans {
                 layer: resolve_str_field(ctx, layer),
                 time: resolve_typed_field(ctx, time),
                 x: resolve_typed_field(ctx, x),
                 y: resolve_typed_field(ctx, y),
-            })])
+            })]
         }
 
         // ── Effect tags ───────────────────────────────────────────────────
-        KnownTag::Quake { time, hmax, vmax } => Ok(vec![KagEvent::Tag(ResolvedTag::Quake {
+        KnownTag::Quake { time, hmax, vmax } => vec![KagEvent::Tag(ResolvedTag::Quake {
             time: resolve_typed_field(ctx, time),
             hmax: resolve_typed_field(ctx, hmax),
             vmax: resolve_typed_field(ctx, vmax),
-        })]),
-        KnownTag::Shake { time, amount, axis } => Ok(vec![KagEvent::Tag(ResolvedTag::Shake {
+        })],
+        KnownTag::Shake { time, amount, axis } => vec![KagEvent::Tag(ResolvedTag::Shake {
             time: resolve_typed_field(ctx, time),
             amount: resolve_typed_field(ctx, amount),
             axis: resolve_str_field(ctx, axis),
-        })]),
-        KnownTag::Flash { time, color } => Ok(vec![KagEvent::Tag(ResolvedTag::Flash {
+        })],
+        KnownTag::Flash { time, color } => vec![KagEvent::Tag(ResolvedTag::Flash {
             time: resolve_typed_field(ctx, time),
             color: resolve_str_field(ctx, color),
-        })]),
+        })],
 
         // ── Message window tags ───────────────────────────────────────────
-        KnownTag::Msgwnd { visible, layer } => Ok(vec![KagEvent::Tag(ResolvedTag::Msgwnd {
+        KnownTag::Msgwnd { visible, layer } => vec![KagEvent::Tag(ResolvedTag::Msgwnd {
             visible: resolve_typed_field(ctx, visible),
             layer: resolve_str_field(ctx, layer),
-        })]),
+        })],
         KnownTag::Wndctrl { x, y, width, height } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::Wndctrl {
+            vec![KagEvent::Tag(ResolvedTag::Wndctrl {
                 x: resolve_typed_field(ctx, x),
                 y: resolve_typed_field(ctx, y),
                 width: resolve_typed_field(ctx, width),
                 height: resolve_typed_field(ctx, height),
-            })])
+            })]
         }
-        KnownTag::Resetfont {} => Ok(vec![KagEvent::Tag(ResolvedTag::Resetfont)]),
+        KnownTag::Resetfont {} => vec![KagEvent::Tag(ResolvedTag::Resetfont)],
         KnownTag::Font { face, size, bold, italic } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::Font {
+            vec![KagEvent::Tag(ResolvedTag::Font {
                 face: resolve_str_field(ctx, face),
                 size: resolve_typed_field(ctx, size),
                 bold: resolve_typed_field(ctx, bold),
                 italic: resolve_typed_field(ctx, italic),
-            })])
+            })]
         }
-        KnownTag::Size { value } => Ok(vec![KagEvent::Tag(ResolvedTag::Size {
+        KnownTag::Size { value } => vec![KagEvent::Tag(ResolvedTag::Size {
             value: resolve_typed_field(ctx, value),
-        })]),
-        KnownTag::Bold { value } => Ok(vec![KagEvent::Tag(ResolvedTag::Bold {
+        })],
+        KnownTag::Bold { value } => vec![KagEvent::Tag(ResolvedTag::Bold {
             value: resolve_typed_field(ctx, value),
-        })]),
-        KnownTag::Italic { value } => Ok(vec![KagEvent::Tag(ResolvedTag::Italic {
+        })],
+        KnownTag::Italic { value } => vec![KagEvent::Tag(ResolvedTag::Italic {
             value: resolve_typed_field(ctx, value),
-        })]),
-        KnownTag::Ruby { text } => Ok(vec![KagEvent::Tag(ResolvedTag::Ruby {
+        })],
+        KnownTag::Ruby { text } => vec![KagEvent::Tag(ResolvedTag::Ruby {
             text: resolve_str_field(ctx, text),
-        })]),
-        KnownTag::Nowrap {} => Ok(vec![KagEvent::Tag(ResolvedTag::Nowrap { enabled: true })]),
+        })],
+        KnownTag::Nowrap {} => vec![KagEvent::Tag(ResolvedTag::Nowrap { enabled: true })],
         KnownTag::Endnowrap {} => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::Nowrap { enabled: false })])
+            vec![KagEvent::Tag(ResolvedTag::Nowrap { enabled: false })]
         }
 
         // ── Character sprite tags ─────────────────────────────────────────
         KnownTag::Chara { name, id, storage, slot, x, y } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::Chara {
+            vec![KagEvent::Tag(ResolvedTag::Chara {
                 name: resolve_str_field(ctx, name),
                 id: resolve_str_field(ctx, id),
                 storage: resolve_str_field(ctx, storage),
                 slot: resolve_str_field(ctx, slot),
                 x: resolve_typed_field(ctx, x),
                 y: resolve_typed_field(ctx, y),
-            })])
+            })]
         }
         KnownTag::CharaHide { name, id, slot } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::CharaHide {
+            vec![KagEvent::Tag(ResolvedTag::CharaHide {
                 name: resolve_str_field(ctx, name),
                 id: resolve_str_field(ctx, id),
                 slot: resolve_str_field(ctx, slot),
-            })])
+            })]
         }
         KnownTag::CharaFree { name, id, slot } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::CharaFree {
+            vec![KagEvent::Tag(ResolvedTag::CharaFree {
                 name: resolve_str_field(ctx, name),
                 id: resolve_str_field(ctx, id),
                 slot: resolve_str_field(ctx, slot),
-            })])
+            })]
         }
         KnownTag::CharaMod { name, id, face, pose, storage } => {
-            Ok(vec![KagEvent::Tag(ResolvedTag::CharaMod {
+            vec![KagEvent::Tag(ResolvedTag::CharaMod {
                 name: resolve_str_field(ctx, name),
                 id: resolve_str_field(ctx, id),
                 face: resolve_str_field(ctx, face),
                 pose: resolve_str_field(ctx, pose),
                 storage: resolve_str_field(ctx, storage),
-            })])
+            })]
         }
 
         // ── Macro definition ──────────────────────────────────────────────
-        // [macro name=...] is a definition header; the interpreter's MacroDef
-        // op handles the skip_to logic. If we somehow reach this as a Tag op,
-        // treat it as a no-op extension forward.
-        KnownTag::Macro { .. } => Ok(vec![]),
+        KnownTag::Macro { .. } => vec![],
 
         // ── Extension / unknown tags ──────────────────────────────────────
-        KnownTag::Extension { name, params } => Ok(vec![KagEvent::Tag(ResolvedTag::Extension {
+        KnownTag::Extension { name, params } => vec![KagEvent::Tag(ResolvedTag::Extension {
             name: name.into_owned(),
             params: resolve_raw_params(ctx, &params),
-        })]),
+        })],
 
         // ── Control-flow tags ────────────────────────────────────────────
-        // These are handled in execute_control_flow() before this function is
-        // called, so they should never arrive here. Forward as extension if
-        // they somehow do (e.g. inside an erased-macro dispatch path).
         KnownTag::If { .. }
         | KnownTag::Elsif { .. }
         | KnownTag::Else {}
         | KnownTag::Endif {}
         | KnownTag::Ignore { .. }
-        | KnownTag::Endignore {} => Ok(vec![]),
+        | KnownTag::Endignore {} => vec![],
     };
 
-    match result {
-        Ok(mut ev) => {
-            events.append(&mut ev);
-            Ok(events)
-        }
-        Err(e) => Err(e),
-    }
+    events.append(&mut tag_events);
+    events
 }
 
 // ─── Control-flow dispatch (always executed, even inside skipped blocks) ──────
@@ -908,14 +901,13 @@ fn execute_control_flow<'s>(
     _script: &Script<'s>,
     ctx: &mut RuntimeContext,
     tag: &Tag<'s>,
-) -> Result<Vec<KagEvent>, InterpreterError> {
+) -> Vec<KagEvent> {
     ctx.advance();
 
     let mut diags = Vec::new();
     match KnownTag::from_tag(tag, &mut diags) {
         KnownTag::If { exp } => {
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_else(|| "false".to_owned());
-            // Only evaluate condition when outer context is already executing
             let cond = if ctx.is_executing() {
                 ctx.script_engine.eval_bool(&exp_str).unwrap_or(false)
             } else {
@@ -945,7 +937,6 @@ fn execute_control_flow<'s>(
             ctx.pop_if();
         }
         KnownTag::Ignore { exp } => {
-            // `[ignore]` uses an `exp=` that is inverted (skip if true)
             let exp_str = resolve_str_field(ctx, exp).unwrap_or_else(|| "false".to_owned());
             let skip = if ctx.is_executing() {
                 ctx.script_engine.eval_bool(&exp_str).unwrap_or(false)
@@ -960,7 +951,7 @@ fn execute_control_flow<'s>(
         _ => {}
     }
 
-    Ok(vec![])
+    vec![]
 }
 
 // ─── Macro invocation ─────────────────────────────────────────────────────────
@@ -969,21 +960,23 @@ fn invoke_macro<'s>(
     script: &Script<'s>,
     ctx: &mut RuntimeContext,
     tag: &Tag<'s>,
-) -> Result<Vec<KagEvent>, InterpreterError> {
+) -> Vec<KagEvent> {
     let macro_name = tag.name.as_ref();
     let def = match script.macro_map.get(macro_name) {
         Some(d) => d.clone(),
         None => {
-            return Ok(vec![KagEvent::Warning(format!(
-                "macro not found: {macro_name}"
-            ))]);
+            return vec![KagEvent::Diagnostic(
+                InterpreterDiagnostic::warning(
+                    DiagnosticCategory::Macro,
+                    format!("macro not found: {macro_name}"),
+                ),
+            )];
         }
     };
 
-    let return_pc = ctx.pc + 1; // return to op after the macro call
+    let return_pc = ctx.pc + 1;
     ctx.advance();
 
-    // Build `mp` from this tag's parameters
     let mut mp = rhai::Map::new();
     for param in &tag.params {
         if let Some(ref key) = param.key {
@@ -999,7 +992,6 @@ fn invoke_macro<'s>(
                         .unwrap_or_default()
                 }
                 ParamValue::MacroSplat => {
-                    // Splat: pass through all current mp entries (handled below)
                     continue;
                 }
             };
@@ -1007,7 +999,6 @@ fn invoke_macro<'s>(
         }
     }
 
-    // Handle MacroSplat: merge current mp into new mp
     if tag
         .params
         .iter()
@@ -1022,7 +1013,7 @@ fn invoke_macro<'s>(
     ctx.push_macro(macro_name, return_pc, mp);
     ctx.jump_to(def.body_start);
 
-    Ok(vec![])
+    vec![]
 }
 
 // ─── Variable removal helper ──────────────────────────────────────────────────
@@ -1129,7 +1120,7 @@ mod tests {
             if ctx.pc >= script.ops.len() {
                 break;
             }
-            let events = execute_op(&script, &mut ctx).expect("execute failed");
+            let events = execute_op(&script, &mut ctx);
             all_events.extend(events);
         }
 
@@ -1200,8 +1191,7 @@ mod tests {
                 KagEvent::EmbedText(s) => format!("emb:{}", s),
                 KagEvent::Tag(rt) => format!("tag:{}", resolved_tag_name(rt)),
                 KagEvent::End => "end".to_string(),
-                KagEvent::Warning(w) => format!("warn:{}", w),
-                KagEvent::Error(e) => format!("err:{}", e),
+                KagEvent::Diagnostic(diag) => format!("diag:{:?}", diag),
                 KagEvent::Return { storage } => format!("return:{}", storage),
                 KagEvent::Trace(s) => format!("trace:{}", s),
                 KagEvent::PushBacklog { text, join } => {
@@ -1379,7 +1369,7 @@ mod tests {
             if ctx.pc >= script.ops.len() {
                 break;
             }
-            let ev = execute_op(&script, &mut ctx).expect("execute");
+            let ev = execute_op(&script, &mut ctx);
 
             // Simulate runtime: follow Jump events (call/return)
             for e in &ev {
@@ -1515,7 +1505,7 @@ mod tests {
             "should have one frame before clearstack"
         );
 
-        let _ = execute_op(&script, &mut ctx).expect("execute");
+        let _ = execute_op(&script, &mut ctx);
 
         assert!(
             ctx.call_stack.is_empty(),
@@ -1535,7 +1525,7 @@ mod tests {
         assert!(!ctx.call_stack.is_empty());
         assert!(!ctx.if_stack.is_empty());
 
-        let _ = execute_op(&script, &mut ctx).expect("execute");
+        let _ = execute_op(&script, &mut ctx);
 
         assert!(ctx.call_stack.is_empty(), "call stack cleared");
         assert!(ctx.if_stack.is_empty(), "if stack cleared");

@@ -1,4 +1,4 @@
-//! Async KAG interpreter actor.
+//! Async KAG interpreter.
 //!
 //! `KagInterpreter` runs as a Tokio task and communicates with its host
 //! (e.g. a Bevy system) through two async MPSC channels:
@@ -18,7 +18,7 @@ pub mod script_engine;
 use tokio::sync::mpsc;
 
 use crate::ast::Script;
-use crate::error::InterpreterError;
+use crate::error::{InterpreterDiagnostic, DiagnosticCategory, InterpreterError};
 use crate::events::{HostEvent, KagEvent, VarScope, VariableSnapshot};
 use crate::parser::parse_script;
 use crate::snapshot::InterpreterSnapshot;
@@ -234,7 +234,9 @@ async fn emit_snapshot(ctx: &RuntimeContext, event_tx: &mpsc::Sender<KagEvent>) 
         Err(e) => {
             tracing::error!("[kag] snapshot error: {e}");
             let _ = event_tx
-                .send(KagEvent::Error(format!("snapshot error: {e}")))
+                .send(KagEvent::Diagnostic(
+                    InterpreterDiagnostic::error(DiagnosticCategory::Serialization, format!("snapshot error: {e}"))
+                ))
                 .await;
         }
     }
@@ -254,7 +256,9 @@ async fn interpreter_task_from_snapshot(
     if let Err(e) = ctx.restore_from_snapshot(&snapshot) {
         tracing::error!("[kag] snapshot restore failed: {e}");
         let _ = event_tx
-            .send(KagEvent::Error(format!("restore error: {e}")))
+            .send(KagEvent::Diagnostic(
+                InterpreterDiagnostic::error(DiagnosticCategory::Serialization, format!("restore error: {e}"))
+            ))
             .await;
         return;
     }
@@ -324,7 +328,10 @@ async fn perform_jump(
                                     d.message
                                 ),
                             }
-                            let _ = event_tx.send(KagEvent::Warning(d.message)).await;
+                            let _ = event_tx.send(KagEvent::Diagnostic(
+                                InterpreterDiagnostic::warning(DiagnosticCategory::Syntax, d.message)
+                                    .in_file(&name)
+                            )).await;
                         }
                         let idx = if let Some(ref t) = target {
                             let key = t.trim_start_matches('*');
@@ -337,13 +344,19 @@ async fn perform_jump(
                                         ctx.current_storage
                                     );
                                     let _ = event_tx
-                                        .send(KagEvent::Warning(format!(
-                                            "label '{key}' not found in '{}' \
-                                                 (script.label_map has {} label(s)); \
-                                                 jumping to start",
-                                            ctx.current_storage,
-                                            script.label_map.len(),
-                                        )))
+                                        .send(KagEvent::Diagnostic(
+                                            InterpreterDiagnostic::warning(
+                                                DiagnosticCategory::LabelNotFound,
+                                                format!(
+                                                    "label '{key}' not found in '{}' \
+                                                         (script.label_map has {} label(s)); \
+                                                         jumping to start",
+                                                    ctx.current_storage,
+                                                    script.label_map.len(),
+                                                ),
+                                            )
+                                            .in_file(&ctx.current_storage)
+                                        ))
                                         .await;
                                     0
                                 }
@@ -369,10 +382,13 @@ async fn perform_jump(
                 ctx.current_storage
             );
             let _ = event_tx
-                .send(KagEvent::Error(format!(
-                    "label not found: '{key}' in '{}'",
-                    ctx.current_storage
-                )))
+                .send(KagEvent::Diagnostic(
+                    InterpreterDiagnostic::error(
+                        DiagnosticCategory::LabelNotFound,
+                        format!("label not found: '{key}' in '{}'", ctx.current_storage),
+                    )
+                    .in_file(&ctx.current_storage)
+                ))
                 .await;
             return false;
         }
@@ -394,14 +410,7 @@ async fn run_interpreter(
             break;
         }
 
-        let events = match execute_op(&script, &mut ctx) {
-            Ok(evs) => evs,
-            Err(e) => {
-                tracing::error!("[kag] unrecoverable executor error: {e}");
-                let _ = event_tx.send(KagEvent::Error(e.to_string())).await;
-                break;
-            }
-        };
+        let events = execute_op(&script, &mut ctx);
 
         // ── Emit all events and handle blocking ones ───────────────────────
         for event in events {
@@ -437,7 +446,9 @@ async fn run_interpreter(
                                                         "[kag] click handler exp failed: {e}"
                                                     );
                                                     let _ = event_tx
-                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .send(KagEvent::Diagnostic(
+                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                        ))
                                                         .await;
                                                 }
                                                 if (st.is_some() || tg.is_some())
@@ -477,7 +488,9 @@ async fn run_interpreter(
                                                         "[kag] timeout handler exp failed: {e}"
                                                     );
                                                     let _ = event_tx
-                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .send(KagEvent::Diagnostic(
+                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                        ))
                                                         .await;
                                                 }
                                                 if (st.is_some() || tg.is_some())
@@ -509,7 +522,9 @@ async fn run_interpreter(
                                                         "[kag] wheel handler exp failed: {e}"
                                                     );
                                                     let _ = event_tx
-                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .send(KagEvent::Diagnostic(
+                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                        ))
                                                         .await;
                                                 }
                                                 if (st.is_some() || tg.is_some())
@@ -634,7 +649,10 @@ async fn run_interpreter(
                                                 d.message
                                             ),
                                         }
-                                        let _ = event_tx.send(KagEvent::Warning(d.message)).await;
+                                        let _ = event_tx.send(KagEvent::Diagnostic(
+                                            InterpreterDiagnostic::warning(DiagnosticCategory::Syntax, d.message)
+                                                .in_file(&ctx.current_storage)
+                                        )).await;
                                     }
                                     // ctx.pc was already set to return_pc by the
                                     // executor — do NOT override it here.
@@ -666,7 +684,9 @@ async fn run_interpreter(
                                                 {
                                                     tracing::warn!("[kag] choice exp failed: {e}");
                                                     let _ = event_tx
-                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .send(KagEvent::Diagnostic(
+                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                        ))
                                                         .await;
                                                 }
                                                 // Navigate to the choice target if present
@@ -787,7 +807,9 @@ async fn run_interpreter(
                                                         "[kag] input assign failed: {e}"
                                                     );
                                                     let _ = event_tx
-                                                        .send(KagEvent::Warning(e.to_string()))
+                                                        .send(KagEvent::Diagnostic(
+                                                            InterpreterDiagnostic::warning(DiagnosticCategory::ScriptEval, e.to_string())
+                                                        ))
                                                         .await;
                                                 }
                                             }

@@ -151,10 +151,13 @@ pub fn poll_interpreter(
             KagEvent::End => {
                 bridge.state = BridgeState::Ended;
             }
-            KagEvent::Warning(msg) => warn!("[kag] {msg}"),
-            KagEvent::Error(msg) => {
-                error!("[kag] {msg}");
-                bridge.state = BridgeState::Ended;
+            KagEvent::Diagnostic(diag) => {
+                if diag.is_fatal() {
+                    error!("[kag] {diag}");
+                    bridge.state = BridgeState::Ended;
+                } else {
+                    warn!("[kag] {diag}");
+                }
             }
             KagEvent::Snapshot(snap) => {
                 ev_snap.write(EvSnapshot(snap));

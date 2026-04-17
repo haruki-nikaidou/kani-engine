@@ -141,22 +141,22 @@ impl ScriptEngine {
     /// Variables mutated inside `script` are automatically reflected back into
     /// the persistent scope because Rhai's `eval_with_scope` shares the scope
     /// reference.
-    pub fn exec(&mut self, script: &str) -> Result<Dynamic, InterpreterError> {
+    pub fn exec(&mut self, script: &str) -> Result<Dynamic, String> {
         self.engine
             .eval_with_scope::<Dynamic>(&mut self.scope, script)
-            .map_err(|e| InterpreterError::ScriptError(rhai_error_msg(&e)))
+            .map_err(|e| rhai_error_msg(&e))
     }
 
     /// Evaluate an expression and coerce the result to `bool`.
     ///
     /// Used for `cond=` parameters and `[if exp=…]` conditions.
-    pub fn eval_bool(&mut self, expr: &str) -> Result<bool, InterpreterError> {
+    pub fn eval_bool(&mut self, expr: &str) -> Result<bool, String> {
         // Wrap in parentheses to handle bare expressions
         let wrapped = format!("({})", expr);
         let result = self
             .engine
             .eval_with_scope::<Dynamic>(&mut self.scope, &wrapped)
-            .map_err(|e| InterpreterError::ScriptError(rhai_error_msg(&e)))?;
+            .map_err(|e| rhai_error_msg(&e))?;
 
         // Flexible truthiness: bools, integers (0 = false), strings ("" = false)
         let b = if result.is_bool() {
@@ -175,12 +175,12 @@ impl ScriptEngine {
     /// Evaluate an expression and convert the result to a display string.
     ///
     /// Used for `[emb exp=…]`.
-    pub fn eval_to_string(&mut self, expr: &str) -> Result<String, InterpreterError> {
+    pub fn eval_to_string(&mut self, expr: &str) -> Result<String, String> {
         let wrapped = format!("({})", expr);
         let result = self
             .engine
             .eval_with_scope::<Dynamic>(&mut self.scope, &wrapped)
-            .map_err(|e| InterpreterError::ScriptError(rhai_error_msg(&e)))?;
+            .map_err(|e| rhai_error_msg(&e))?;
         Ok(result.to_string())
     }
 
