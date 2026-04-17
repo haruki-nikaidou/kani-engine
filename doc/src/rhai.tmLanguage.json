@@ -1,0 +1,85 @@
+{
+  "name": "rhai",
+  "displayName": "Rhai",
+  "scopeName": "source.rhai",
+  "fileTypes": ["rhai"],
+  "patterns": [
+    { "include": "#block-comment" },
+    { "include": "#line-comment" },
+    { "include": "#string" },
+    { "include": "#number" },
+    { "include": "#keyword" },
+    { "include": "#function-def" },
+    { "include": "#function-call" },
+    { "include": "#operator" }
+  ],
+  "repository": {
+    "block-comment": {
+      "name": "comment.block.rhai",
+      "begin": "/\\*",
+      "end": "\\*/",
+      "patterns": [{ "include": "#block-comment" }]
+    },
+    "line-comment": {
+      "name": "comment.line.double-slash.rhai",
+      "match": "//.*$"
+    },
+    "string": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.rhai",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "name": "constant.character.escape.rhai", "match": "\\\\." }
+          ]
+        },
+        {
+          "name": "string.quoted.single.rhai",
+          "match": "'(?:[^'\\\\]|\\\\.)*'"
+        }
+      ]
+    },
+    "number": {
+      "name": "constant.numeric.rhai",
+      "match": "\\b(?:0x[0-9a-fA-F_]+|0o[0-7_]+|0b[01_]+|[0-9][0-9_]*(?:\\.[0-9][0-9_]*)?(?:[eE][+-]?[0-9]+)?)\\b"
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "name": "constant.language.rhai",
+          "match": "\\b(true|false|nil)\\b"
+        },
+        {
+          "name": "keyword.control.rhai",
+          "match": "\\b(if|else|while|loop|do|for|in|break|continue|return|switch|throw|try|catch)\\b"
+        },
+        {
+          "name": "keyword.declaration.rhai",
+          "match": "\\b(fn|private|let|const|import|export|as)\\b"
+        },
+        {
+          "name": "support.function.builtin.rhai",
+          "match": "\\b(print|debug|eval|type_of|to_string|is_shared|is_locked)\\b"
+        }
+      ]
+    },
+    "function-def": {
+      "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "keyword.declaration.rhai" },
+        "2": { "name": "entity.name.function.rhai" }
+      }
+    },
+    "function-call": {
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.function.call.rhai" }
+      }
+    },
+    "operator": {
+      "name": "keyword.operator.rhai",
+      "match": "(?:[-+*/%&|^!<>=]=?|&&|\\|\\||\\.\\.=?|=>|::)"
+    }
+  }
+}

@@ -1,12 +1,23 @@
 {
-  "name": "KAG Script",
+  "name": "ks",
+  "displayName": "KAG Script",
   "scopeName": "source.ks",
-  "fileTypes": ["ks"],
+  "fileTypes": [
+    "ks"
+  ],
   "patterns": [
-    { "include": "#comment" },
-    { "include": "#label" },
-    { "include": "#speaker" },
-    { "include": "#tag" }
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#label"
+    },
+    {
+      "include": "#speaker"
+    },
+    {
+      "include": "#tag"
+    }
   ],
   "repository": {
     "comment": {
@@ -26,14 +37,22 @@
       "begin": "(?:^@|\\[)",
       "end": "(?:^@.*$|\\])",
       "beginCaptures": {
-        "0": { "name": "punctuation.definition.tag.ks" }
+        "0": {
+          "name": "punctuation.definition.tag.ks"
+        }
       },
       "endCaptures": {
-        "0": { "name": "punctuation.definition.tag.ks" }
+        "0": {
+          "name": "punctuation.definition.tag.ks"
+        }
       },
       "patterns": [
-        { "include": "#tag-name" },
-        { "include": "#attribute" }
+        {
+          "include": "#tag-name"
+        },
+        {
+          "include": "#attribute"
+        }
       ]
     },
     "tag-name": {
@@ -44,10 +63,13 @@
       "name": "meta.attribute.ks",
       "match": "([\\w]+)=(\"[^\"]*\"|[^\\s\\]]*)",
       "captures": {
-        "1": { "name": "entity.other.attribute-name.ks" },
-        "2": { "name": "string.unquoted.ks" }
+        "1": {
+          "name": "entity.other.attribute-name.ks"
+        },
+        "2": {
+          "name": "string.unquoted.ks"
+        }
       }
     }
   }
 }
-

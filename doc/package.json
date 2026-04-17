@@ -14,5 +14,9 @@
     "astro": "^6.0.1",
     "sharp": "^0.34.2",
     "starlight-theme-flexoki": "^0.2.2"
+  },
+  "devDependencies": {
+    "@iconify/json": "^2.2.463",
+    "unplugin-icons": "^23.0.1"
   }
 }
