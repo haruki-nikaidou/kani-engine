@@ -618,7 +618,7 @@ pub enum KagEvent {
     /// A tag the interpreter does not handle internally is forwarded here as a
     /// typed [`ResolvedTag`].  The host bridge dispatches it to the appropriate
     /// Bevy system.  Game-specific tags arrive as [`ResolvedTag::Extension`].
-    Tag(ResolvedTag),
+    Tag(Box<ResolvedTag>),
 
     // ── Interpreter lifecycle ────────────────────────────────────────────────
     /// The scenario has reached its end naturally.
