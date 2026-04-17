@@ -3,13 +3,52 @@
 //! Holds the program counter, all three stacks (call / if / macro), the
 //! current speaker name, and the link-choice accumulator.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use rhai::Map;
 
 use crate::error::InterpreterError;
+use crate::events::FrameSpec;
 use crate::snapshot::{CallFrameSnap, IfFrameSnap, InterpreterSnapshot, MacroFrameSnap};
+
+// ─── Character registry types ─────────────────────────────────────────────────
+
+/// A named face/expression variant for a character.
+#[derive(Debug, Clone)]
+pub struct FaceVariant {
+    /// Face name (e.g. `"normal"`, `"happy"`).
+    pub face: String,
+    /// Path to the image for this face variant.
+    pub storage: String,
+}
+
+/// A character definition stored in the registry.
+#[derive(Debug, Clone)]
+pub struct CharaDef {
+    /// Character identifier (matches the `name=` attribute on all `chara_*` tags).
+    pub name: String,
+    /// Default sprite image path.
+    pub storage: Option<String>,
+    /// Declared sprite dimensions.
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    /// Registered face variants.
+    pub faces: Vec<FaceVariant>,
+}
+
+impl CharaDef {
+    /// Look up the image path for a named face variant.
+    /// Falls back to `self.storage` if the face is not found.
+    pub fn resolve_face(&self, face: Option<&str>) -> Option<String> {
+        if let Some(f) = face {
+            if let Some(var) = self.faces.iter().find(|v| v.face == f) {
+                return Some(var.storage.clone());
+            }
+        }
+        self.storage.clone()
+    }
+}
 
 use super::script_engine::ScriptEngine;
 
@@ -116,6 +155,11 @@ pub struct RuntimeContext {
     /// When `true` the host may use clicks to skip transitions/animations.
     pub clickskip_enabled: bool,
 
+    // ── Skip mode ─────────────────────────────────────────────────────────────
+    /// When `true`, `[l]` and `[p]` waits are auto-advanced at high speed
+    /// (controlled by `[skipstart]` / `[skipstop]` / `[cancelskip]`).
+    pub skip_mode: bool,
+
     // ── [autowc] state ────────────────────────────────────────────────────────
     /// Whether auto-character-wait is active (set by `[autowc enabled=true]`).
     pub autowc_enabled: bool,
@@ -129,6 +173,21 @@ pub struct RuntimeContext {
     /// `[wait mode=until time=N]`.  `None` means "not yet set".
     /// Not serialisable — resets to `None` on every interpreter start / restore.
     pub wait_base_time: Option<Instant>,
+
+    // ── Character definition registry ────────────────────────────────────────
+    /// Named character definitions registered by `[chara_new]`/`[chara_face]`.
+    /// Persists across scene files.
+    pub chara_registry: HashMap<String, CharaDef>,
+
+    // ── Keyframe animation definitions ────────────────────────────────────────
+    /// Named keyframe sequences defined by `[keyframe]`…`[endkeyframe]` blocks.
+    /// Persists across scene files so animations can be defined once globally.
+    pub keyframe_defs: HashMap<String, Vec<FrameSpec>>,
+
+    /// Name of the keyframe sequence currently being defined (set by
+    /// `[keyframe name=…]`, cleared by `[endkeyframe]`).  `None` when not
+    /// inside a definition block.
+    pub current_keyframe_name: Option<String>,
 }
 
 /// A choice being accumulated between `[link]` and `[endlink]`.
@@ -177,9 +236,13 @@ impl RuntimeContext {
             pending_timeout: None,
             pending_wheel: None,
             clickskip_enabled: true,
+            skip_mode: false,
             autowc_enabled: false,
             autowc_map: Vec::new(),
             wait_base_time: None,
+            chara_registry: HashMap::new(),
+            keyframe_defs: HashMap::new(),
+            current_keyframe_name: None,
         }
     }
 

@@ -64,6 +64,7 @@ pub use kag_syntax::parser;
 
 pub mod error;
 pub mod events;
+pub mod inline_markup;
 pub mod runtime;
 pub mod snapshot;
 
@@ -73,7 +74,10 @@ pub mod snapshot;
 pub use runtime::KagInterpreter;
 
 /// All event types used across the public API.
-pub use events::{ChoiceOption, HostEvent, KagEvent, ResolvedTag, VarScope, VariableSnapshot};
+pub use events::{
+    ChoiceOption, FrameSpec, HostEvent, KagEvent, ResolvedTag, TextSpan, TextStyle, VarScope,
+    VariableSnapshot,
+};
 
 /// Typed tag name enum — identifies every built-in KAG tag by variant.
 pub use kag_syntax::tag_defs::TagName;

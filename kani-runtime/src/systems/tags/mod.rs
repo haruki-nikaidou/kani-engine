@@ -6,9 +6,13 @@
 //! Tags not matched by any built-in handler are available as
 //! `ResolvedTag::Extension` — game-specific code matches on that variant.
 
+pub mod animation;
 pub mod audio;
 pub mod chara;
 pub mod effect;
 pub mod image;
 pub mod message;
+pub mod misc;
 pub mod transition;
+pub mod ui;
+pub mod video;

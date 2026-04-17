@@ -1,65 +1,99 @@
-//! Character sprite tag handlers (`[chara]`, `[chara_hide]`, `[chara_free]`,
-//! `[chara_mod]`).
+//! Character sprite tag handlers.
+//!
+//! Handles: `[chara_show]`, `[chara_hide]`, `[chara_hide_all]`, `[chara_free]`,
+//! `[chara_delete]`, `[chara_mod]`, `[chara_move]`, `[chara_layer]`,
+//! `[chara_layer_mod]`, `[chara_part]`, `[chara_part_reset]`.
 
 use bevy::prelude::*;
 use kag_interpreter::ResolvedTag;
 
 use crate::events::{
-    EvFreeCharacter, EvHideCharacter, EvModCharacter, EvSetCharacter, EvTagRouted,
+    EvDeleteCharacter, EvFreeCharacter, EvHideAllCharacters, EvHideCharacter, EvModCharacter,
+    EvModCharacterLayer, EvMoveCharacter, EvResetCharacterParts, EvSetCharacterLayer,
+    EvSetCharacterPart, EvShowCharacter, EvTagRouted,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_chara_tags(
     mut reader: MessageReader<EvTagRouted>,
-    mut ev_set: MessageWriter<EvSetCharacter>,
+    mut ev_show: MessageWriter<EvShowCharacter>,
     mut ev_hide: MessageWriter<EvHideCharacter>,
+    mut ev_hide_all: MessageWriter<EvHideAllCharacters>,
     mut ev_free: MessageWriter<EvFreeCharacter>,
+    mut ev_delete: MessageWriter<EvDeleteCharacter>,
     mut ev_mod: MessageWriter<EvModCharacter>,
+    mut ev_move: MessageWriter<EvMoveCharacter>,
+    mut ev_layer: MessageWriter<EvSetCharacterLayer>,
+    mut ev_layer_mod: MessageWriter<EvModCharacterLayer>,
+    mut ev_part: MessageWriter<EvSetCharacterPart>,
+    mut ev_part_reset: MessageWriter<EvResetCharacterParts>,
 ) {
     for tag in reader.read() {
-        // Both `name=` and `id=` are acceptable identifiers across KAG variants;
-        // prefer `name` if present, fall back to `id`.
         match tag.0.clone() {
-            ResolvedTag::Chara {
+            ResolvedTag::CharaShow {
                 name,
-                id,
                 storage,
-                slot,
                 x,
                 y,
+                time,
+                method,
             } => {
-                ev_set.write(EvSetCharacter {
-                    id: name.or(id),
+                ev_show.write(EvShowCharacter {
+                    name,
                     storage,
-                    slot,
                     x,
                     y,
+                    time,
+                    method,
                 });
             }
-            ResolvedTag::CharaHide { name, id, slot } => {
-                ev_hide.write(EvHideCharacter {
-                    id: name.or(id),
-                    slot,
-                });
+            ResolvedTag::CharaHide { name, time, method } => {
+                ev_hide.write(EvHideCharacter { name, time, method });
             }
-            ResolvedTag::CharaFree { name, id, slot } => {
-                ev_free.write(EvFreeCharacter {
-                    id: name.or(id),
-                    slot,
-                });
+            ResolvedTag::CharaHideAll { time, method } => {
+                ev_hide_all.write(EvHideAllCharacters { time, method });
+            }
+            ResolvedTag::CharaFree { name } => {
+                ev_free.write(EvFreeCharacter { name });
+            }
+            ResolvedTag::CharaDelete { name } => {
+                ev_delete.write(EvDeleteCharacter { name });
             }
             ResolvedTag::CharaMod {
                 name,
-                id,
+                storage,
                 face,
                 pose,
-                storage,
             } => {
                 ev_mod.write(EvModCharacter {
-                    id: name.or(id),
+                    name,
+                    storage,
                     face,
                     pose,
-                    storage,
                 });
+            }
+            ResolvedTag::CharaMove { name, x, y, time } => {
+                ev_move.write(EvMoveCharacter { name, x, y, time });
+            }
+            ResolvedTag::CharaLayer { name, layer } => {
+                ev_layer.write(EvSetCharacterLayer { name, layer });
+            }
+            ResolvedTag::CharaLayerMod {
+                name,
+                opacity,
+                visible,
+            } => {
+                ev_layer_mod.write(EvModCharacterLayer {
+                    name,
+                    opacity,
+                    visible,
+                });
+            }
+            ResolvedTag::CharaPart { name, part, storage } => {
+                ev_part.write(EvSetCharacterPart { name, part, storage });
+            }
+            ResolvedTag::CharaPartReset { name } => {
+                ev_part_reset.write(EvResetCharacterParts { name });
             }
             _ => {}
         }

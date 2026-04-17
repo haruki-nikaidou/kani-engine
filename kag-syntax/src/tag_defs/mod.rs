@@ -340,17 +340,157 @@ define_tags! {
     /// Clear the call stack.
     Clearstack("clearstack") {},
 
+    // ── UI / Menus ──────────────────────────────────────────────────────────
+    /// Spawn a clickable button widget.
+    Button("button") {
+        text: optional<str>,
+        graphic: optional<str>,
+        x: optional<f32>,
+        y: optional<f32>,
+        width: optional<f32>,
+        height: optional<f32>,
+        bg: optional<str>,
+        hover_bg: optional<str>,
+        press_bg: optional<str>,
+        color: optional<str>,
+        font_size: optional<f32>,
+        target: optional<str>,
+        storage: optional<str>,
+        exp: optional<str>,
+        key: optional<str>,
+        visible: optional<bool>,
+        opacity: optional<f32>,
+    },
+    /// Make a layer respond to click events.
+    Clickable("clickable") {
+        layer: required<str>,
+        target: optional<str>,
+        storage: optional<str>,
+        exp: optional<str>,
+    },
+    /// Open the main menu panel.
+    Showmenu("showmenu") {},
+    /// Open the load screen panel.
+    Showload("showload") {},
+    /// Open the save screen panel.
+    Showsave("showsave") {},
+    /// Open the backlog viewer panel.
+    Showlog("showlog") {},
+    /// Temporarily hide the message window.
+    Hidemessage("hidemessage") {},
+    /// Show the persistent menu button.
+    Showmenubutton("showmenubutton") {},
+    /// Hide the persistent menu button.
+    Hidemenubutton("hidemenubutton") {},
+    /// Display a modal dialog box.
+    Dialog("dialog") {
+        text: optional<str>,
+        title: optional<str>,
+    },
+    /// Change the mouse cursor image.
+    Cursor("cursor") {
+        storage: optional<str>,
+    },
+    /// Enable display of the speaker name box.
+    SpeakOn("speak_on") {},
+    /// Disable display of the speaker name box.
+    SpeakOff("speak_off") {},
+    /// Configure the default click-wait glyph.
+    Glyph("glyph") {
+        storage: optional<str>,
+    },
+    /// Configure the auto-mode glyph.
+    GlyphAuto("glyph_auto") {
+        storage: optional<str>,
+    },
+    /// Configure the skip-mode glyph.
+    GlyphSkip("glyph_skip") {
+        storage: optional<str>,
+    },
+    /// Set visual defaults for glink buttons.
+    GlinkConfig("glink_config") {},
+    /// Visual effect when skip/auto mode starts or stops.
+    ModeEffect("mode_effect") {
+        mode: recommended<str>,
+        effect: optional<str>,
+    },
+
+    // ── Skip control ────────────────────────────────────────────────────────
+    /// Enable skip mode — [l]/[p] waits auto-advance at high speed.
+    Skipstart("skipstart") {},
+    /// Disable skip mode.
+    Skipstop("skipstop") {},
+    /// Cancel skip mode (alias for skipstop).
+    Cancelskip("cancelskip") {},
+    /// Open the key-binding configuration UI.
+    StartKeyconfig("start_keyconfig") {},
+    /// Close the key-binding configuration UI.
+    StopKeyconfig("stop_keyconfig") {},
+
     // ── Misc ────────────────────────────────────────────────────────────────
     /// Enable or disable click-to-skip.
     Clickskip("clickskip") {
         enabled: optional<bool>,
     },
-    /// Set the character name in the ptext layer.
-    CharaPtext("chara_ptext") {
-        name: recommended<str>,
+    /// Open a URL in the system browser.
+    Web("web") {
+        url: recommended<str>,
     },
-
     // ── Image / layer ───────────────────────────────────────────────────────
+    /// Copy the current front layer to the back layer (for transition prep).
+    Backlay("backlay") {},
+    /// Set the active message/text layer.
+    Current("current") {
+        layer: optional<str>,
+    },
+    /// Position the text cursor within the current message layer.
+    Locate("locate") {
+        x: optional<f32>,
+        y: optional<f32>,
+    },
+    /// Set the blend mode on a layer.
+    Layermode("layermode") {
+        layer: required<str>,
+        mode: recommended<str>,
+    },
+    /// Reset the blend mode of a layer to Normal.
+    FreeLayermode("free_layermode") {
+        layer: required<str>,
+    },
+    /// Apply a named shader effect to a layer.
+    Filter("filter") {
+        layer: required<str>,
+        r#type: recommended<str>,
+    },
+    /// Remove a filter from a layer.
+    FreeFilter("free_filter") {
+        layer: required<str>,
+    },
+    /// Position a filter within its layer.
+    PositionFilter("position_filter") {
+        layer: required<str>,
+        x: optional<f32>,
+        y: optional<f32>,
+    },
+    /// Apply an alpha mask image to a layer.
+    Mask("mask") {
+        layer: required<str>,
+        storage: required<str>,
+    },
+    /// Remove a mask from a layer.
+    MaskOff("mask_off") {
+        layer: required<str>,
+    },
+    /// Draw a primitive shape on a layer.
+    Graph("graph") {
+        layer: optional<str>,
+        shape: recommended<str>,
+        x: optional<f32>,
+        y: optional<f32>,
+        width: optional<f32>,
+        height: optional<f32>,
+        color: optional<str>,
+    },
     /// Set the background image.
     Bg("bg") {
         storage: required<str>,
@@ -375,6 +515,14 @@ define_tags! {
     Free("free") {
         layer: required<str>,
     },
+    /// Free a layer by image (alias for free).
+    Freeimage("freeimage") {
+        layer: required<str>,
+    },
+    /// Free a layer (alias for free).
+    Freelayer("freelayer") {
+        layer: required<str>,
+    },
     /// Set layer position.
     Position("position") {
         layer: optional<str>,
@@ -384,7 +532,7 @@ define_tags! {
 
     // ── Audio ───────────────────────────────────────────────────────────────
     /// Play background music.
-    Bgm("bgm") {
+    Bgm("bgm", alias Playbgm "playbgm") {
         storage: required<str>,
         r#loop: optional<bool>,
         volume: optional<f32>,
@@ -393,6 +541,38 @@ define_tags! {
     /// Stop background music.
     Stopbgm("stopbgm") {
         fadetime: optional<u64>,
+    },
+    /// Start BGM with a fade-in (alias for bgm with fadetime set).
+    Fadeinbgm("fadeinbgm") {
+        storage: recommended<str>,
+        time: optional<u64>,
+    },
+    /// Stop BGM with a fade-out (alias for stopbgm with fadetime set).
+    Fadeoutbgm("fadeoutbgm") {
+        time: optional<u64>,
+    },
+    /// Pause BGM at the current seek position.
+    Pausebgm("pausebgm") {
+        buf: optional<u32>,
+    },
+    /// Resume paused BGM from the saved seek position.
+    Resumebgm("resumebgm") {
+        buf: optional<u32>,
+    },
+    /// Fade background music volume.
+    Fadebgm("fadebgm") {
+        time: optional<u64>,
+        volume: optional<f32>,
+    },
+    /// Cross-fade: start new BGM while fading out the current one.
+    Xchgbgm("xchgbgm") {
+        storage: recommended<str>,
+        time: optional<u64>,
+    },
+    /// Change options on the currently-playing BGM without restarting.
+    Bgmopt("bgmopt") {
+        r#loop: optional<bool>,
+        seek: optional<str>,
     },
     /// Play a sound effect.
     Se("se", alias PlaySe "playSe") {
@@ -405,15 +585,94 @@ define_tags! {
     Stopse("stopse") {
         buf: optional<u32>,
     },
+    /// Pause a sound effect buffer.
+    Pausese("pausese") {
+        buf: optional<u32>,
+    },
+    /// Resume a paused sound effect buffer.
+    Resumese("resumese") {
+        buf: optional<u32>,
+    },
+    /// Change options on a currently-playing SE buffer without restarting.
+    Seopt("seopt") {
+        buf: optional<u32>,
+        r#loop: optional<bool>,
+    },
     /// Play a voice clip.
     Vo("vo", alias Voice "voice") {
         storage: required<str>,
         buf: optional<u32>,
     },
-    /// Fade background music volume.
-    Fadebgm("fadebgm") {
+    /// Set the volume for a target channel (bgm, se, voice).
+    Changevol("changevol") {
+        target: optional<str>,
+        vol: optional<f32>,
         time: optional<u64>,
+    },
+
+    // ── Animation ───────────────────────────────────────────────────────────
+    /// Play a preset animation on a named layer.
+    Anim("anim") {
+        layer: optional<str>,
+        preset: optional<str>,
+        time: optional<u64>,
+        r#loop: optional<bool>,
+        delay: optional<u64>,
+    },
+    /// Cancel the ongoing animation on a layer.
+    Stopanim("stopanim") {
+        layer: optional<str>,
+    },
+    /// Begin a named keyframe sequence definition.
+    Keyframe("keyframe") {
+        name: recommended<str>,
+    },
+    /// One keyframe inside a [keyframe] block.
+    Frame("frame") {
+        time: recommended<u64>,
+        opacity: optional<f32>,
+        x: optional<f32>,
+        y: optional<f32>,
+    },
+    /// End a keyframe sequence definition.
+    Endkeyframe("endkeyframe") {},
+    /// Play a named keyframe animation on a layer.
+    Kanim("kanim") {
+        layer: optional<str>,
+        name: recommended<str>,
+        r#loop: optional<bool>,
+    },
+    /// Stop a keyframe animation on a layer.
+    StopKanim("stop_kanim") {
+        layer: optional<str>,
+    },
+    /// Play a named keyframe animation on a character layer.
+    Xanim("xanim") {
+        layer: optional<str>,
+        name: recommended<str>,
+        r#loop: optional<bool>,
+    },
+    /// Stop a keyframe animation on a character layer.
+    StopXanim("stop_xanim") {
+        layer: optional<str>,
+    },
+
+    // ── Video / Movie ────────────────────────────────────────────────────────
+    /// Play a video as the background.
+    Bgmovie("bgmovie") {
+        storage: required<str>,
+        r#loop: optional<bool>,
         volume: optional<f32>,
+    },
+    /// Stop the background video.
+    StopBgmovie("stop_bgmovie") {},
+    /// Play a video as a foreground overlay.
+    Movie("movie") {
+        storage: required<str>,
+        x: optional<f32>,
+        y: optional<f32>,
+        width: optional<f32>,
+        height: optional<f32>,
     },
 
     // ── Transition ──────────────────────────────────────────────────────────
@@ -504,34 +763,89 @@ define_tags! {
     Endnowrap("endnowrap") {},
 
     // ── Character sprites ───────────────────────────────────────────────────
-    /// Show a character sprite.
-    Chara("chara") {
-        name: recommended_any_of("name", "id")<str>,
-        id: recommended_any_of("name", "id")<str>,
+    /// Register a new character definition (no visual output).
+    CharaNew("chara_new") {
+        name: recommended<str>,
         storage: optional<str>,
-        slot: optional<str>,
+        width: optional<f32>,
+        height: optional<f32>,
+    },
+    /// Add a face/expression variant to a registered character.
+    CharaFace("chara_face") {
+        name: recommended<str>,
+        face: recommended<str>,
+        storage: recommended<str>,
+    },
+    /// Update configuration for a registered character.
+    CharaConfig("chara_config") {
+        name: recommended<str>,
+    },
+    /// Display a registered character on screen.
+    CharaShow("chara_show") {
+        name: recommended<str>,
+        face: optional<str>,
         x: optional<f32>,
         y: optional<f32>,
+        time: optional<u64>,
+        method: optional<str>,
     },
-    /// Hide a character sprite.
+    /// Hide a character with an optional exit transition.
     CharaHide("chara_hide") {
-        name: recommended_any_of("name", "id")<str>,
-        id: recommended_any_of("name", "id")<str>,
-        slot: optional<str>,
+        name: recommended<str>,
+        time: optional<u64>,
+        method: optional<str>,
     },
-    /// Remove a character sprite.
+    /// Hide all visible characters at once.
+    CharaHideAll("chara_hide_all") {
+        time: optional<u64>,
+        method: optional<str>,
+    },
+    /// Unload a character sprite from memory.
     CharaFree("chara_free") {
-        name: recommended_any_of("name", "id")<str>,
-        id: recommended_any_of("name", "id")<str>,
-        slot: optional<str>,
+        name: recommended<str>,
     },
-    /// Modify a character sprite.
+    /// Remove a character definition from the registry.
+    CharaDelete("chara_delete") {
+        name: recommended<str>,
+    },
+    /// Change expression/pose of an on-screen character.
     CharaMod("chara_mod") {
-        name: recommended_any_of("name", "id")<str>,
-        id: recommended_any_of("name", "id")<str>,
+        name: recommended<str>,
         face: optional<str>,
         pose: optional<str>,
         storage: optional<str>,
+    },
+    /// Animate a character to a new screen position.
+    CharaMove("chara_move") {
+        name: recommended<str>,
+        x: optional<f32>,
+        y: optional<f32>,
+        time: optional<u64>,
+    },
+    /// Assign a character to a specific z-layer.
+    CharaLayer("chara_layer") {
+        name: recommended<str>,
+        layer: recommended<str>,
+    },
+    /// Modify layer-level properties of an on-screen character.
+    CharaLayerMod("chara_layer_mod") {
+        name: recommended<str>,
+        opacity: optional<f32>,
+        visible: optional<bool>,
+    },
+    /// Set a compositable part on a character.
+    CharaPart("chara_part") {
+        name: recommended<str>,
+        part: recommended<str>,
+        storage: recommended<str>,
+    },
+    /// Reset all compositable parts of a character to defaults.
+    CharaPartReset("chara_part_reset") {
+        name: recommended<str>,
+    },
+    /// Set the character name shown in the ptext name box.
+    CharaPtext("chara_ptext") {
+        name: recommended<str>,
     }
 
     ;
@@ -548,6 +862,9 @@ define_tags! {
         Ws("ws"),
         Wv("wv"),
         Wp("wp"),
+        Wbgm("wbgm"),
+        Wse("wse"),
+        WaitBgmovie("wait_bgmovie"),
     }
 }
 
@@ -1088,29 +1405,37 @@ mod tests {
     }
 
     #[test]
-    fn chara_without_id_or_name_is_warning() {
+    fn chara_new_without_name_is_warning() {
         let mut diags = vec![];
-        KnownTag::from_tag(&tag_no_params("chara"), &mut diags);
+        KnownTag::from_tag(&tag_no_params("chara_new"), &mut diags);
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].severity, Severity::Warning);
     }
 
     #[test]
-    fn chara_with_name_is_clean() {
+    fn chara_new_with_name_is_clean() {
         let mut diags = vec![];
-        KnownTag::from_tag(&tag_with_param("chara", "name", "alice"), &mut diags);
+        KnownTag::from_tag(&tag_with_param("chara_new", "name", "alice"), &mut diags);
         assert!(diags.is_empty());
     }
 
     #[test]
-    fn chara_with_id_is_clean() {
+    fn chara_show_without_name_is_warning() {
         let mut diags = vec![];
-        KnownTag::from_tag(&tag_with_param("chara", "id", "alice"), &mut diags);
+        KnownTag::from_tag(&tag_no_params("chara_show"), &mut diags);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn chara_show_with_name_is_clean() {
+        let mut diags = vec![];
+        KnownTag::from_tag(&tag_with_param("chara_show", "name", "alice"), &mut diags);
         assert!(diags.is_empty());
     }
 
     #[test]
-    fn chara_hide_without_id_or_name_is_warning() {
+    fn chara_hide_without_name_is_warning() {
         let mut diags = vec![];
         KnownTag::from_tag(&tag_no_params("chara_hide"), &mut diags);
         assert_eq!(diags.len(), 1);
@@ -1118,7 +1443,7 @@ mod tests {
     }
 
     #[test]
-    fn chara_free_without_id_or_name_is_warning() {
+    fn chara_free_without_name_is_warning() {
         let mut diags = vec![];
         KnownTag::from_tag(&tag_no_params("chara_free"), &mut diags);
         assert_eq!(diags.len(), 1);
@@ -1126,7 +1451,7 @@ mod tests {
     }
 
     #[test]
-    fn chara_mod_without_id_or_name_is_warning() {
+    fn chara_mod_without_name_is_warning() {
         let mut diags = vec![];
         KnownTag::from_tag(&tag_no_params("chara_mod"), &mut diags);
         assert_eq!(diags.len(), 1);
@@ -1246,12 +1571,15 @@ mod tests {
         assert!(all.contains(&TagName::Vo));
         assert!(all.contains(&TagName::Voice));
         assert!(all.contains(&TagName::Wa));
+        assert!(all.contains(&TagName::Bgm));
+        assert!(all.contains(&TagName::Playbgm));
     }
 
     #[test]
     fn tag_name_canonical_maps_aliases() {
         assert_eq!(TagName::PlaySe.canonical(), TagName::Se);
         assert_eq!(TagName::Voice.canonical(), TagName::Vo);
+        assert_eq!(TagName::Playbgm.canonical(), TagName::Bgm);
         assert_eq!(TagName::Bg.canonical(), TagName::Bg);
     }
 
@@ -1309,6 +1637,9 @@ mod tests {
             "ws",
             "wv",
             "wp",
+            "wbgm",
+            "wse",
+            "wait_bgmovie",
             "ct",
             "timeout",
             "waitclick",
@@ -1336,20 +1667,55 @@ mod tests {
             "clearsysvar",
             "clearstack",
             "clickskip",
-            "chara_ptext",
             "bg",
             "image",
             "layopt",
             "free",
+            "freeimage",
+            "freelayer",
             "position",
+            "backlay",
+            "current",
+            "locate",
+            "layermode",
+            "free_layermode",
+            "filter",
+            "free_filter",
+            "position_filter",
+            "mask",
+            "mask_off",
+            "graph",
             "bgm",
+            "playbgm",
             "stopbgm",
+            "fadeinbgm",
+            "fadeoutbgm",
+            "pausebgm",
+            "resumebgm",
+            "fadebgm",
+            "xchgbgm",
+            "bgmopt",
             "se",
             "playSe",
             "stopse",
+            "pausese",
+            "resumese",
+            "seopt",
             "vo",
             "voice",
-            "fadebgm",
+            "changevol",
+            "bgmovie",
+            "stop_bgmovie",
+            "movie",
+            "anim",
+            "stopanim",
+            "keyframe",
+            "frame",
+            "endkeyframe",
+            "kanim",
+            "stop_kanim",
+            "xanim",
+            "stop_xanim",
             "trans",
             "fadein",
             "fadeout",
@@ -1367,10 +1733,40 @@ mod tests {
             "ruby",
             "nowrap",
             "endnowrap",
-            "chara",
+            "chara_new",
+            "chara_face",
+            "chara_config",
+            "chara_show",
             "chara_hide",
+            "chara_hide_all",
             "chara_free",
+            "chara_delete",
             "chara_mod",
+            "chara_move",
+            "chara_layer",
+            "chara_layer_mod",
+            "chara_part",
+            "chara_part_reset",
+            "chara_ptext",
+            "skipstart",
+            "skipstop",
+            "cancelskip",
+            "start_keyconfig",
+            "stop_keyconfig",
+            "web",
+            "showmenu",
+            "showload",
+            "showsave",
+            "showlog",
+            "hidemessage",
+            "showmenubutton",
+            "hidemenubutton",
+            "speak_on",
+            "speak_off",
+            "glyph",
+            "glyph_auto",
+            "glyph_skip",
+            "glink_config",
         ] {
             let tag_name = TagName::from_name(name)
                 .unwrap_or_else(|| panic!("TagName::from_name({name:?}) returned None"));

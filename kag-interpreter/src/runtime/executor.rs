@@ -11,9 +11,29 @@ use kag_syntax::tag_defs::{AttributeString, KnownTag, MaybeResolved, TagName};
 
 use crate::ast::{Op, Param, ParamValue, Script, Tag, TextPart};
 use crate::error::{DiagnosticCategory, InterpreterDiagnostic};
-use crate::events::{ChoiceOption, KagEvent, ResolvedTag};
+use crate::events::{ChoiceOption, KagEvent, ResolvedTag, TextSpan, TextStyle};
 
 use super::context::{JumpTarget, RuntimeContext, TimeoutHandler};
+
+/// Build a plain (unstyled) `DisplayText` event.
+fn plain_display_text(
+    text: String,
+    speaker: Option<String>,
+    speed: Option<u64>,
+    log: bool,
+) -> KagEvent {
+    let spans = vec![TextSpan {
+        text: text.clone(),
+        style: TextStyle::default(),
+    }];
+    KagEvent::DisplayText {
+        text,
+        spans,
+        speaker,
+        speed,
+        log,
+    }
+}
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
@@ -84,12 +104,34 @@ pub fn execute_op<'s>(script: &Script<'s>, ctx: &mut RuntimeContext) -> Vec<KagE
 // ─── Text op ─────────────────────────────────────────────────────────────────
 
 fn execute_text<'s>(ctx: &mut RuntimeContext, parts: &[TextPart<'s>]) -> Vec<KagEvent> {
+    use crate::inline_markup::{parse_inline_markup, spans_to_plain};
+
     let mut events = Vec::new();
     let mut text_buf = String::new();
 
     let speaker = ctx.current_speaker.take();
     let mut current_speed = ctx.text_speed;
     let mut current_log = ctx.log_enabled;
+
+    /// Flush `text_buf` as a `DisplayText` event (with inline markup parsed).
+    fn flush(
+        text_buf: &mut String,
+        events: &mut Vec<KagEvent>,
+        speaker: Option<String>,
+        speed: Option<u64>,
+        log: bool,
+    ) {
+        let raw = std::mem::take(text_buf);
+        let spans = parse_inline_markup(&raw);
+        let text = spans_to_plain(&spans);
+        events.push(KagEvent::DisplayText {
+            text,
+            spans,
+            speaker,
+            speed,
+            log,
+        });
+    }
 
     for part in parts {
         match part {
@@ -110,12 +152,13 @@ fn execute_text<'s>(ctx: &mut RuntimeContext, parts: &[TextPart<'s>]) -> Vec<Kag
                         }
                         text_buf.clear();
                     } else {
-                        events.push(KagEvent::DisplayText {
-                            text: std::mem::take(&mut text_buf),
-                            speaker: speaker.clone(),
-                            speed: current_speed,
-                            log: current_log,
-                        });
+                        flush(
+                            &mut text_buf,
+                            &mut events,
+                            speaker.clone(),
+                            current_speed,
+                            current_log,
+                        );
                     }
                 }
                 // Execute the inline tag (may mutate ctx.text_speed / ctx.log_enabled)
@@ -135,12 +178,13 @@ fn execute_text<'s>(ctx: &mut RuntimeContext, parts: &[TextPart<'s>]) -> Vec<Kag
                 c.text.push_str(&text_buf);
             }
         } else {
-            events.push(KagEvent::DisplayText {
-                text: text_buf,
+            flush(
+                &mut text_buf,
+                &mut events,
                 speaker,
-                speed: current_speed,
-                log: current_log,
-            });
+                current_speed,
+                current_log,
+            );
         }
     }
 
@@ -531,12 +575,12 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
             if text_val.is_empty() {
                 vec![]
             } else {
-                vec![KagEvent::DisplayText {
-                    text: text_val,
-                    speaker: ctx.current_speaker.clone(),
-                    speed: ctx.text_speed,
-                    log: ctx.log_enabled,
-                }]
+                vec![plain_display_text(
+                    text_val,
+                    ctx.current_speaker.clone(),
+                    ctx.text_speed,
+                    ctx.log_enabled,
+                )]
             }
         }
 
@@ -547,12 +591,12 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
                 params: resolve_raw_params(ctx, &tag.params),
             })];
             if !text_val.is_empty() {
-                ev.push(KagEvent::DisplayText {
-                    text: text_val,
-                    speaker: ctx.current_speaker.clone(),
-                    speed: ctx.text_speed,
-                    log: ctx.log_enabled,
-                });
+                ev.push(plain_display_text(
+                    text_val,
+                    ctx.current_speaker.clone(),
+                    ctx.text_speed,
+                    ctx.log_enabled,
+                ));
             }
             ev
         }
@@ -742,14 +786,71 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
                 opacity: resolve_typed_field(ctx, opacity),
             })]
         }
-        KnownTag::Free { layer } => vec![KagEvent::Tag(ResolvedTag::Free {
-            layer: resolve_str_field(ctx, layer),
-        })],
+        KnownTag::Free { layer } | KnownTag::Freeimage { layer } | KnownTag::Freelayer { layer } => {
+            vec![KagEvent::Tag(ResolvedTag::Free {
+                layer: resolve_str_field(ctx, layer),
+            })]
+        }
         KnownTag::Position { layer, x, y } => vec![KagEvent::Tag(ResolvedTag::Position {
             layer: resolve_str_field(ctx, layer),
             x: resolve_typed_field(ctx, x),
             y: resolve_typed_field(ctx, y),
         })],
+        KnownTag::Backlay {} => vec![KagEvent::Tag(ResolvedTag::Backlay)],
+        KnownTag::Current { layer } => vec![KagEvent::Tag(ResolvedTag::Current {
+            layer: resolve_str_field(ctx, layer),
+        })],
+        KnownTag::Locate { x, y } => vec![KagEvent::Tag(ResolvedTag::Locate {
+            x: resolve_typed_field(ctx, x),
+            y: resolve_typed_field(ctx, y),
+        })],
+        KnownTag::Layermode { layer, mode } => vec![KagEvent::Tag(ResolvedTag::Layermode {
+            layer: resolve_str_field(ctx, layer),
+            mode: resolve_str_field(ctx, mode),
+        })],
+        KnownTag::FreeLayermode { layer } => vec![KagEvent::Tag(ResolvedTag::FreeLayermode {
+            layer: resolve_str_field(ctx, layer),
+        })],
+        KnownTag::Filter { layer, r#type } => vec![KagEvent::Tag(ResolvedTag::Filter {
+            layer: resolve_str_field(ctx, layer),
+            filter_type: resolve_str_field(ctx, r#type),
+        })],
+        KnownTag::FreeFilter { layer } => vec![KagEvent::Tag(ResolvedTag::FreeFilter {
+            layer: resolve_str_field(ctx, layer),
+        })],
+        KnownTag::PositionFilter { layer, x, y } => {
+            vec![KagEvent::Tag(ResolvedTag::PositionFilter {
+                layer: resolve_str_field(ctx, layer),
+                x: resolve_typed_field(ctx, x),
+                y: resolve_typed_field(ctx, y),
+            })]
+        }
+        KnownTag::Mask { layer, storage } => vec![KagEvent::Tag(ResolvedTag::Mask {
+            layer: resolve_str_field(ctx, layer),
+            storage: resolve_str_field(ctx, storage),
+        })],
+        KnownTag::MaskOff { layer } => vec![KagEvent::Tag(ResolvedTag::MaskOff {
+            layer: resolve_str_field(ctx, layer),
+        })],
+        KnownTag::Graph {
+            layer,
+            shape,
+            x,
+            y,
+            width,
+            height,
+            color,
+        } => {
+            vec![KagEvent::Tag(ResolvedTag::Graph {
+                layer: resolve_str_field(ctx, layer),
+                shape: resolve_str_field(ctx, shape),
+                x: resolve_typed_field(ctx, x),
+                y: resolve_typed_field(ctx, y),
+                width: resolve_typed_field(ctx, width),
+                height: resolve_typed_field(ctx, height),
+                color: resolve_str_field(ctx, color),
+            })]
+        }
 
         // ── Audio tags ────────────────────────────────────────────────────
         KnownTag::Bgm {
@@ -768,6 +869,35 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         KnownTag::Stopbgm { fadetime } => vec![KagEvent::Tag(ResolvedTag::Stopbgm {
             fadetime: resolve_typed_field(ctx, fadetime),
         })],
+        // fadeinbgm maps to Bgm with the time arg as fadetime
+        KnownTag::Fadeinbgm { storage, time } => vec![KagEvent::Tag(ResolvedTag::Bgm {
+            storage: resolve_str_field(ctx, storage),
+            looping: true,
+            volume: None,
+            fadetime: resolve_typed_field(ctx, time),
+        })],
+        // fadeoutbgm maps to Stopbgm with the time arg as fadetime
+        KnownTag::Fadeoutbgm { time } => vec![KagEvent::Tag(ResolvedTag::Stopbgm {
+            fadetime: resolve_typed_field(ctx, time),
+        })],
+        KnownTag::Pausebgm { buf } => vec![KagEvent::Tag(ResolvedTag::Pausebgm {
+            buf: resolve_typed_field(ctx, buf),
+        })],
+        KnownTag::Resumebgm { buf } => vec![KagEvent::Tag(ResolvedTag::Resumebgm {
+            buf: resolve_typed_field(ctx, buf),
+        })],
+        KnownTag::Fadebgm { time, volume } => vec![KagEvent::Tag(ResolvedTag::Fadebgm {
+            time: resolve_typed_field(ctx, time),
+            volume: resolve_typed_field(ctx, volume),
+        })],
+        KnownTag::Xchgbgm { storage, time } => vec![KagEvent::Tag(ResolvedTag::Xchgbgm {
+            storage: resolve_str_field(ctx, storage),
+            time: resolve_typed_field(ctx, time),
+        })],
+        KnownTag::Bgmopt { r#loop, seek } => vec![KagEvent::Tag(ResolvedTag::Bgmopt {
+            looping: resolve_typed_field(ctx, r#loop),
+            seek: resolve_str_field(ctx, seek),
+        })],
         KnownTag::Se {
             storage,
             buf,
@@ -784,14 +914,132 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         KnownTag::Stopse { buf } => vec![KagEvent::Tag(ResolvedTag::Stopse {
             buf: resolve_typed_field(ctx, buf),
         })],
+        KnownTag::Pausese { buf } => vec![KagEvent::Tag(ResolvedTag::Pausese {
+            buf: resolve_typed_field(ctx, buf),
+        })],
+        KnownTag::Resumese { buf } => vec![KagEvent::Tag(ResolvedTag::Resumese {
+            buf: resolve_typed_field(ctx, buf),
+        })],
+        KnownTag::Seopt { buf, r#loop } => vec![KagEvent::Tag(ResolvedTag::Seopt {
+            buf: resolve_typed_field(ctx, buf),
+            looping: resolve_typed_field(ctx, r#loop),
+        })],
         KnownTag::Vo { storage, buf } => vec![KagEvent::Tag(ResolvedTag::Vo {
             storage: resolve_str_field(ctx, storage),
             buf: resolve_typed_field(ctx, buf),
         })],
-        KnownTag::Fadebgm { time, volume } => vec![KagEvent::Tag(ResolvedTag::Fadebgm {
-            time: resolve_typed_field(ctx, time),
-            volume: resolve_typed_field(ctx, volume),
+        KnownTag::Changevol { target, vol, time } => {
+            vec![KagEvent::Tag(ResolvedTag::Changevol {
+                target: resolve_str_field(ctx, target),
+                vol: resolve_typed_field(ctx, vol),
+                time: resolve_typed_field(ctx, time),
+            })]
+        }
+
+        // ── Animation tags ────────────────────────────────────────────────
+        KnownTag::Anim {
+            layer,
+            preset,
+            time,
+            r#loop,
+            delay,
+        } => {
+            vec![KagEvent::Tag(ResolvedTag::Anim {
+                layer: resolve_str_field(ctx, layer),
+                preset: resolve_str_field(ctx, preset),
+                time: resolve_typed_field(ctx, time),
+                looping: resolve_typed_field(ctx, r#loop).unwrap_or(false),
+                delay: resolve_typed_field(ctx, delay),
+            })]
+        }
+        KnownTag::Stopanim { layer } => vec![KagEvent::Tag(ResolvedTag::StopAnim {
+            layer: resolve_str_field(ctx, layer),
         })],
+        KnownTag::Keyframe { name } => {
+            if let Some(n) = resolve_str_field(ctx, name) {
+                ctx.keyframe_defs.insert(n.clone(), Vec::new());
+                ctx.current_keyframe_name = Some(n);
+            }
+            vec![]
+        }
+        KnownTag::Frame {
+            time,
+            opacity,
+            x,
+            y,
+        } => {
+            let frame = crate::events::FrameSpec {
+                time: resolve_typed_field(ctx, time).unwrap_or(0),
+                opacity: resolve_typed_field(ctx, opacity),
+                x: resolve_typed_field(ctx, x),
+                y: resolve_typed_field(ctx, y),
+            };
+            if let Some(name) = &ctx.current_keyframe_name {
+                if let Some(seq) = ctx.keyframe_defs.get_mut(name) {
+                    seq.push(frame);
+                }
+            }
+            vec![]
+        }
+        KnownTag::Endkeyframe {} => {
+            ctx.current_keyframe_name = None;
+            vec![]
+        }
+        KnownTag::Kanim { layer, name, r#loop } => {
+            let frames = resolve_str_field(ctx, name)
+                .and_then(|n| ctx.keyframe_defs.get(&n).cloned())
+                .unwrap_or_default();
+            vec![KagEvent::Tag(ResolvedTag::Kanim {
+                layer: resolve_str_field(ctx, layer),
+                frames,
+                looping: resolve_typed_field(ctx, r#loop).unwrap_or(false),
+            })]
+        }
+        KnownTag::StopKanim { layer } => vec![KagEvent::Tag(ResolvedTag::StopKanim {
+            layer: resolve_str_field(ctx, layer),
+        })],
+        KnownTag::Xanim { layer, name, r#loop } => {
+            let frames = resolve_str_field(ctx, name)
+                .and_then(|n| ctx.keyframe_defs.get(&n).cloned())
+                .unwrap_or_default();
+            vec![KagEvent::Tag(ResolvedTag::Xanim {
+                layer: resolve_str_field(ctx, layer),
+                frames,
+                looping: resolve_typed_field(ctx, r#loop).unwrap_or(false),
+            })]
+        }
+        KnownTag::StopXanim { layer } => vec![KagEvent::Tag(ResolvedTag::StopXanim {
+            layer: resolve_str_field(ctx, layer),
+        })],
+
+        // ── Video / Movie tags ────────────────────────────────────────────
+        KnownTag::Bgmovie {
+            storage,
+            r#loop,
+            volume,
+        } => {
+            vec![KagEvent::Tag(ResolvedTag::Bgmovie {
+                storage: resolve_str_field(ctx, storage),
+                looping: resolve_typed_field(ctx, r#loop).unwrap_or(false),
+                volume: resolve_typed_field(ctx, volume),
+            })]
+        }
+        KnownTag::StopBgmovie {} => vec![KagEvent::Tag(ResolvedTag::StopBgmovie)],
+        KnownTag::Movie {
+            storage,
+            x,
+            y,
+            width,
+            height,
+        } => {
+            vec![KagEvent::Tag(ResolvedTag::Movie {
+                storage: resolve_str_field(ctx, storage),
+                x: resolve_typed_field(ctx, x),
+                y: resolve_typed_field(ctx, y),
+                width: resolve_typed_field(ctx, width),
+                height: resolve_typed_field(ctx, height),
+            })]
+        }
 
         // ── Transition tags ───────────────────────────────────────────────
         KnownTag::Trans { method, time, rule } => vec![KagEvent::Tag(ResolvedTag::Trans {
@@ -882,52 +1130,284 @@ fn execute_tag<'s>(script: &Script<'s>, ctx: &mut RuntimeContext, tag: &Tag<'s>)
         }
 
         // ── Character sprite tags ─────────────────────────────────────────
-        KnownTag::Chara {
+        KnownTag::CharaNew {
             name,
-            id,
             storage,
-            slot,
+            width,
+            height,
+        } => {
+            if let Some(n) = resolve_str_field(ctx, name) {
+                let def = crate::runtime::context::CharaDef {
+                    name: n.clone(),
+                    storage: resolve_str_field(ctx, storage),
+                    width: resolve_typed_field(ctx, width),
+                    height: resolve_typed_field(ctx, height),
+                    faces: Vec::new(),
+                };
+                ctx.chara_registry.insert(n, def);
+            }
+            vec![]
+        }
+        KnownTag::CharaFace {
+            name,
+            face,
+            storage,
+        } => {
+            if let (Some(n), Some(f), Some(s)) = (
+                resolve_str_field(ctx, name),
+                resolve_str_field(ctx, face),
+                resolve_str_field(ctx, storage),
+            ) {
+                if let Some(def) = ctx.chara_registry.get_mut(&n) {
+                    def.faces.retain(|v| v.face != f);
+                    def.faces.push(crate::runtime::context::FaceVariant { face: f, storage: s });
+                }
+            }
+            vec![]
+        }
+        KnownTag::CharaConfig { name } => {
+            let name_val = resolve_str_field(ctx, name);
+            vec![KagEvent::Tag(ResolvedTag::Extension {
+                name: "chara_config".to_owned(),
+                params: if let Some(n) = name_val { vec![("name".to_owned(), n)] } else { vec![] },
+            })]
+        }
+        KnownTag::CharaShow {
+            name,
+            face,
             x,
             y,
+            time,
+            method,
         } => {
-            vec![KagEvent::Tag(ResolvedTag::Chara {
-                name: resolve_str_field(ctx, name),
-                id: resolve_str_field(ctx, id),
-                storage: resolve_str_field(ctx, storage),
-                slot: resolve_str_field(ctx, slot),
+            let name_val = resolve_str_field(ctx, name);
+            let face_val = resolve_str_field(ctx, face);
+            let storage = name_val.as_deref()
+                .and_then(|n| ctx.chara_registry.get(n))
+                .and_then(|def| def.resolve_face(face_val.as_deref()));
+            vec![KagEvent::Tag(ResolvedTag::CharaShow {
+                name: name_val,
+                storage,
                 x: resolve_typed_field(ctx, x),
                 y: resolve_typed_field(ctx, y),
+                time: resolve_typed_field(ctx, time),
+                method: resolve_str_field(ctx, method),
             })]
         }
-        KnownTag::CharaHide { name, id, slot } => {
+        KnownTag::CharaHide { name, time, method } => {
             vec![KagEvent::Tag(ResolvedTag::CharaHide {
                 name: resolve_str_field(ctx, name),
-                id: resolve_str_field(ctx, id),
-                slot: resolve_str_field(ctx, slot),
+                time: resolve_typed_field(ctx, time),
+                method: resolve_str_field(ctx, method),
             })]
         }
-        KnownTag::CharaFree { name, id, slot } => {
+        KnownTag::CharaHideAll { time, method } => {
+            vec![KagEvent::Tag(ResolvedTag::CharaHideAll {
+                time: resolve_typed_field(ctx, time),
+                method: resolve_str_field(ctx, method),
+            })]
+        }
+        KnownTag::CharaFree { name } => {
             vec![KagEvent::Tag(ResolvedTag::CharaFree {
                 name: resolve_str_field(ctx, name),
-                id: resolve_str_field(ctx, id),
-                slot: resolve_str_field(ctx, slot),
             })]
+        }
+        KnownTag::CharaDelete { name } => {
+            let name_val = resolve_str_field(ctx, name);
+            if let Some(n) = &name_val {
+                ctx.chara_registry.remove(n);
+            }
+            vec![KagEvent::Tag(ResolvedTag::CharaDelete { name: name_val })]
         }
         KnownTag::CharaMod {
             name,
-            id,
             face,
             pose,
             storage,
         } => {
+            let name_val = resolve_str_field(ctx, name);
+            let face_val = resolve_str_field(ctx, face);
+            let direct_storage = resolve_str_field(ctx, storage);
+            let resolved_storage = direct_storage.or_else(|| {
+                name_val.as_deref()
+                    .and_then(|n| ctx.chara_registry.get(n))
+                    .and_then(|def| def.resolve_face(face_val.as_deref()))
+            });
             vec![KagEvent::Tag(ResolvedTag::CharaMod {
-                name: resolve_str_field(ctx, name),
-                id: resolve_str_field(ctx, id),
-                face: resolve_str_field(ctx, face),
+                name: name_val,
+                storage: resolved_storage,
+                face: face_val,
                 pose: resolve_str_field(ctx, pose),
+            })]
+        }
+        KnownTag::CharaMove { name, x, y, time } => {
+            vec![KagEvent::Tag(ResolvedTag::CharaMove {
+                name: resolve_str_field(ctx, name),
+                x: resolve_typed_field(ctx, x),
+                y: resolve_typed_field(ctx, y),
+                time: resolve_typed_field(ctx, time),
+            })]
+        }
+        KnownTag::CharaLayer { name, layer } => {
+            vec![KagEvent::Tag(ResolvedTag::CharaLayer {
+                name: resolve_str_field(ctx, name),
+                layer: resolve_str_field(ctx, layer),
+            })]
+        }
+        KnownTag::CharaLayerMod {
+            name,
+            opacity,
+            visible,
+        } => {
+            vec![KagEvent::Tag(ResolvedTag::CharaLayerMod {
+                name: resolve_str_field(ctx, name),
+                opacity: resolve_typed_field(ctx, opacity),
+                visible: resolve_typed_field(ctx, visible),
+            })]
+        }
+        KnownTag::CharaPart { name, part, storage } => {
+            vec![KagEvent::Tag(ResolvedTag::CharaPart {
+                name: resolve_str_field(ctx, name),
+                part: resolve_str_field(ctx, part),
                 storage: resolve_str_field(ctx, storage),
             })]
         }
+        KnownTag::CharaPartReset { name } => {
+            vec![KagEvent::Tag(ResolvedTag::CharaPartReset {
+                name: resolve_str_field(ctx, name),
+            })]
+        }
+
+        // ── Skip control tags ─────────────────────────────────────────────
+        KnownTag::Skipstart {} => {
+            ctx.skip_mode = true;
+            vec![KagEvent::Tag(ResolvedTag::SkipMode { enabled: true })]
+        }
+        KnownTag::Skipstop {} | KnownTag::Cancelskip {} => {
+            ctx.skip_mode = false;
+            vec![KagEvent::Tag(ResolvedTag::SkipMode { enabled: false })]
+        }
+        KnownTag::StartKeyconfig {} => {
+            vec![KagEvent::Tag(ResolvedTag::KeyConfig { open: true })]
+        }
+        KnownTag::StopKeyconfig {} => {
+            vec![KagEvent::Tag(ResolvedTag::KeyConfig { open: false })]
+        }
+
+        // ── UI tags ───────────────────────────────────────────────────────
+        KnownTag::Button {
+            text,
+            graphic,
+            x,
+            y,
+            width,
+            height,
+            bg,
+            hover_bg,
+            press_bg,
+            color,
+            font_size,
+            target,
+            storage,
+            exp,
+            key,
+            visible,
+            opacity,
+        } => {
+            vec![KagEvent::Tag(ResolvedTag::Button {
+                text: resolve_str_field(ctx, text),
+                graphic: resolve_str_field(ctx, graphic),
+                x: resolve_typed_field(ctx, x),
+                y: resolve_typed_field(ctx, y),
+                width: resolve_typed_field(ctx, width),
+                height: resolve_typed_field(ctx, height),
+                bg: resolve_str_field(ctx, bg),
+                hover_bg: resolve_str_field(ctx, hover_bg),
+                press_bg: resolve_str_field(ctx, press_bg),
+                color: resolve_str_field(ctx, color),
+                font_size: resolve_typed_field(ctx, font_size),
+                target: resolve_str_field(ctx, target),
+                storage: resolve_str_field(ctx, storage),
+                exp: resolve_str_field(ctx, exp),
+                key: resolve_str_field(ctx, key),
+                visible: resolve_typed_field(ctx, visible),
+                opacity: resolve_typed_field(ctx, opacity),
+            })]
+        }
+        KnownTag::Clickable {
+            layer,
+            target,
+            storage,
+            exp,
+        } => {
+            vec![KagEvent::Tag(ResolvedTag::Clickable {
+                layer: resolve_str_field(ctx, layer),
+                target: resolve_str_field(ctx, target),
+                storage: resolve_str_field(ctx, storage),
+                exp: resolve_str_field(ctx, exp),
+            })]
+        }
+        KnownTag::Showmenu {} => vec![KagEvent::Tag(ResolvedTag::OpenPanel {
+            kind: "menu".to_owned(),
+        })],
+        KnownTag::Showload {} => vec![KagEvent::Tag(ResolvedTag::OpenPanel {
+            kind: "load".to_owned(),
+        })],
+        KnownTag::Showsave {} => vec![KagEvent::Tag(ResolvedTag::OpenPanel {
+            kind: "save".to_owned(),
+        })],
+        KnownTag::Showlog {} => vec![KagEvent::Tag(ResolvedTag::OpenPanel {
+            kind: "log".to_owned(),
+        })],
+        KnownTag::Hidemessage {} => vec![KagEvent::Tag(ResolvedTag::OpenPanel {
+            kind: "hidemessage".to_owned(),
+        })],
+        KnownTag::Showmenubutton {} => vec![KagEvent::Tag(ResolvedTag::OpenPanel {
+            kind: "showmenubutton".to_owned(),
+        })],
+        KnownTag::Hidemenubutton {} => vec![KagEvent::Tag(ResolvedTag::OpenPanel {
+            kind: "hidemenubutton".to_owned(),
+        })],
+        KnownTag::Dialog { text, title } => vec![KagEvent::Tag(ResolvedTag::Dialog {
+            text: resolve_str_field(ctx, text),
+            title: resolve_str_field(ctx, title),
+        })],
+        KnownTag::Cursor { storage } => vec![KagEvent::Tag(ResolvedTag::Cursor {
+            storage: resolve_str_field(ctx, storage),
+        })],
+        KnownTag::SpeakOn {} => vec![KagEvent::Tag(ResolvedTag::SetSpeakerBoxVisible {
+            visible: true,
+        })],
+        KnownTag::SpeakOff {} => vec![KagEvent::Tag(ResolvedTag::SetSpeakerBoxVisible {
+            visible: false,
+        })],
+        KnownTag::Glyph { storage } => vec![KagEvent::Tag(ResolvedTag::SetGlyph {
+            kind: "default".to_owned(),
+            storage: resolve_str_field(ctx, storage),
+        })],
+        KnownTag::GlyphAuto { storage } => vec![KagEvent::Tag(ResolvedTag::SetGlyph {
+            kind: "auto".to_owned(),
+            storage: resolve_str_field(ctx, storage),
+        })],
+        KnownTag::GlyphSkip { storage } => vec![KagEvent::Tag(ResolvedTag::SetGlyph {
+            kind: "skip".to_owned(),
+            storage: resolve_str_field(ctx, storage),
+        })],
+        KnownTag::GlinkConfig { .. } => vec![KagEvent::Tag(ResolvedTag::Extension {
+            name: "glink_config".to_owned(),
+            params: resolve_raw_params(ctx, &tag.params),
+        })],
+        KnownTag::ModeEffect { mode, effect } => {
+            vec![KagEvent::Tag(ResolvedTag::ModeEffect {
+                mode: resolve_str_field(ctx, mode),
+                effect: resolve_str_field(ctx, effect),
+            })]
+        }
+
+        // ── [web] — open a URL in the system browser ───────────────────────
+        KnownTag::Web { url } => vec![KagEvent::Tag(ResolvedTag::Web {
+            url: resolve_str_field(ctx, url),
+        })],
 
         // ── Macro definition ──────────────────────────────────────────────
         KnownTag::Macro { .. } => vec![],
@@ -1200,12 +1680,40 @@ mod tests {
             ResolvedTag::Layopt { .. } => "layopt",
             ResolvedTag::Free { .. } => "free",
             ResolvedTag::Position { .. } => "position",
+            ResolvedTag::Backlay => "backlay",
+            ResolvedTag::Current { .. } => "current",
+            ResolvedTag::Locate { .. } => "locate",
+            ResolvedTag::Layermode { .. } => "layermode",
+            ResolvedTag::FreeLayermode { .. } => "free_layermode",
+            ResolvedTag::Filter { .. } => "filter",
+            ResolvedTag::FreeFilter { .. } => "free_filter",
+            ResolvedTag::PositionFilter { .. } => "position_filter",
+            ResolvedTag::Mask { .. } => "mask",
+            ResolvedTag::MaskOff { .. } => "mask_off",
+            ResolvedTag::Graph { .. } => "graph",
             ResolvedTag::Bgm { .. } => "bgm",
             ResolvedTag::Stopbgm { .. } => "stopbgm",
+            ResolvedTag::Pausebgm { .. } => "pausebgm",
+            ResolvedTag::Resumebgm { .. } => "resumebgm",
+            ResolvedTag::Fadebgm { .. } => "fadebgm",
+            ResolvedTag::Xchgbgm { .. } => "xchgbgm",
+            ResolvedTag::Bgmopt { .. } => "bgmopt",
             ResolvedTag::Se { .. } => "se",
             ResolvedTag::Stopse { .. } => "stopse",
+            ResolvedTag::Pausese { .. } => "pausese",
+            ResolvedTag::Resumese { .. } => "resumese",
+            ResolvedTag::Seopt { .. } => "seopt",
             ResolvedTag::Vo { .. } => "vo",
-            ResolvedTag::Fadebgm { .. } => "fadebgm",
+            ResolvedTag::Changevol { .. } => "changevol",
+            ResolvedTag::Anim { .. } => "anim",
+            ResolvedTag::StopAnim { .. } => "stopanim",
+            ResolvedTag::Kanim { .. } => "kanim",
+            ResolvedTag::StopKanim { .. } => "stop_kanim",
+            ResolvedTag::Xanim { .. } => "xanim",
+            ResolvedTag::StopXanim { .. } => "stop_xanim",
+            ResolvedTag::Bgmovie { .. } => "bgmovie",
+            ResolvedTag::StopBgmovie => "stop_bgmovie",
+            ResolvedTag::Movie { .. } => "movie",
             ResolvedTag::Trans { .. } => "trans",
             ResolvedTag::Fadein { .. } => "fadein",
             ResolvedTag::Fadeout { .. } => "fadeout",
@@ -1222,10 +1730,28 @@ mod tests {
             ResolvedTag::Italic { .. } => "italic",
             ResolvedTag::Ruby { .. } => "ruby",
             ResolvedTag::Nowrap { .. } => "nowrap",
-            ResolvedTag::Chara { .. } => "chara",
+            ResolvedTag::CharaShow { .. } => "chara_show",
             ResolvedTag::CharaHide { .. } => "chara_hide",
+            ResolvedTag::CharaHideAll { .. } => "chara_hide_all",
             ResolvedTag::CharaFree { .. } => "chara_free",
+            ResolvedTag::CharaDelete { .. } => "chara_delete",
             ResolvedTag::CharaMod { .. } => "chara_mod",
+            ResolvedTag::CharaMove { .. } => "chara_move",
+            ResolvedTag::CharaLayer { .. } => "chara_layer",
+            ResolvedTag::CharaLayerMod { .. } => "chara_layer_mod",
+            ResolvedTag::CharaPart { .. } => "chara_part",
+            ResolvedTag::CharaPartReset { .. } => "chara_part_reset",
+            ResolvedTag::SkipMode { .. } => "skip_mode",
+            ResolvedTag::KeyConfig { .. } => "key_config",
+            ResolvedTag::Button { .. } => "button",
+            ResolvedTag::Clickable { .. } => "clickable",
+            ResolvedTag::OpenPanel { .. } => "open_panel",
+            ResolvedTag::Dialog { .. } => "dialog",
+            ResolvedTag::Cursor { .. } => "cursor",
+            ResolvedTag::SetSpeakerBoxVisible { .. } => "set_speaker_box_visible",
+            ResolvedTag::SetGlyph { .. } => "set_glyph",
+            ResolvedTag::ModeEffect { .. } => "mode_effect",
+            ResolvedTag::Web { .. } => "web",
             ResolvedTag::Extension { name, .. } => {
                 // Leak to get a &'static str for test output — only used in tests.
                 Box::leak(name.clone().into_boxed_str())

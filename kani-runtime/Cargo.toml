@@ -16,3 +16,4 @@ bevy.workspace = true
 
 kag-interpreter = { path = "../kag-interpreter" }
 kani-pak = { path = "../kani-pak", features = ["bevy"] }
+open = "5.3.3"

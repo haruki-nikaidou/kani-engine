@@ -42,8 +42,10 @@ use bevy::prelude::*;
 use systems::input::{handle_click_input, handle_completion, handle_timer, handle_ui_inputs};
 use systems::poll::poll_interpreter;
 use systems::tags::{
-    audio::handle_audio_tags, chara::handle_chara_tags, effect::handle_effect_tags,
-    image::handle_image_tags, message::handle_message_tags, transition::handle_transition_tags,
+    animation::handle_animation_tags, audio::handle_audio_tags, chara::handle_chara_tags,
+    effect::handle_effect_tags, image::handle_image_tags, message::handle_message_tags,
+    misc::handle_misc_tags, transition::handle_transition_tags, ui::handle_ui_tags,
+    video::handle_video_tags,
 };
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────
@@ -87,19 +89,49 @@ impl Plugin for KaniRuntimePlugin {
             .add_message::<events::EvSnapshot>()
             // internal tag routing (ResolvedTag variants; game code matches Extension)
             .add_message::<events::EvTagRouted>()
-            // image
+            // image / layer
             .add_message::<events::EvSetBackground>()
             .add_message::<events::EvSetImageLayer>()
             .add_message::<events::EvSetLayerOpt>()
             .add_message::<events::EvFreeLayer>()
             .add_message::<events::EvSetLayerPosition>()
+            .add_message::<events::EvBacklay>()
+            .add_message::<events::EvSetCurrentLayer>()
+            .add_message::<events::EvLocateCursor>()
+            .add_message::<events::EvSetLayerMode>()
+            .add_message::<events::EvResetLayerMode>()
+            .add_message::<events::EvSetFilter>()
+            .add_message::<events::EvFreeFilter>()
+            .add_message::<events::EvPositionFilter>()
+            .add_message::<events::EvSetMask>()
+            .add_message::<events::EvRemoveMask>()
+            .add_message::<events::EvDrawGraph>()
             // audio
             .add_message::<events::EvPlayBgm>()
             .add_message::<events::EvStopBgm>()
+            .add_message::<events::EvPauseBgm>()
+            .add_message::<events::EvResumeBgm>()
+            .add_message::<events::EvFadeBgm>()
+            .add_message::<events::EvCrossFadeBgm>()
+            .add_message::<events::EvSetBgmOpt>()
             .add_message::<events::EvPlaySe>()
             .add_message::<events::EvStopSe>()
+            .add_message::<events::EvPauseSe>()
+            .add_message::<events::EvResumeSe>()
+            .add_message::<events::EvSetSeOpt>()
             .add_message::<events::EvPlayVoice>()
-            .add_message::<events::EvFadeBgm>()
+            .add_message::<events::EvChangeVol>()
+            // animation
+            .add_message::<events::EvPlayAnim>()
+            .add_message::<events::EvStopAnim>()
+            .add_message::<events::EvPlayKanim>()
+            .add_message::<events::EvStopKanim>()
+            .add_message::<events::EvPlayXanim>()
+            .add_message::<events::EvStopXanim>()
+            // video
+            .add_message::<events::EvPlayBgMovie>()
+            .add_message::<events::EvStopBgMovie>()
+            .add_message::<events::EvPlayMovie>()
             // transition
             .add_message::<events::EvRunTransition>()
             .add_message::<events::EvFadeScreen>()
@@ -116,10 +148,31 @@ impl Plugin for KaniRuntimePlugin {
             .add_message::<events::EvSetRuby>()
             .add_message::<events::EvSetNowrap>()
             // character sprites
-            .add_message::<events::EvSetCharacter>()
+            .add_message::<events::EvShowCharacter>()
             .add_message::<events::EvHideCharacter>()
+            .add_message::<events::EvHideAllCharacters>()
             .add_message::<events::EvFreeCharacter>()
+            .add_message::<events::EvDeleteCharacter>()
             .add_message::<events::EvModCharacter>()
+            .add_message::<events::EvMoveCharacter>()
+            .add_message::<events::EvSetCharacterLayer>()
+            .add_message::<events::EvModCharacterLayer>()
+            .add_message::<events::EvSetCharacterPart>()
+            .add_message::<events::EvResetCharacterParts>()
+            // misc
+            .add_message::<events::EvOpenUrl>()
+            // skip + key config
+            .add_message::<events::EvSkipMode>()
+            .add_message::<events::EvKeyConfig>()
+            // ui
+            .add_message::<events::EvSpawnButton>()
+            .add_message::<events::EvSetClickable>()
+            .add_message::<events::EvOpenPanel>()
+            .add_message::<events::EvShowDialog>()
+            .add_message::<events::EvSetCursor>()
+            .add_message::<events::EvSetSpeakerBoxVisible>()
+            .add_message::<events::EvSetGlyph>()
+            .add_message::<events::EvModeEffect>()
             // host → interpreter
             .add_message::<events::EvSelectChoice>()
             .add_message::<events::EvSubmitInput>()
@@ -139,10 +192,14 @@ impl Plugin for KaniRuntimePlugin {
                 (
                     handle_image_tags,
                     handle_audio_tags,
+                    handle_animation_tags,
+                    handle_video_tags,
                     handle_transition_tags,
                     handle_effect_tags,
                     handle_message_tags,
                     handle_chara_tags,
+                    handle_ui_tags,
+                    handle_misc_tags,
                 )
                     .after(poll_interpreter),
                 (

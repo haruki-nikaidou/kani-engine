@@ -48,12 +48,14 @@ pub fn poll_interpreter(
             // ── Text output ───────────────────────────────────────────────────
             KagEvent::DisplayText {
                 text,
+                spans,
                 speaker,
                 speed,
                 log,
             } => {
                 ev_text.write(EvDisplayText {
                     text,
+                    spans,
                     speaker,
                     speed,
                     log,
