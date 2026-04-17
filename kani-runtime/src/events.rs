@@ -54,7 +54,7 @@ pub enum EvInterpreterCall {
 }
 
 #[derive(Message, Debug, Clone)]
-pub struct EvTagRouted(pub ResolvedTag);
+pub struct EvTagRouted(pub Box<ResolvedTag>);
 
 // ─── 2a. Image / layer tag actions ───────────────────────────────────────────
 

@@ -41,7 +41,7 @@ pub fn dispatch_tags(
     mut ev_misc: MessageWriter<EvMiscTag>,
 ) {
     for tag in reader.read() {
-        match tag.0.clone() {
+        match *tag.0.clone() {
             // ── Image / Layer ──────────────────────────────────────────
             resolved @ (ResolvedTag::Bg { .. }
             | ResolvedTag::Image { .. }
