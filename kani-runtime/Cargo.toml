@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 description = "Bevy runtime bridge between kag-interpreter and Bevy ECS"
 
+[features]
+develop = []
+
 [dependencies]
 anyhow.workspace = true
 thiserror.workspace = true

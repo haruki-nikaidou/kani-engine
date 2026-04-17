@@ -1,0 +1,21 @@
+[package]
+name = "kani-bundler"
+version = "0.1.0"
+edition = "2024"
+description = "Project manager / CLI tool for kani-engine games"
+
+[[bin]]
+name = "kani-bundler"
+path = "src/main.rs"
+
+[dependencies]
+kani-runtime = { path = "../kani-runtime", features = ["develop"] }
+kani-pak     = { path = "../kani-pak",     features = ["write"] }
+kag-syntax = { path = "../kag-syntax" }
+anyhow     = { workspace = true }
+serde      = { workspace = true }
+clap       = { workspace = true }
+toml       = { workspace = true }
+blake3     = { workspace = true }
+walkdir    = { workspace = true }
+miette     = { workspace = true }

@@ -1,6 +1,14 @@
 [workspace]
 resolver = "3"
-members = ["kag-syntax", "kag-interpreter", "kag-lsp", "kani-pak", "kani-runtime"]
+members = [
+    "kag-syntax",
+    "kag-interpreter",
+    "kag-lsp",
+    "kani-pak",
+    "kani-runtime",
+    "kani-init",
+    "kani-bundler",
+]
 
 [workspace.dependencies]
 # Error handling
@@ -35,6 +43,12 @@ miette = { version = "7", features = ["fancy"] }
 # LSP
 tower-lsp = "0.20"
 dashmap = "6.1"
+
+# CLI / bundler tools
+clap = { version = "4", features = ["derive"] }
+toml = "1"
+blake3 = "1"
+walkdir = "2"
 
 # Runtime
 [workspace.dependencies.bevy]

@@ -1,0 +1,14 @@
+[package]
+name = "kani-init"
+version = "0.1.0"
+edition = "2024"
+description = "Thin release binary for kani-engine — shipped to players"
+
+[[bin]]
+name = "kani-init"
+path = "src/main.rs"
+
+[dependencies]
+# Deliberately does NOT enable the "develop" feature.
+kani-runtime = { path = "../kani-runtime" }
+anyhow = { workspace = true }
