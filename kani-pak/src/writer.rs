@@ -86,7 +86,7 @@ impl PakWriter {
 
         let compressed = match &compression {
             Compression::None => data.to_vec(),
-            Compression::Zstd { level } => zstd::encode_all(data, *level)?
+            Compression::Zstd { level } => zstd::encode_all(data, *level)?,
         };
         let compression_byte = match compression {
             Compression::None => COMPRESSION_NONE,
@@ -113,7 +113,7 @@ impl PakWriter {
     /// Panics only if the internal `Vec` write fails, which cannot happen.
     pub fn finish(self) -> Vec<u8> {
         let mut buf = Vec::new();
-        
+
         #[allow(clippy::expect_used)]
         self.write_to(&mut buf)
             .expect("in-memory write must not fail");
