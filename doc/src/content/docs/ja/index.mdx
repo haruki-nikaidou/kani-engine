@@ -1,0 +1,35 @@
+---
+title: Kani ゲームエンジン
+description: Bevy と KAG スクリプティング、Rhai 式で構築された Rust 製ビジュアルノベルエンジン。
+template: splash
+hero:
+  tagline: Bevy・KAG・Rhai で豊かなビジュアルノベルを Rust で作ろう。
+  actions:
+    - text: はじめる
+      link: /ja/start-here/getting-started/
+      icon: right-arrow
+    - text: KAG-Rhai リファレンス
+      link: /ja/reference/kag-rhai/
+      icon: open-book
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Kani とは？
+
+<CardGrid stagger>
+  <Card title="KAG スクリプト" icon="pencil">
+    シンプルな `.ks` ファイルでシナリオを書ける KAG タグシステム。基本的なシーンならプログラミング不要。
+  </Card>
+  <Card title="Rhai 式" icon="seti:config">
+    [Rhai](https://rhai.rs/) 式をスクリプトに直接埋め込んで、条件分岐・変数・動的テキストを実現。
+  </Card>
+  <Card title="Bevy ランタイム" icon="rocket">
+    [Bevy](https://bevyengine.org/) の ECS ゲームループ・アセットパイプライン・クロスプラットフォームレンダリングをそのまま活用。
+  </Card>
+  <Card title="LSP サポート" icon="laptop">
+    同梱の `kag-lsp` 言語サーバーで、エディタ上のシンタックスハイライト・ホバードキュメント・定義へのジャンプが利用可能。
+  </Card>
+</CardGrid>
+

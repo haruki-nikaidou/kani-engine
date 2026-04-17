@@ -1,0 +1,53 @@
+{
+  "name": "KAG Script",
+  "scopeName": "source.ks",
+  "fileTypes": ["ks"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#label" },
+    { "include": "#speaker" },
+    { "include": "#tag" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.semicolon.ks",
+      "match": ";.*$"
+    },
+    "label": {
+      "name": "entity.name.label.ks",
+      "match": "^\\*\\S+"
+    },
+    "speaker": {
+      "name": "entity.name.tag.speaker.ks",
+      "match": "^#.+$"
+    },
+    "tag": {
+      "name": "meta.tag.ks",
+      "begin": "(?:^@|\\[)",
+      "end": "(?:^@.*$|\\])",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.tag.ks" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.tag.ks" }
+      },
+      "patterns": [
+        { "include": "#tag-name" },
+        { "include": "#attribute" }
+      ]
+    },
+    "tag-name": {
+      "name": "keyword.control.tag.ks",
+      "match": "(?<=[@\\[])\\w+"
+    },
+    "attribute": {
+      "name": "meta.attribute.ks",
+      "match": "([\\w]+)=(\"[^\"]*\"|[^\\s\\]]*)",
+      "captures": {
+        "1": { "name": "entity.other.attribute-name.ks" },
+        "2": { "name": "string.unquoted.ks" }
+      }
+    }
+  }
+}
+

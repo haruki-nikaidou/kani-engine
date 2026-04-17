@@ -2,24 +2,47 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightThemeFlexoki from 'starlight-theme-flexoki';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const kagGrammar = JSON.parse(
+	readFileSync(fileURLToPath(new URL('./src/kag.tmLanguage.json', import.meta.url)), 'utf-8')
+);
 
 // https://astro.build/config
 export default defineConfig({
+	site: 'https://haruki-nikaidou.github.io/kani-engine',
 	integrations: [
 		starlight({
 			plugins: [starlightThemeFlexoki()],
 			title: 'Kani Game Engine',
+			expressiveCode: {
+				langs: [kagGrammar],
+			},
+			defaultLocale: 'en',
+			locales: {
+				en: { label: 'English', lang: 'en' },
+				ja: { label: '日本語', lang: 'ja' },
+			},
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/haruki-nikaidou/kani-engine' }],
 			sidebar: [
 				{
-					label: 'Guides',
+					label: 'Start Here',
+					translations: { ja: 'はじめに' },
 					items: [
-						// Each item here is one entry in the navigation menu.
-						{ label: 'Example Guide', slug: 'guides/example' },
+						{ label: 'Getting Started', translations: { ja: 'はじめかた' }, slug: 'start-here/getting-started' },
+					],
+				},
+				{
+					label: 'Guides',
+					translations: { ja: 'ガイド' },
+					items: [
+						{ label: 'Setup LSP', translations: { ja: 'LSP のセットアップ' }, slug: 'guides/setup-lsp' },
 					],
 				},
 				{
 					label: 'Reference',
+					translations: { ja: 'リファレンス' },
 					autogenerate: { directory: 'reference' },
 				},
 			],

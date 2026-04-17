@@ -1,0 +1,35 @@
+---
+title: Kani Game Engine
+description: A Rust visual-novel engine built on Bevy and KAG scripting with Rhai expressions.
+template: splash
+hero:
+  tagline: Build rich visual novels in Rust — powered by Bevy, KAG, and Rhai.
+  actions:
+    - text: Get Started
+      link: /en/start-here/getting-started/
+      icon: right-arrow
+    - text: KAG-Rhai Reference
+      link: /en/reference/kag-rhai/
+      icon: open-book
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is Kani?
+
+<CardGrid stagger>
+  <Card title="KAG Scripting" icon="pencil">
+    Write your story in plain `.ks` files using the familiar KAG tag system — no programming required for basic scenes.
+  </Card>
+  <Card title="Rhai Expressions" icon="seti:config">
+    Embed [Rhai](https://rhai.rs/) expressions directly in your scripts for conditional branches, variables, and dynamic text.
+  </Card>
+  <Card title="Bevy Runtime" icon="rocket">
+    The engine runs on [Bevy](https://bevyengine.org/), giving you a first-class ECS game loop, asset pipeline, and cross-platform rendering.
+  </Card>
+  <Card title="LSP Support" icon="laptop">
+    Get syntax highlighting, hover docs, and go-to-definition in your editor via the bundled `kag-lsp` language server.
+  </Card>
+</CardGrid>
+
