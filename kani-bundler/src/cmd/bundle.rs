@@ -7,20 +7,26 @@
 //!    the path map; serialize the modified source text.
 //! 4. Add all hashed assets + rewritten scripts to a [`PakWriter`].
 //! 5. Write the `.pak` to `<output>/game.pak`.
-//! 6. Compile `kani-init` with `KANI_ENTRY_SCRIPT` set, producing the
-//!    release binary.
-//! 7. Copy the binary to `<output>/`.
+//! 6. Install `kani-init` from crates.io via `cargo install` into a temp dir.
+//! 7. Write an `init` file containing the entry script name next to the binary.
+//! 8. Copy the binary and `init` file to `<output>/`.
+//! 9. Zip `<output>/` into `<output>.zip` for distribution.
 
 use std::collections::HashMap;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context as _, Result, bail};
 use kag_syntax::{Op, ParamValue, TextPart, parse_script};
 use kani_pak::writer::{Compression, PakWriter};
+use tempfile::TempDir;
 use walkdir::WalkDir;
 
 use crate::config::{AssetsConfig, asset_base, load_config};
+
+
+// ─── Entry point ──────────────────────────────────────────────────────────────
 
 pub fn run(project_dir: &Path, target_override: Option<&str>) -> Result<()> {
     let cfg = load_config(project_dir)?;
@@ -74,7 +80,7 @@ pub fn run(project_dir: &Path, target_override: Option<&str>) -> Result<()> {
         .with_context(|| format!("writing pak to '{}'", pak_path.display()))?;
     println!("bundler: wrote '{}' ({} bytes).", pak_path.display(), pak_bytes.len());
 
-    // ── Step 6: compile kani-init ─────────────────────────────────────────────
+    // ── Step 6: install kani-init from crates.io ─────────────────────────────
     let target = target_override
         .map(str::to_owned)
         .or_else(|| {
@@ -85,22 +91,37 @@ pub fn run(project_dir: &Path, target_override: Option<&str>) -> Result<()> {
             }
         });
 
-    let binary_name = compile_kani_init(&cfg.entry.start, target.as_deref())?;
+    let (binary_path, _tmp) = install_kani_init(target.as_deref())?;
 
-    // ── Step 7: copy binary ───────────────────────────────────────────────────
-    let dest = output_dir.join(binary_name.file_name().unwrap_or(binary_name.as_os_str()));
-    std::fs::copy(&binary_name, &dest)
+    // ── Step 7: write `init` file and copy binary ─────────────────────────────
+    let dest = output_dir.join(binary_path.file_name().unwrap_or(binary_path.as_os_str()));
+    std::fs::copy(&binary_path, &dest)
         .with_context(|| format!("copying binary to '{}'", dest.display()))?;
-    println!("bundler: binary at '{}'.", dest.display());
-    println!("bundler: done.");
+    // _tmp is dropped here — safe because the binary is already copied.
 
+    let init_path = output_dir.join("init");
+    std::fs::write(&init_path, cfg.entry.start.as_bytes())
+        .with_context(|| format!("writing init file '{}'", init_path.display()))?;
+    println!("bundler: binary at '{}', init file written.", dest.display());
+
+    // ── Step 8: zip the output directory ─────────────────────────────────────
+    let zip_path = {
+        let mut p = output_dir.clone();
+        let stem = p.file_name().map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "dist".to_owned());
+        p.pop();
+        p.join(format!("{stem}.zip"))
+    };
+    create_zip(&output_dir, &zip_path)
+        .with_context(|| format!("creating zip '{}'", zip_path.display()))?;
+    println!("bundler: release archive at '{}'.", zip_path.display());
+
+    println!("bundler: done.");
     Ok(())
 }
 
 // ─── Asset hashing ────────────────────────────────────────────────────────────
 
-/// Walk `asset_base`, hash every non-`.ks` file, return a map from
-/// relative path (forward-slash, no leading slash) → `<blake3_hex>.<ext>`.
 fn build_path_map(asset_base: &Path) -> Result<HashMap<String, String>> {
     let mut map = HashMap::new();
 
@@ -255,31 +276,40 @@ fn collect_tag_replacements(
     }
 }
 
-// ─── Compile kani-init ────────────────────────────────────────────────────────
+// ─── Install kani-init ────────────────────────────────────────────────────────
 
-/// Invoke `cargo build -p kani-init --release [--target <triple>]` with
-/// `KANI_ENTRY_SCRIPT` set.  Returns the path to the produced binary.
-fn compile_kani_init(entry_script: &str, target: Option<&str>) -> Result<PathBuf> {
-    println!("bundler: compiling kani-init (entry={entry_script})...");
+/// Install `kani-init` from crates.io into a temporary directory and return
+/// `(path_to_binary, temp_dir)`.
+///
+/// The caller must keep `TempDir` alive until the binary has been copied.
+fn install_kani_init(target: Option<&str>) -> Result<(PathBuf, TempDir)> {
+    println!("bundler: installing kani-init from crates.io...");
+
+    let tmp = TempDir::new().context("creating temp install dir")?;
+    let tmp_path = tmp.path();
 
     let mut cmd = Command::new("cargo");
-    cmd.args(["build", "-p", "kani-init", "--release"])
-        .env("KANI_ENTRY_SCRIPT", entry_script);
+    cmd.args(["install", "kani-init", "--root"])
+        .arg(tmp_path);
 
     if let Some(t) = target {
         cmd.args(["--target", t]);
     }
 
-    let status = cmd
-        .status()
-        .context("failed to invoke cargo — is it in PATH?")?;
-
+    let status = cmd.status().context("failed to invoke cargo — is it in PATH?")?;
     if !status.success() {
-        bail!("cargo build -p kani-init exited with status {status}");
+        bail!("cargo install kani-init exited with status {status}");
     }
 
-    // Locate the binary in Cargo's output directory.
-    let binary_path = binary_output_path(target)?;
+    // `cargo install --root <dir>` places binaries in `<dir>/bin/`.
+    let binary_name = {
+        let is_windows = target
+            .map(|t| t.contains("windows"))
+            .unwrap_or(cfg!(target_os = "windows"));
+        if is_windows { "kani-init.exe" } else { "kani-init" }
+    };
+    let binary_path = tmp_path.join("bin").join(binary_name);
+
     if !binary_path.exists() {
         bail!(
             "expected binary at '{}' but it was not found",
@@ -287,47 +317,44 @@ fn compile_kani_init(entry_script: &str, target: Option<&str>) -> Result<PathBuf
         );
     }
 
-    Ok(binary_path)
+    Ok((binary_path, tmp))
 }
 
-/// Determine where Cargo puts the kani-init binary.
-fn binary_output_path(target: Option<&str>) -> Result<PathBuf> {
-    // Ask Cargo for the workspace root via CARGO_MANIFEST_DIR or fall back to cwd.
-    let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
-        .map(PathBuf::from)
-        // When run as a plain binary outside Cargo, walk up to find Cargo.toml.
-        .unwrap_or_else(|_| find_workspace_root().unwrap_or_else(|| PathBuf::from(".")));
 
-    let mut path = workspace_root.join("target");
-    if let Some(t) = target {
-        path.push(t);
+// ─── Distribution zip ─────────────────────────────────────────────────────────
+
+/// Zip every file in `dir` (non-recursively for now) into `zip_path`.
+fn create_zip(dir: &Path, zip_path: &Path) -> Result<()> {
+    let file = std::fs::File::create(zip_path)
+        .with_context(|| format!("creating '{}'", zip_path.display()))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    for entry in WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        let rel = path
+            .strip_prefix(dir)
+            .unwrap()
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+
+        zip.start_file(&rel, options)
+            .with_context(|| format!("adding '{rel}' to zip"))?;
+        let data = std::fs::read(path)
+            .with_context(|| format!("reading '{}'", path.display()))?;
+        zip.write_all(&data)
+            .with_context(|| format!("writing '{rel}' to zip"))?;
     }
-    path.push("release");
 
-    let binary_name = if cfg!(target_os = "windows") {
-        "kani-init.exe"
-    } else {
-        "kani-init"
-    };
-    path.push(binary_name);
-    Ok(path)
-}
-
-/// Walk parent directories until we find a `Cargo.toml` with `[workspace]`.
-fn find_workspace_root() -> Option<PathBuf> {
-    let mut dir = std::env::current_dir().ok()?;
-    loop {
-        let candidate = dir.join("Cargo.toml");
-        if candidate.exists() {
-            let text = std::fs::read_to_string(&candidate).ok()?;
-            if text.contains("[workspace]") {
-                return Some(dir);
-            }
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
+    zip.finish().context("finalising zip")?;
+    Ok(())
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
