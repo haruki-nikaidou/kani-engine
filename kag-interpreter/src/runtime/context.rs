@@ -41,11 +41,10 @@ impl CharaDef {
     /// Look up the image path for a named face variant.
     /// Falls back to `self.storage` if the face is not found.
     pub fn resolve_face(&self, face: Option<&str>) -> Option<String> {
-        if let Some(f) = face {
-            if let Some(var) = self.faces.iter().find(|v| v.face == f) {
+        if let Some(f) = face
+            && let Some(var) = self.faces.iter().find(|v| v.face == f) {
                 return Some(var.storage.clone());
             }
-        }
         self.storage.clone()
     }
 }

@@ -50,7 +50,7 @@ pub fn parse_inline_markup(input: &str) -> Vec<TextSpan> {
                     let (tag_name, attrs) = split_tag_name(tag_content);
                     let new_style = apply_opening_tag(
                         tag_name,
-                        &attrs,
+                        attrs,
                         style_stack.last().unwrap_or(&TextStyle::default()),
                     );
                     if tag_name == "ruby" {
@@ -117,12 +117,11 @@ fn push_char(spans: &mut Vec<TextSpan>, style: &TextStyle, ch: char) {
 }
 
 fn push_str(spans: &mut Vec<TextSpan>, style: &TextStyle, text: &str) {
-    if let Some(last) = spans.last_mut() {
-        if &last.style == style {
+    if let Some(last) = spans.last_mut()
+        && &last.style == style {
             last.text.push_str(text);
             return;
         }
-    }
     spans.push(TextSpan {
         text: text.to_owned(),
         style: style.clone(),
@@ -171,11 +170,10 @@ fn apply_opening_tag(name: &str, attrs: &str, parent: &TextStyle) -> TextStyle {
             }
         }
         "size" => {
-            if let Some(v) = parse_attr_from(attrs, "value") {
-                if let Ok(f) = v.parse::<f32>() {
+            if let Some(v) = parse_attr_from(attrs, "value")
+                && let Ok(f) = v.parse::<f32>() {
                     style.size = Some(f);
                 }
-            }
         }
         "ruby" => {
             // ruby reading is stored separately via pending_ruby; style otherwise unchanged
