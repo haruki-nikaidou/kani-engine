@@ -1,101 +1,60 @@
-;=========================================
-; CG モード　画面作成
-;=========================================
+; CG Gallery screen.
+;
+; Porting notes vs. TyranoScript / cg.ks:
+;   [iscript]...[endscript]            →  [eval exp="<rhai>"]
+;   [button graphic=... x=... y=...]   →  [link] text choices (no positioned thumbnails)
+;   sf.cg_view[key] = "on" / check     →  sf.cg_<id> boolean flags set from scene1.ks
+;   cg_image_button macro              →  inline [if] / [link] per CG entry
+;   pagination (tf.page)               →  single page (add more *page_N labels for large galleries)
+;   [freeimage layer=1]                →  [free layer=1]
+;
+; To add a new CG to the gallery:
+;   1. In your scenario, write:  [eval exp="sf.cg_myname = true;"]
+;   2. Add a [if] / [link] / *view block below (follow the pattern for *view_room).
 
-@layopt layer=message0 visible=false
-
-@clearfix
-[hidemenubutton]
-[cm]
-
-[bg storage="../../tyrano/images/system/bg_base.png" time=100]
-[layopt layer=1 visible=true]
-
-[image layer=1 left=0 top=0 storage="config/label_cg.png" folder="image" ]
-
-[iscript]
-    
-    tf.page = 0;
-    tf.selected_cg_image = ""; //選択されたCGを一時的に保管
-    
-[endscript]
-
-
-
-*cgpage
-[layopt layer=1 visible=true]
+*start
 
 [cm]
-[button graphic="config/menu_button_close.png" enterimg="config/menu_button_close2.png"  target="*backtitle" x=1150 y=40 ]
+@layopt layer=message0 visible=true
+@bg storage="bgimage/title.jpg" time=100
 
-[iscript]
-    tf.tmp_index = 0;
-    tf.cg_index = 12 * tf.page;
-    tf.top = 100;
-    tf.left = 60;
-    
-[endscript]
+*cg_menu
 
-[iscript]
-	tf.target_page = "page_" + tf.page.to_string();
-[endscript]
-
-*cgview
-@jump target=&tf.target_page
-
-*page_0
-[cg_image_button graphic="rouka.jpg,room.jpg,title.png" no_graphic="../../tyrano/images/system/noimage.png" x=60 y=130 width=160 height=140 folder="bgimage" ]
-[cg_image_button graphic="room.jpg" no_graphic="../../tyrano/images/system/noimage.png" x=250 y=130 width=160 height=140 folder="bgimage" ]
-
-@jump target="*common"
-
-*common
-
-
-*endpage
-
-
-
-[s]
-
-*backtitle
 [cm]
-[freeimage layer=1]
-@jump storage=title.ks
+── CG Gallery ──[r]
+[r]
+[if exp="sf.cg_room == true || sf.cg_hallway == true"]
+Select a CG to view:[r]
+[r]
+[if exp="sf.cg_room == true"]
+[link target="*view_room"]
+○  Classroom
+[endif]
+[if exp="sf.cg_hallway == true"]
+[link target="*view_hallway"]
+○  Hallway
+[endif]
+[link storage="title.ks"]
+← Back to Title
+[endlink]
+[else]
+No CGs have been unlocked yet.[r]
+Play through the game to discover them.[p]
+@jump storage="title.ks"
+[endif]
 
-*nextpage
-[eval exp="tf.page += 1;"]
-@jump target="*cgpage"
+; ── CG viewers ────────────────────────────────────────────────────────────────
 
+*view_room
 
-*backpage
-[eval exp="tf.page -= 1;"]
-@jump target="*cgpage"
-
-*clickcg
 [cm]
-
-[layopt layer=1 visible=false]
-
-[eval exp="tf.cg_index=0"]
-
-*cg_next_image
-
-[image storage=&tf.selected_cg_image[tf.cg_index] folder="bgimage"  ]
+[bg storage="bgimage/room.jpg" time=500]
 [l]
-[bg storage="../../tyrano/images/system/bg_base.png" time=10]
+@jump target="*cg_menu"
 
-[eval exp="tf.cg_index += 1;"]
+*view_hallway
 
-@jump target="cg_next_image" cond="tf.selected_cg_image.len() > tf.cg_index"
-
-
-@jump  target=*cgpage
-[s]
-
-*no_image
-
-@jump  target=*cgpage
-
-
-
+[cm]
+[bg storage="bgimage/hallway.jpg" time=500]
+[l]
+@jump target="*cg_menu"

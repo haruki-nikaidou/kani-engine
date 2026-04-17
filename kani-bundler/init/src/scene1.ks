@@ -1,443 +1,340 @@
-;ティラノスクリプトサンプルゲーム
+; kani-engine demo scenario — scene 1.
+;
+; Porting notes vs. TyranoScript / scene1.ks:
+;   [iscript]...[endscript]          →  [eval exp="<rhai>"]
+;   [chara_new] / [chara_face]       →  removed; storage= passed directly
+;   [chara_show name=x]              →  [chara name=x storage="..."]
+;   [chara_mod name=x face=happy]    →  [chara_mod name=x storage="chara/akane/happy.png"]
+;   [position layer=message0 ...]    →  [wndctrl x=... y=... width=... height=...]
+;   [ptext] / [chara_config ptext=]  →  [chara_ptext name=...] or #Name shorthand
+;   [clearfix] / [start_keyconfig]   →  not used (engine-internal in TyranoScript)
+;   [hidemenubutton] / [showmenubutton] →  not used
+;   @showmenubutton                  →  not used
+;   [button name=role_button role=…] →  not used (system UI handled by the runtime)
+;   [anim ...]                       →  not used (no equivalent yet)
+;   [playbgm]                        →  [bgm]
+;   [freeimage layer=1]              →  [free layer=1]
+;   [glink color=… size=… x=… y=…]  →  [link] (text choices)
+;   CG unlock: sf.cg_<id> = true    →  [eval exp="sf.cg_room = true;"]
+;   Replay unlock: sf.replay_<id>   →  [eval exp="sf.replay_demo = true;"]
 
+; ─────────────────────────────────────────────────────────────────────────────
 *start
 
-[cm  ]
-[clearfix]
-[start_keyconfig]
+[cm]
+[bg storage="bgimage/room.jpg" time=100]
+[layopt layer=message0 visible=true]
+[wndctrl x=160 y=500 width=1000 height=200]
 
+; Mark this scene as replayable.  The replay_start label is what replay.ks
+; will jump to so the scene begins cleanly (skipping the variable init above).
+[eval exp="sf.replay_demo = true;"]
 
-[bg storage="room.jpg" time="100"]
+*replay_start
 
-;メニューボタンの表示
-@showmenubutton
-
-;メッセージウィンドウの設定
-[position layer="message0" left=160 top=500 width=1000 height=200 page=fore visible=true]
-
-;文字が表示される領域を調整
-[position layer=message0 page=fore margint="45" marginl="50" marginr="70" marginb="60"]
-
-
-;メッセージウィンドウの表示
-@layopt layer=message0 visible=true
-
-;キャラクターの名前が表示される文字領域
-[ptext name="chara_name_area" layer="message0" color="white" size=28 bold=true x=180 y=510]
-
-;上記で定義した領域がキャラクターの名前表示であることを宣言（これがないと#の部分でエラーになります）
-[chara_config ptext="chara_name_area"]
-
-;このゲームで登場するキャラクターを宣言
-;akane
-[chara_new  name="akane" storage="chara/akane/normal.png" jname="あかね"  ]
-;キャラクターの表情登録
-[chara_face name="akane" face="angry" storage="chara/akane/angry.png"]
-[chara_face name="akane" face="doki" storage="chara/akane/doki.png"]
-[chara_face name="akane" face="happy" storage="chara/akane/happy.png"]
-[chara_face name="akane" face="sad" storage="chara/akane/sad.png"]
-
-
-;yamato
-[chara_new  name="yamato"  storage="chara/yamato/normal.png" jname="やまと" ]
+; Unlock the room CG for the gallery
+[eval exp="sf.cg_room = true;"]
 
 #
-さて、ゲームが簡単に作れるというから、来てみたものの[p]
+Hm. They said making a game was easy here...[p]
 
-誰もいねぇじゃねぇか。[p]
-……[p]
-帰るか。。。[p]
+Nobody's home.[p]
 
-[font  size="30"   ]
+...[p]
+
+I guess I'll just head back.[p]
+
+; ── Akane appears ─────────────────────────────────────────────────────────────
+
+[font size=30]
 #?
-ちょっとまったーーーーー[p]
-[resetfont  ]
+Hey, wait![p]
+[resetfont]
 
 #
-誰だ！？[p]
+Who's there?![p]
 
-;キャラクター登場
-[chara_show  name="akane"  ]
+[chara name=akane storage="chara/akane/normal.png" x=300 y=100]
+[chara_ptext name=akane]
+
 #?
-こんにちは。[p]
-私の名前はあかね。[p]
-#あかね
-もしかして、ノベルゲームの開発に興味があるの？[p]
+Hello![p]
 
-[glink  color="blue"  storage="scene1.ks"  size="28"  x="360"  width="500"  y="150"  text="はい。興味あります"  target="*selectinterest"  ]
-[glink  color="blue"  storage="scene1.ks"  size="28"  x="360"  width="500"  y="250"  text="興味あります！"  target="*selectinterest"  ]
-[glink  color="blue"  storage="scene1.ks"  size="28"  x="360"  width="500"  y="350"  text="どちらかと言うと興味あり"  target="*selectinterest"  ]
-[s  ]
+My name is Akane.[p]
+
+#akane
+Are you interested in making visual novel games?[p]
+
+[link target="*selectinterest"]
+Yes, definitely!
+[link target="*selectinterest"]
+I'm interested!
+[link target="*selectinterest"]
+Sort of, maybe...
+[endlink]
+
+; ── Branch converges here ──────────────────────────────────────────────────────
+
 *selectinterest
 
-[chara_mod  name="akane" face="happy"  ]
-#あかね
-わー。興味あるなんて、嬉しいなー。[p]
-#
-・・・・・[p]
-まぁ、作ってみたい気持ちはあるけど、むずかしいんでしょ？[p]
-プログラミングとかやったことないし、、、[p]
+[chara_mod name=akane storage="chara/akane/happy.png"]
+#akane
+Really?! That makes me so happy![p]
 
-[chara_mod name="akane" face="default"]
-
-#あかね
-そんな君に、耳寄りな情報があるんだけど[p]
-ききたい？　ききたいよね？[p]
 #
-いや、べつに
-#あかね
+...Well, I want to make one, but it sounds complicated.[p]
+I've never done any programming before.[p]
+
+[chara_mod name=akane storage="chara/akane/normal.png"]
+#akane
+Well, have I got news for you![p]
+Interested?[p]
+
+#
+Sure, I guess.
+
+#akane
 [cm]
 [font size=40]
 [delay speed=160]
-ティラノスクリプトー[p]
+kani-engine![p]
 [delay speed=30]
 [resetfont]
 
 #
-・・・・[p]
-#あかね
-ティラノスクリプトを使うと、簡単に本格的なノベルゲームが簡単に作れてしまうのよ。[p]
-#
-へぇー。それはちょっと興味あるね。[p]
-
-[chara_mod  name="akane" face="happy"  ]
-#あかね
-ほ、ほんと！？[p]
-このゲームをプレイするだけで、ティラノスクリプトの機能を確認することができるから[p]
-ぜひ、最後までつきあってね[p]
-
-まず、ティラノスクリプトの特徴として[font color="red"]「HTML5」[resetfont]で動作するよ[p]
-
-
-#
-つ、つまり？[p]
-#あかね
-一度ティラノスクリプトで作ったゲームは多くの環境で動作させることができるってこと！[p]
-#
-へぇー。それはいいね。[p]
-せっかく作ったらたくさんの人に遊んでもらいたいもんね。[p]
-
-#あかね
-ウィンドウズ用のPCアプリケーションはもちろん。[p]
-マック用のアプリケーションにだって対応するわよ。[p]
-あと、HTML5だから、ブラウザゲームとしても発表できるわよ。[p]
-ウェブサイトに貼り付けて遊んでもらえるから、気軽にゲームをプレイしてもらうことができるね。[p]
-主要なブラウザはすべてサポートしているから、安心してね。[p]
-#
-やるなぁ。。[p]
-
-でも、最近スマホが復旧してて、僕のサイトにもスマホで訪れる人が増えたんだけど[p]
-スマホからは遊べない？[p]
-
-#あかね
-ティラノスクリプトで作ったゲームはスマートフォンからでも遊べるよ！[p]
-アイフォーン、アンドロイドはもちろん。アイパッドとかのタブレットでも問題ないわ。[p]
-#
-おぉー。[p]
-
-#あかね
-AppStoreやGooglePlayに向けてアプリ化して販売することもできるから[p]
-#
-おぉぉ、、やっとの貧困生活から脱出できるかも[p]
-#あかね
-まぁ、おもしろいゲームつくらないと、売れもしないけどな！[p]
-#
-くっ。。[p]
-
-#あかね
-じゃあ、次に場面を移動してみるね[p]
-廊下に移動するよ[p]
-[bg  time="3000"  method="crossfade" storage="rouka.jpg"  ]
-
-#
-お、廊下に移動したね。[p]
-
-#あかね
-寒いよぉ〜。はやく教室に戻ろう。[p]
-
-[bg  time="1000" method="slide"  storage="room.jpg" ]
-#
-あれ、今、場面の移動がちょっと違ったね。[p]
-#あかね
-うん。急いでたからね。[p]
-ティラノスクリプトでは、いろいろな演出を加える事ができて[p]
-画面を切り替えるだけでも１０種類以上の演出がつかえるよ。[p]
-#
-ふむ。便利だ[p]
-
-#あかね
-次にメッセージの表示方法を変えてみるね[p]
-ティラノスクリプトでは、今みたいなアドベンチャーゲームの他に[r]
-ビジュアルノベルのような全画面表示のゲームもつくれるよ。[p]
-
-#
-
-;キャラクター非表示
-[chara_hide name="akane"]
-
-
-;メッセージを全画面に切り替え
-[position layer="message0" left=20 top=40 width=1200 height=660 page=fore visible=true ]
-
-どうかな? 物語をじっくり読ませたい場合はこの方式が便利ですね[l][r]
-ティラノスクリプトは非常に強力で、柔軟な表現が可能です。[l][cm]
-
-[font size=40]文字のサイズを変更したり
-[l][r]
-[resetfont]
-[font color="pink"]色を変更したり
-[resetfont][l][r]
-
-[ruby text=る]ル[ruby text=び]ビを[ruby text=ふ]振ることだって[ruby text=かん]簡[ruby text=たん]単にできます[l]
-[cm]
-
-;たて書きにする
-[position vertical=true layer=message0 page=fore margint="45" marginl="0" marginr="70" marginb="60"]
-
-このように縦書きで記述することもできます。[r][l]
-縦書きでも、横書きの時と同じ機能を使うことができます。[r][l]
-
-;横書きに戻す
-[position vertical=false]
-
-横書きと縦書きをシーンによって使い分けることもできます[r][l]
-じゃあ、アドベンチャー形式に戻しますね[p]
-
-;メッセージボックスを元に戻す
-[position layer="message0" left=160 top=500 width=1000 height=200 page=fore visible=true]
-
-@chara_show name="akane"
+...kani-engine?[p]
 
 #akane
-メッセージボックスは、自分の好きな画像を使うこともできるよ[p]
-
-
-
-[font color="0x454D51"]
-[deffont color="0x454D51"]
-
-
-;名前部分のメッセージレイヤ削除
-[free name="chara_name_area" layer="message0"]
-
-;メッセージウィンドウの設定
-[position layer="message0" width="1280" height="210" top="510" left="0"]
-[position layer="message0" frame="frame.png" margint="50" marginl="100" marginr="100" opacity="230" page="fore"]
-
-;名前枠の設定
-[ptext name="chara_name_area" layer="message0" color="0xFAFAFA" size="28" bold="true" x="100" y="514"]
-[chara_config ptext="chara_name_area"]
-
-
-
-どうかな？[p]
-ゲームに合わせて自分の好きなデザインを作ってくださいね[p]
-
-あと、デフォルトだとセーブやロードは画面右下のボタンからできるけど[p]
-ウィンドウをカスタマイズすれば、、、、[p]
-
-;メニューボタン非表示
-@hidemenubutton
-
-;ロールボタン追加;;;;;;;;;;;;;;
-
-
-; ロールボタン配置
-
-;クイックセーブボタン
-[button name="role_button" role="quicksave" graphic="button/qsave.png" enterimg="button/qsave2.png" x="40" y="690"]
-
-;クイックロードボタン
-[button name="role_button" role="quickload" graphic="button/qload.png" enterimg="button/qload2.png" x="140" y="690"]
-
-;セーブボタン
-[button name="role_button" role="save" graphic="button/save.png" enterimg="button/save2.png" x="240" y="690"]
-
-;ロードボタン
-[button name="role_button" role="load" graphic="button/load.png" enterimg="button/load2.png" x="340" y="690"]
-
-;オートボタン
-[button name="role_button" role="auto" graphic="button/auto.png" enterimg="button/auto2.png" x="440" y="690"]
-
-;スキップボタン
-[button name="role_button" role="skip" graphic="button/skip.png" enterimg="button/skip2.png" x="540" y="690"]
-
-;バックログボタン
-[button name="role_button" role="backlog" graphic="button/log.png" enterimg="button/log2.png" x="640" y="690"]
-
-;フルスクリーン切替ボタン
-[button name="role_button" role="fullscreen" graphic="button/screen.png" enterimg="button/screen2.png" x="740" y="690"]
-
-;コンフィグボタン（※sleepgame を使用して config.ks を呼び出しています）
-[button name="role_button" role="sleepgame" graphic="button/sleep.png" enterimg="button/sleep2.png" storage="config.ks" x="840" y="690"]
-
-;メニュー呼び出しボタン（※ロールボタンを使うなら不要）
-[button name="role_button" role="menu" graphic="button/menu.png" enterimg="button/menu2.png" x="940" y="690"]
-
-;メッセージウィンドウ非表示ボタン
-[button name="role_button" role="window" graphic="button/close.png" enterimg="button/close2.png" x="1040" y="690"]
-
-;タイトルに戻るボタン
-[button name="role_button" role="title" graphic="button/title.png" enterimg="button/title2.png" x="1140" y="690"]
-
-;;ロールボタン追加終わり
-
-
-こんな風にゲームに必要な機能を画面の上に持たせることも簡単にできるよ[p]
-これはロールボタンといって、ボタンに特別な機能を持たせる事ができます。[p]
-標準で用意されているのは、[l]
-セーブ、[l]
-ロード、[l][cm]
-タイトルへ戻る、
-メニュー表示、
-メッセージ非表示、
-スキップ、
-バックログ、
-フルスクリーン切り替え、
-クイックセーブ、
-クイックロード、
-オートモード！
-[p]
-
-はぁ、はぁ[p]
+With kani-engine you can create a full-featured visual novel with ease![p]
 
 #
-大丈夫？[p]
-これだけあれば、ゲームを作るには困らなそうだね[p]
+Hm, that actually sounds interesting.[p]
 
-#あかね
-さて、もちろん音楽を鳴らすこともできるよ[l][cm]
-それじゃあ、再生するよ？[l][cm]
+[chara_mod name=akane storage="chara/akane/happy.png"]
+#akane
+I knew you'd say that![p]
+Playing through this demo you can see kani-engine's features first-hand,[p]
+so please stick with me to the end![p]
 
-[link target=*playmusic]【１】うん。再生してください[endlink][r]
-[link target=*noplay]【２】いや。今は再生しないで！[endlink]
-[s]
+First — kani-engine runs on [font color=red]Bevy[resetfont], a powerful Rust game engine.[p]
+
+#
+What does that mean, exactly?[p]
+
+#akane
+It means your game can target Windows, macOS, Linux, and more from a single codebase![p]
+
+#
+Oh nice. I want as many people as possible to play my game.[p]
+
+#akane
+And because the scripting language is [font color=blue]Rhai[resetfont] instead of JavaScript,[p]
+you get type-safety and Rust-native speed out of the box.[p]
+
+#
+So... no web browser needed?[p]
+
+#akane
+Exactly! Games run natively as a Bevy app.[p]
+Now let me show you some features. Starting with scene transitions.[p]
+We're heading to the hallway![p]
+
+[bg storage="bgimage/hallway.jpg" time=3000 method=crossfade]
+
+; Unlock the hallway CG
+[eval exp="sf.cg_hallway = true;"]
+
+#
+Oh — we're in the hallway![p]
+
+#akane
+Brrr, it's cold! Let's hurry back.[p]
+
+[bg storage="bgimage/room.jpg" time=1000 method=slide]
+
+#
+That transition was different![p]
+
+#akane
+Right — kani-engine supports multiple transition effects for scene changes.[p]
+crossfade, slide, wipe, and more.[p]
+
+#
+Very handy.[p]
+
+#akane
+Next, let me show you different ways to display text.[p]
+In addition to this adventure-style box, you can use[p]
+a full-screen visual novel layout![p]
+
+#
+
+; ── Full-screen text mode ──────────────────────────────────────────────────────
+
+[chara_hide name=akane]
+[wndctrl x=20 y=40 width=1200 height=660]
+
+What do you think? Full-screen mode is great for narration.[l][r]
+kani-engine gives you flexible, pixel-level control over text layout.[l][cm]
+
+[font size=40]You can change the font size like this,[l][r]
+[resetfont]
+[font color=pink]change the colour,[resetfont][l][r]
+
+or add [ruby text=annotation]ruby text[ruby text=like][ruby text=this] like this.[l]
+[cm]
+
+; ── Back to adventure mode ─────────────────────────────────────────────────────
+
+[wndctrl x=160 y=500 width=1000 height=200]
+[chara name=akane storage="chara/akane/normal.png" x=300 y=100]
+[chara_ptext name=akane]
+
+#akane
+The message window can use any design you like![p]
+
+By the way, kani-engine also supports screen effects.[p]
+
+[flash time=300 color=0xFFFFFF]
+
+Like a flash effect — useful for lightning or dramatic reveals.[p]
+
+[quake time=600 hmax=8 vmax=4]
+
+And a screen quake for impact moments.[p]
+
+Now — should I play some background music?[l][cm]
+
+[link target="*playmusic"]
+Yes, please play something!
+[link target="*noplay"]
+No, not right now.
+[endlink]
+
+; ── BGM branch ────────────────────────────────────────────────────────────────
 
 *playmusic
 
 [cm]
-よし、再生するよ。[l]
-@playbgm time="3000" storage=music.ogg loop=true
-徐々にフェードインしながら再生することもできるんだ[l][cm]
+Alright, here we go![l]
+@bgm storage="bgm/main_theme.ogg" fadetime=3000 loop=true
+It fades in gradually — pretty smooth, right?[l][cm]
 
 @jump target="*common_bgm"
 
 *noplay
+
 [cm]
-うん。わかった。再生はしないね。[l][cm]
-また、試してみてね[l][cm]
+OK, no music then. You can change it in the Config screen later.[l][cm]
 
 *common_bgm
 
-あ、そうそう[l][cm]
-今みたいな選択肢で物語を分岐することも、簡単にできるよ。[l][cm]
+Story branches from player choices — just like what you did a moment ago.[l][cm]
 
-#あかね
-ここらで、別のキャラクターに登場してもらいましょうか[l][cm]
-やまとー[p]
-[chara_show name="yamato"]
+; ── Second character ──────────────────────────────────────────────────────────
 
-こんな風に。簡単です。[l][r]
-キャラクターは何人でも登場させることができるから、試してみてね。[p]
+#akane
+Let me introduce another character![l][cm]
+Yamato![p]
+
+[chara name=yamato storage="chara/yamato/normal.png" x=700 y=100]
+
+See how easy it is to have multiple characters on screen.[l][r]
+You can bring in as many characters as the story needs.[p]
 
 #yamato
-おい、俺もう、帰っていいかな？[l][cm]
+Can I go home now?[l][cm]
 
 #akane
-あ、ごめんごめん。ありがとう[l][cm]
+Sorry about that! Thanks for coming.[l][cm]
 
-[chara_hide name="yamato"]
+[chara_hide name=yamato]
+
+; ── Wrap-up ───────────────────────────────────────────────────────────────────
 
 #akane
-これでティラノスクリプトの基本機能の説明は終わりだけど[p]
-どうだったかな？[p]
+That covers kani-engine's core features![p]
+What do you think?[p]
 
 #
-うん、これなら自分でも作れそうな気がしてきたよ[p]
+I think even I could make a game with this.[p]
 
-#あかね
-よかった！[p]
-最初は、ティラノスクリプト公式ページのチュートリアルをやってみると良いと思うよ！[p]
-もちろん、このゲームもティラノスクリプトで動いてるから、参考になると思うし。[p]
-ぜひ、ゲーム制作にチャレンジしてみてね[p]
-プレイしてくれてありがとう。[p]
+[chara_mod name=akane storage="chara/akane/happy.png"]
+#akane
+That's exactly what I hoped to hear![p]
+kani-engine uses KAG scripts with embedded Rhai — no JavaScript required.[p]
+The full tag reference and getting-started guide are in the docs.[p]
+Thanks for playing![p]
 
-最後にティラノスクリプトで役立つ情報へのリンクを表示しておくから
-確認してみてね。[p]
+; Replay mode exit: if we are in a replay, jump back to replay.ks
+[endreplay]
 
 [cm]
 
-*button_link
+; ── Info link menu ────────────────────────────────────────────────────────────
+
+*info_menu
 
 @layopt layer=message0 visible=false
-@layopt layer=fix visible=false
-[anim name="akane" left=600 time=1000]
 
-;リンクボタンを表示
-[glink text="ティラノビルダーの紹介" size=20 width=500 x=30 y=100 color=blue target=tyranobuilder ]
-[glink text="制作事例" size=20 width=500 x=30 y=160 color=blue target=example ]
-[glink text="応用テクニック" size=20 width=500 x=30 y=220 color=blue target=tech ]
-[glink text="役に立つ情報源" size=20 width=500 x=30 y=280 color=blue target=info ]
-[glink text="タグリファレンス" size=20 width=500 x=30 y=340 color=blue target=tagref ]
+[link target="*info_kag_rhai"]
+About KAG + Rhai scripting
+[link target="*info_variables"]
+About game variables (f / sf / tf)
+[link target="*info_features"]
+Feature highlights
+[link storage="title.ks"]
+Back to Title
+[endlink]
 
-[s]
+; ─────────────────────────────────────────────────────────────────────────────
+*info_kag_rhai
 
-*tyranobuilder
-
-[cm]
 @layopt layer=message0 visible=true
-@layopt layer=fix visible=true;
-[font color-"red"]
-「ティラノビルダー」
-[resetfont]
-という無料の開発ツールもあります。[p]
 
-[image layer=1 page=fore visible=true top=10 left=50 width=560 height=400  storage = builder.png]
+#akane
+kani-engine scenarios are plain .ks files using KAG syntax.[p]
+Rhai expressions can be embedded anywhere:[p]
+  eval runs a Rhai script with side-effects,[p]
+  emb injects an expression result into the text stream,[p]
+  and attribute values prefixed with & are evaluated as Rhai at runtime.[p]
 
-これは、グラフィカルな画面でノベルゲームを作れるツールです[p]
-スクリプトが苦手な人でもゲーム制作を行うことができるからぜひ試してね。[p]
-[freeimage layer=1]
+@jump target="*info_menu"
 
-@jump target=button_link
+; ─────────────────────────────────────────────────────────────────────────────
+*info_variables
 
-[s]
-*example
 @layopt layer=message0 visible=true
-@layopt layer=fix visible=true
-これまで、ティラノスクリプトを使って沢山のゲームが作成されています。[p]
-一部の制作事例を公式サイトに乗せているのでよければ確認してくださいね。[p]
 
+#akane
+There are four variable scopes accessible from Rhai:[p]
+  f  — game flags (saved with the game save),[p]
+  sf — system flags (saved globally, survives new games),[p]
+  tf — transient flags (NOT saved, reset on load),[p]
+  mp — macro parameters (available inside macro bodies).[p]
 
-@jump target=button_link
+For example, this demo used sf.cg_room and sf.replay_demo[p]
+to track unlocked gallery entries across saves.[p]
 
-[cm]
-[s]
+@jump target="*info_menu"
 
-*tech
+; ─────────────────────────────────────────────────────────────────────────────
+*info_features
+
 @layopt layer=message0 visible=true
-@layopt layer=fix visible=true
-このサンプルでは、ティラノスクリプトのごく一部の機能しか紹介できていません[p]
-さらに出来ることを知りたい場合、スクリプトを丸ごとダウンロードできるようになっているので[p]
-そのサンプルを触ってみることをオススメします！[p]
 
+#akane
+Some of what this demo showed:[p]
+  Background images with timed transitions (crossfade, slide),[p]
+  Character sprites with expression changes,[p]
+  Story branching with [link] choices,[p]
+  Background music with fade-in,[p]
+  Font size and colour changes plus ruby text,[p]
+  Screen flash and quake effects,[p]
+  Full-screen vs. windowed message layout,[p]
+  and a CG gallery and replay mode backed by sf flags.[p]
+Check the docs for the complete KAG-Rhai tag reference![p]
 
-@jump target=button_link
-
-
-*info
-@layopt layer=message0 visible=true
-@layopt layer=fix visible=true
-ティラノスクリプトでわからないことがあったら[p]
-公式掲示板で質問したり、Wikiなどもありますので参考にしてみてください[p]
-@jump target=button_link
-
-*tagref
-@layopt layer=message0 visible=true
-@layopt layer=fix visible=true
-タグは詳細なリファレンスページが用意されています。[p]
-このページでさらに詳細な使い方を身につけてください[p]
-
-
-@jump target="*button_link"
+@jump target="*info_menu"
 
 [s]
