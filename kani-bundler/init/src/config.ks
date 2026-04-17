@@ -1,183 +1,261 @@
-;=========================================
-; コンフィグ モード　画面作成
-;=========================================
-;メッセージレイヤ0を不可視に
-	[layopt layer="message0" visible="false"]
-;fixボタンをクリア
-	[clearfix]
-;キーコンフィグの無効化
-	[stop_keyconfig]
-;メニューボタン非表示
-	[hidemenubutton]
-	[iscript]
-	; ラベル通過記録を有効に（kani-engineホストに転送される拡張タグで設定）
-	; 初期値（TyranoScriptのデフォルト値を使用）
-	tf.current_bgm_vol   = 100; // BGM音量
-	tf.current_se_vol    = 100; // SE音量
-	tf.current_ch_speed  = 30;  // テキスト表示速度
-	tf.current_auto_speed = 2000; // オート時のテキスト表示速度
-	tf.text_skip = "OFF"; // 未読スキップ
-	[endscript]
-	[iscript]
-	/* 画像類のパス */
-	tf.img_path = "image/config/";
-	/* 画像類のパス（ボタン） */
-	tf.btn_path_off = tf.img_path + "c_btn.gif";
-	tf.btn_path_on  = tf.img_path + "c_set.png";
-	// ボタン画像の幅と高さ
-	tf.btn_w = 46;
-	tf.btn_h = 46;
-	// ボタンを表示する座標
-	tf.config_x = [1040, 400, 454, 508, 562, 616, 670, 724, 778, 832, 886];
-	tf.config_y_bgm  = 190; // BGMのY座標
-	tf.config_y_se   = 250; // SEのY座標
-	tf.config_y_ch   = 325; // テキスト速度のY座標
-	tf.config_y_auto = 385; // オート速度のY座標
-	// テキスト速度のサンプルテキスト
-	tf.text_sample = "テストメッセージです。このスピードでテキストが表示されます。";
-	[endscript]
+; Config / settings screen.
+;
+; Porting notes vs. TyranoScript / config.ks:
+;   [iscript]...[endscript]     →  [eval exp="<rhai>"]
+;   [button fix=true ...]       →  [link] text choices (no positioned image buttons)
+;   [bgmopt volume=...]         →  [fadebgm time=500 volume=...]
+;   [seopt volume=...]          →  stored in sf.se_volume (applied by game logic)
+;   [configdelay speed=...]     →  [configdelay speed=...] ✓ (same tag)
+;   [autoconfig speed=...]      →  stored in sf.auto_speed (no direct tag equivalent)
+;   [config_record_label skip=] →  stored in sf.skip_unread (engine reads this flag)
+;   [awakegame]                 →  [clearstack] then jump back (no sleepgame system)
+;   [stop_keyconfig] / [start_keyconfig] →  not used
+;   [hidemenubutton]            →  not used
+;   bg_config.png path          →  "image/config/bg_config.png"
+
+*start
+
 [cm]
-;コンフィグ用の背景を読み込んでトランジション
-	[bg storage=&tf.img_path+"bg_config.png" time="100"]
-;画面右上の「Back」ボタン
-	[button fix="true" graphic=&tf.img_path+"c_btn_back.png" enterimg=&tf.img_path+"c_btn_back2.png" target="*backtitle" x="1160" y="20"]
-[jump target="*config_page"]
-*config_page
-;------------------------------------------------------------------------------------------------------
-; BGM音量
-;------------------------------------------------------------------------------------------------------
-	[button name="bgmvol,bgmvol_10"  fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[1]  y=&tf.config_y_bgm exp="tf.current_bgm_vol =  10;"]
-	[button name="bgmvol,bgmvol_20"  fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[2]  y=&tf.config_y_bgm exp="tf.current_bgm_vol =  20;"]
-	[button name="bgmvol,bgmvol_30"  fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[3]  y=&tf.config_y_bgm exp="tf.current_bgm_vol =  30;"]
-	[button name="bgmvol,bgmvol_40"  fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[4]  y=&tf.config_y_bgm exp="tf.current_bgm_vol =  40;"]
-	[button name="bgmvol,bgmvol_50"  fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[5]  y=&tf.config_y_bgm exp="tf.current_bgm_vol =  50;"]
-	[button name="bgmvol,bgmvol_60"  fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[6]  y=&tf.config_y_bgm exp="tf.current_bgm_vol =  60;"]
-	[button name="bgmvol,bgmvol_70"  fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[7]  y=&tf.config_y_bgm exp="tf.current_bgm_vol =  70;"]
-	[button name="bgmvol,bgmvol_80"  fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[8]  y=&tf.config_y_bgm exp="tf.current_bgm_vol =  80;"]
-	[button name="bgmvol,bgmvol_90"  fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[9]  y=&tf.config_y_bgm exp="tf.current_bgm_vol =  90;"]
-	[button name="bgmvol,bgmvol_100" fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[10] y=&tf.config_y_bgm exp="tf.current_bgm_vol = 100;"]
-;BGMミュート
-	[button name="bgmvol,bgmvol_0" fix="true" target="*vol_bgm_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[0] y=&tf.config_y_bgm exp="tf.current_bgm_vol = 0;"]
-;------------------------------------------------------------------------------------------------------
-; SE音量
-;------------------------------------------------------------------------------------------------------
-	[button name="sevol,sevol_10"  fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[1]  y=&tf.config_y_se exp="tf.current_se_vol =  10;"]
-	[button name="sevol,sevol_20"  fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[2]  y=&tf.config_y_se exp="tf.current_se_vol =  20;"]
-	[button name="sevol,sevol_30"  fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[3]  y=&tf.config_y_se exp="tf.current_se_vol =  30;"]
-	[button name="sevol,sevol_40"  fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[4]  y=&tf.config_y_se exp="tf.current_se_vol =  40;"]
-	[button name="sevol,sevol_50"  fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[5]  y=&tf.config_y_se exp="tf.current_se_vol =  50;"]
-	[button name="sevol,sevol_60"  fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[6]  y=&tf.config_y_se exp="tf.current_se_vol =  60;"]
-	[button name="sevol,sevol_70"  fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[7]  y=&tf.config_y_se exp="tf.current_se_vol =  70;"]
-	[button name="sevol,sevol_80"  fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[8]  y=&tf.config_y_se exp="tf.current_se_vol =  80;"]
-	[button name="sevol,sevol_90"  fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[9]  y=&tf.config_y_se exp="tf.current_se_vol =  90;"]
-	[button name="sevol,sevol_100" fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[10] y=&tf.config_y_se exp="tf.current_se_vol = 100;"]
-;SEミュート
-	[button name="sevol,sevol_0" fix="true" target="*vol_se_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[0] y=&tf.config_y_se exp="tf.current_se_vol = 0;"]
-;------------------------------------------------------------------------------------------------------
-; テキスト速度
-;------------------------------------------------------------------------------------------------------
-	[button name="ch,ch_100" fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[1]  y=&tf.config_y_ch exp="tf.set_ch_speed = 100;"]
-	[button name="ch,ch_80"  fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[2]  y=&tf.config_y_ch exp="tf.set_ch_speed =  80;"]
-	[button name="ch,ch_50"  fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[3]  y=&tf.config_y_ch exp="tf.set_ch_speed =  50;"]
-	[button name="ch,ch_40"  fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[4]  y=&tf.config_y_ch exp="tf.set_ch_speed =  40;"]
-	[button name="ch,ch_30"  fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[5]  y=&tf.config_y_ch exp="tf.set_ch_speed =  30;"]
-	[button name="ch,ch_25"  fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[6]  y=&tf.config_y_ch exp="tf.set_ch_speed =  25;"]
-	[button name="ch,ch_20"  fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[7]  y=&tf.config_y_ch exp="tf.set_ch_speed =  20;"]
-	[button name="ch,ch_11"  fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[8]  y=&tf.config_y_ch exp="tf.set_ch_speed =  11;"]
-	[button name="ch,ch_8"   fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[9]  y=&tf.config_y_ch exp="tf.set_ch_speed =   8;"]
-	[button name="ch,ch_5"   fix="true" target="*ch_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[10] y=&tf.config_y_ch exp="tf.set_ch_speed =   5;"]
-;------------------------------------------------------------------------------------------------------
-; オート速度
-;------------------------------------------------------------------------------------------------------
-	[button name="auto,auto_5000" fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[1]  y=&tf.config_y_auto exp="tf.set_auto_speed = 5000;"]
-	[button name="auto,auto_4500" fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[2]  y=&tf.config_y_auto exp="tf.set_auto_speed = 4500;"]
-	[button name="auto,auto_4000" fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[3]  y=&tf.config_y_auto exp="tf.set_auto_speed = 4000;"]
-	[button name="auto,auto_3500" fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[4]  y=&tf.config_y_auto exp="tf.set_auto_speed = 3500;"]
-	[button name="auto,auto_3000" fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[5]  y=&tf.config_y_auto exp="tf.set_auto_speed = 3000;"]
-	[button name="auto,auto_2500" fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[6]  y=&tf.config_y_auto exp="tf.set_auto_speed = 2500;"]
-	[button name="auto,auto_2000" fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[7]  y=&tf.config_y_auto exp="tf.set_auto_speed = 2000;"]
-	[button name="auto,auto_1300" fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[8]  y=&tf.config_y_auto exp="tf.set_auto_speed = 1300;"]
-	[button name="auto,auto_800"  fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[9]  y=&tf.config_y_auto exp="tf.set_auto_speed =  800;"]
-	[button name="auto,auto_500"  fix="true" target="*auto_speed_change" graphic=&tf.btn_path_off width=&tf.btn_w height=&tf.btn_h x=&tf.config_x[10] y=&tf.config_y_auto exp="tf.set_auto_speed =  500;"]
-;------------------------------------------------------------------------------------------------------
-; 未読スキップ
-;------------------------------------------------------------------------------------------------------
-;未読スキップ-OFF
-	[button name="unread_off" fix="true" target="*skip_off" graphic=&tf.btn_path_off width="170" height="45" x="400" y="470"]
-;未読スキップ-ON
-	[button name="unread_on"  fix="true" target="*skip_on"  graphic=&tf.btn_path_off width="170" height="45" x="580" y="470"]
-[s]
-;--------------------------------------------------------------------------------
-; コンフィグモードの終了
-;--------------------------------------------------------------------------------
-*backtitle
+
+; Initialise settings to defaults on first visit
+[eval exp="if sf.bgm_volume == () { sf.bgm_volume = 100; }"]
+[eval exp="if sf.se_volume  == () { sf.se_volume  = 100; }"]
+[eval exp="if sf.text_speed == () { sf.text_speed = 30; }"]
+[eval exp="if sf.auto_speed == () { sf.auto_speed = 2000; }"]
+[eval exp="if sf.skip_unread == () { sf.skip_unread = false; }"]
+
+@bg storage="image/config/bg_config.png" time=100
+@layopt layer=message0 visible=true
+
+; ── Main menu ─────────────────────────────────────────────────────────────────
+
+*config_main
+
 [cm]
-;テキスト速度のサンプル表示に使用していたメッセージレイヤを非表示に
-	[layopt layer="message1" visible="false"]
-;fixボタンをクリア
-	[clearfix]
-;キーコンフィグの有効化
-	[start_keyconfig]
-;コールスタックのクリア
-	[clearstack]
-;ゲーム復帰
-	[awakegame]
-;================================================================================
-; ボタンクリック時の処理
-;================================================================================
-;--------------------------------------------------------------------------------
-; BGM音量
-;--------------------------------------------------------------------------------
-*vol_bgm_change
-[bgmopt volume=&tf.current_bgm_vol]
-[return]
-;--------------------------------------------------------------------------------
-; SE音量
-;--------------------------------------------------------------------------------
-*vol_se_change
-[seopt volume=&tf.current_se_vol]
-[return]
-;---------------------------------------------------------------------------------
-; テキスト速度
-;--------------------------------------------------------------------------------
-*ch_speed_change
-	[iscript]
-	tf.current_ch_speed = tf.set_ch_speed;
-	[endscript]
-	[configdelay speed=&tf.set_ch_speed]
-;テキスト表示速度のサンプルに使用するメッセージレイヤの設定
-	[position layer="message1" left="90" top="580" width="1100" height="100" margint="2" marginl="30" page="fore" visible="true" opacity="0"]
-	[layopt layer="message1" visible="true"]
-	[current layer="message1"]
-;サンプルテキストを表示する
-	[emb exp="tf.text_sample"]
-;待ち時間をテキスト速度とサンプルの文字数に対応
-	[eval exp="tf.text_sample_speed = tf.set_ch_speed * tf.text_sample.len() + 700"]
-	[wait time=&tf.text_sample_speed]
-	[er]
-	[layopt layer="message1" visible="false"]
-[return]
-;--------------------------------------------------------------------------------
-; オート速度
-;--------------------------------------------------------------------------------
-*auto_speed_change
-	[autoconfig speed=&tf.set_auto_speed]
-[return]
-;--------------------------------------------------------------------------------
-; スキップ処理-OFF
-;--------------------------------------------------------------------------------
-*skip_off
-	[iscript]
-	tf.text_skip = "OFF";
-	[endscript]
-	[config_record_label skip="false"]
-[return]
-;--------------------------------------------------------------------------------
-; スキップ処理-ON
-;--------------------------------------------------------------------------------
+── Settings ──[r]
+[r]
+  BGM Volume  :  [emb exp="sf.bgm_volume"]%[r]
+  SE  Volume  :  [emb exp="sf.se_volume"]%[r]
+  Text Speed  :  [emb exp="sf.text_speed"] ms / char[r]
+  Auto Speed  :  [emb exp="sf.auto_speed"] ms[r]
+  Skip Unread :  
+[if exp="sf.skip_unread"]
+ON[r]
+[else]
+OFF[r]
+[endif]
+[p]
+
+What would you like to adjust?[p]
+
+[link target="*conf_bgm"]
+BGM Volume
+[link target="*conf_se"]
+SE Volume
+[link target="*conf_speed"]
+Text Speed
+[link target="*conf_auto"]
+Auto Speed
+[link target="*conf_skip"]
+Skip Mode
+[link target="*exit_config"]
+← Back to Title
+[endlink]
+
+; ── BGM Volume ────────────────────────────────────────────────────────────────
+
+*conf_bgm
+
+[cm]
+BGM Volume: [emb exp="sf.bgm_volume"]%[p]
+
+[link target="*bgm_0"]
+0% — Mute
+[link target="*bgm_30"]
+30% — Low
+[link target="*bgm_60"]
+60% — Medium
+[link target="*bgm_100"]
+100% — Full
+[link target="*config_main"]
+← Back
+[endlink]
+
+*bgm_0
+[eval exp="sf.bgm_volume = 0;"]
+[fadebgm time=500 volume=0.0]
+@jump target="*conf_bgm"
+
+*bgm_30
+[eval exp="sf.bgm_volume = 30;"]
+[fadebgm time=500 volume=0.3]
+@jump target="*conf_bgm"
+
+*bgm_60
+[eval exp="sf.bgm_volume = 60;"]
+[fadebgm time=500 volume=0.6]
+@jump target="*conf_bgm"
+
+*bgm_100
+[eval exp="sf.bgm_volume = 100;"]
+[fadebgm time=500 volume=1.0]
+@jump target="*conf_bgm"
+
+; ── SE Volume ─────────────────────────────────────────────────────────────────
+
+*conf_se
+
+[cm]
+SE Volume: [emb exp="sf.se_volume"]%[p]
+
+[link target="*se_0"]
+0% — Mute
+[link target="*se_30"]
+30% — Low
+[link target="*se_60"]
+60% — Medium
+[link target="*se_100"]
+100% — Full
+[link target="*config_main"]
+← Back
+[endlink]
+
+*se_0
+[eval exp="sf.se_volume = 0;"]
+@jump target="*conf_se"
+
+*se_30
+[eval exp="sf.se_volume = 30;"]
+@jump target="*conf_se"
+
+*se_60
+[eval exp="sf.se_volume = 60;"]
+@jump target="*conf_se"
+
+*se_100
+[eval exp="sf.se_volume = 100;"]
+@jump target="*conf_se"
+
+; ── Text Speed ────────────────────────────────────────────────────────────────
+
+*conf_speed
+
+[cm]
+Text Speed: [emb exp="sf.text_speed"] ms / char  (lower = faster)[p]
+
+[link target="*speed_slow"]
+Slow   (80 ms)
+[link target="*speed_normal"]
+Normal (30 ms)
+[link target="*speed_fast"]
+Fast   (10 ms)
+[link target="*speed_instant"]
+Instant (0 ms)
+[link target="*config_main"]
+← Back
+[endlink]
+
+*speed_slow
+[eval exp="sf.text_speed = 80;"]
+[configdelay speed=80]
+[cm]
+Sample text at this speed: The quick brown fox jumps over the lazy dog.
+[wait time=4000 canskip=true]
+[cm]
+@jump target="*conf_speed"
+
+*speed_normal
+[eval exp="sf.text_speed = 30;"]
+[configdelay speed=30]
+[cm]
+Sample text at this speed: The quick brown fox jumps over the lazy dog.
+[wait time=2000 canskip=true]
+[cm]
+@jump target="*conf_speed"
+
+*speed_fast
+[eval exp="sf.text_speed = 10;"]
+[configdelay speed=10]
+[cm]
+Sample text at this speed: The quick brown fox jumps over the lazy dog.
+[wait time=1000 canskip=true]
+[cm]
+@jump target="*conf_speed"
+
+*speed_instant
+[eval exp="sf.text_speed = 0;"]
+[configdelay speed=0]
+[cm]
+Sample text at this speed: The quick brown fox jumps over the lazy dog.
+[wait time=500 canskip=true]
+[cm]
+@jump target="*conf_speed"
+
+; ── Auto Speed ───────────────────────────────────────────────────────────────
+
+*conf_auto
+
+[cm]
+Auto Speed: [emb exp="sf.auto_speed"] ms  (time to wait after each page in auto mode)[p]
+
+[link target="*auto_slow"]
+Slow   (5000 ms)
+[link target="*auto_normal"]
+Normal (2000 ms)
+[link target="*auto_fast"]
+Fast   (800 ms)
+[link target="*config_main"]
+← Back
+[endlink]
+
+*auto_slow
+[eval exp="sf.auto_speed = 5000;"]
+@jump target="*conf_auto"
+
+*auto_normal
+[eval exp="sf.auto_speed = 2000;"]
+@jump target="*conf_auto"
+
+*auto_fast
+[eval exp="sf.auto_speed = 800;"]
+@jump target="*conf_auto"
+
+; ── Skip Mode ─────────────────────────────────────────────────────────────────
+
+*conf_skip
+
+[cm]
+Skip Unread:
+[if exp="sf.skip_unread"]
+ON
+[else]
+OFF
+[endif]
+[p]
+
+When ON  — skip mode advances through text you have not read before.[r]
+When OFF — skip mode only advances through already-seen text.[r]
+[p]
+
+[link target="*skip_on"]
+Turn ON
+[link target="*skip_off"]
+Turn OFF
+[link target="*config_main"]
+← Back
+[endlink]
+
 *skip_on
-	[iscript]
-	tf.text_skip = "ON";
-	[endscript]
-	[config_record_label skip="true"]
-[return]
+[eval exp="sf.skip_unread = true;"]
+@jump target="*conf_skip"
+
+*skip_off
+[eval exp="sf.skip_unread = false;"]
+@jump target="*conf_skip"
+
+; ── Exit ──────────────────────────────────────────────────────────────────────
+
+*exit_config
+[cm]
+[clearstack]
+@jump storage="title.ks"

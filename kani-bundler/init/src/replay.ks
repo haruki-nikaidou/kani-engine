@@ -1,84 +1,47 @@
-;=========================================
-; 回想モード　画面作成
-;=========================================
+; Replay (Recollection) mode screen.
+;
+; Porting notes vs. TyranoScript / replay.ks:
+;   [iscript]...[endscript]              →  [eval exp="<rhai>"]
+;   [button graphic=... x=... y=...]     →  [link] text choices
+;   sf.replay_view[name] = {storage, target}  →  sf.replay_<id> boolean + hardcoded storage/target
+;   replay_image_button macro            →  inline [if] / [link] per entry
+;   tf.flag_replay controlled by iscript →  [eval exp="tf.flag_replay = true;"]
+;   [awakegame] / sleepgame system       →  not used; [endreplay] macro in tyrano.ks handles return
+;
+; To add a new replayable scene:
+;   1. In your scenario, write:  [eval exp="sf.replay_myscene = true;"]
+;   2. Mark the entry label with *replay_start (or any chosen label).
+;   3. Put [endreplay] at the end of the replayable block.
+;   4. Add a [if] / [link] / *play block below (follow the pattern for *play_demo).
+
 *start
-@layopt layer=message0 visible=false
-@clearfix
-[hidemenubutton]
+
 [cm]
+@layopt layer=message0 visible=true
+@bg storage="bgimage/title.jpg" time=100
 
+*replay_menu
 
-[bg storage="../../tyrano/images/system/bg_base.png" time=100]
-[layopt layer=1 visible=true]
-
-[image name="label_replay" layer=1 left=0 top=0 storage="config/label_recollection.png" folder="image" ]
-
-[iscript]
-    
-    tf.page = 0;
-    tf.selected_replay_obj = ""; //選択されたリプレイを一時的に保管
-    
-[endscript]
-
-
-
-*replaypage
 [cm]
-[button graphic="config/menu_button_close.png" enterimg="config/menu_button_close2.png"  target="*backtitle" x=1150 y=40 ]
+── Replay ──[r]
+[r]
+[if exp="sf.replay_demo == true"]
+Select a scene to replay:[r]
+[r]
+[link target="*play_demo"]
+○  Demo Scene
+[link storage="title.ks"]
+← Back to Title
+[endlink]
+[else]
+No scenes have been unlocked yet.[r]
+Play through the game to unlock replay scenes.[p]
+@jump storage="title.ks"
+[endif]
 
-[iscript]
-	tf.target_page = "page_" + tf.page.to_string();
-[endscript]
+; ── Scene launchers ───────────────────────────────────────────────────────────
 
-*replayview
+*play_demo
 
-@jump target=&tf.target_page
-
-*page_0
-[replay_image_button name="replay1" graphic="cat.jpg" no_graphic="../../tyrano/images/system/noimage.png" x=60 y=130 width=160 height=140 folder="bgimage" ]
-[replay_image_button name="replay2" graphic="toile.jpg" no_graphic="../../tyrano/images/system/noimage.png" x=260 y=130 width=160 height=140 folder="bgimage" ]
-
-
-@jump target ="*common"
-
-
-*common
-
-[s]
-
-*backtitle
-[cm]
-[freeimage layer=1]
-
-[iscript]
-tf.flag_replay = false;
-[endscript]
-
-@jump storage=title.ks
-
-*nextpage
-[eval exp="tf.page += 1;"]
-@jump target="*replaypage"
-
-
-*backpage
-[eval exp="tf.page -= 1;"]
-@jump target="*replaypage"
-
-*clickcg
-[cm]
-
-[iscript]
-    tf.flag_replay = true;
-[endscript]
-
-[free layer=1 name="label_replay"]
-
-@jump storage=&tf.selected_replay_obj.storage target=&tf.selected_replay_obj.target
-[s]
-
-*no_image
-
-@jump  target=*replaypage
-
-
+[eval exp="tf.flag_replay = true;"]
+@jump storage="scene1.ks" target="*replay_start"
