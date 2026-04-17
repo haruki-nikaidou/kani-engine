@@ -8,31 +8,11 @@
 use bevy::prelude::*;
 use kag_interpreter::ResolvedTag;
 
-use crate::events::{
-    EvBacklay, EvDrawGraph, EvFreeFilter, EvFreeLayer, EvLocateCursor, EvPositionFilter,
-    EvRemoveMask, EvResetLayerMode, EvSetBackground, EvSetCurrentLayer, EvSetFilter,
-    EvSetImageLayer, EvSetLayerMode, EvSetLayerOpt, EvSetLayerPosition, EvSetMask, EvTagRouted,
-};
+use crate::events::{EvLayerTag, EvTagRouted};
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_image_tags(
     mut reader: MessageReader<EvTagRouted>,
-    mut ev_bg: MessageWriter<EvSetBackground>,
-    mut ev_image: MessageWriter<EvSetImageLayer>,
-    mut ev_layopt: MessageWriter<EvSetLayerOpt>,
-    mut ev_free: MessageWriter<EvFreeLayer>,
-    mut ev_pos: MessageWriter<EvSetLayerPosition>,
-    mut ev_backlay: MessageWriter<EvBacklay>,
-    mut ev_current: MessageWriter<EvSetCurrentLayer>,
-    mut ev_locate: MessageWriter<EvLocateCursor>,
-    mut ev_layermode: MessageWriter<EvSetLayerMode>,
-    mut ev_reset_layermode: MessageWriter<EvResetLayerMode>,
-    mut ev_filter: MessageWriter<EvSetFilter>,
-    mut ev_free_filter: MessageWriter<EvFreeFilter>,
-    mut ev_pos_filter: MessageWriter<EvPositionFilter>,
-    mut ev_mask: MessageWriter<EvSetMask>,
-    mut ev_remove_mask: MessageWriter<EvRemoveMask>,
-    mut ev_graph: MessageWriter<EvDrawGraph>,
+    mut ev: MessageWriter<EvLayerTag>,
 ) {
     for tag in reader.read() {
         match tag.0.clone() {
@@ -41,11 +21,7 @@ pub fn handle_image_tags(
                 time,
                 method,
             } => {
-                ev_bg.write(EvSetBackground {
-                    storage,
-                    time,
-                    method,
-                });
+                ev.write(EvLayerTag::SetBackground { storage, time, method });
             }
             ResolvedTag::Image {
                 storage: Some(storage),
@@ -54,83 +30,57 @@ pub fn handle_image_tags(
                 y,
                 visible,
             } => {
-                ev_image.write(EvSetImageLayer {
-                    storage,
-                    layer,
-                    x,
-                    y,
-                    visible,
-                });
+                ev.write(EvLayerTag::SetImageLayer { storage, layer, x, y, visible });
             }
             ResolvedTag::Layopt {
                 layer: Some(layer),
                 visible,
                 opacity,
             } => {
-                ev_layopt.write(EvSetLayerOpt {
-                    layer,
-                    visible,
-                    opacity,
-                });
+                ev.write(EvLayerTag::SetLayerOpt { layer, visible, opacity });
             }
             ResolvedTag::Free { layer: Some(layer) } => {
-                ev_free.write(EvFreeLayer { layer });
+                ev.write(EvLayerTag::FreeLayer { layer });
             }
             ResolvedTag::Position {
                 layer: Some(layer),
                 x,
                 y,
             } => {
-                ev_pos.write(EvSetLayerPosition { layer, x, y });
+                ev.write(EvLayerTag::SetLayerPosition { layer, x, y });
             }
             ResolvedTag::Backlay => {
-                ev_backlay.write(EvBacklay);
+                ev.write(EvLayerTag::Backlay);
             }
             ResolvedTag::Current { layer } => {
-                ev_current.write(EvSetCurrentLayer { layer });
+                ev.write(EvLayerTag::SetCurrentLayer { layer });
             }
             ResolvedTag::Locate { x, y } => {
-                ev_locate.write(EvLocateCursor { x, y });
+                ev.write(EvLayerTag::LocateCursor { x, y });
             }
             ResolvedTag::Layermode { layer, mode } => {
-                ev_layermode.write(EvSetLayerMode { layer, mode });
+                ev.write(EvLayerTag::SetLayerMode { layer, mode });
             }
             ResolvedTag::FreeLayermode { layer } => {
-                ev_reset_layermode.write(EvResetLayerMode { layer });
+                ev.write(EvLayerTag::ResetLayerMode { layer });
             }
             ResolvedTag::Filter { layer, filter_type } => {
-                ev_filter.write(EvSetFilter { layer, filter_type });
+                ev.write(EvLayerTag::SetFilter { layer, filter_type });
             }
             ResolvedTag::FreeFilter { layer } => {
-                ev_free_filter.write(EvFreeFilter { layer });
+                ev.write(EvLayerTag::FreeFilter { layer });
             }
             ResolvedTag::PositionFilter { layer, x, y } => {
-                ev_pos_filter.write(EvPositionFilter { layer, x, y });
+                ev.write(EvLayerTag::PositionFilter { layer, x, y });
             }
             ResolvedTag::Mask { layer, storage } => {
-                ev_mask.write(EvSetMask { layer, storage });
+                ev.write(EvLayerTag::SetMask { layer, storage });
             }
             ResolvedTag::MaskOff { layer } => {
-                ev_remove_mask.write(EvRemoveMask { layer });
+                ev.write(EvLayerTag::RemoveMask { layer });
             }
-            ResolvedTag::Graph {
-                layer,
-                shape,
-                x,
-                y,
-                width,
-                height,
-                color,
-            } => {
-                ev_graph.write(EvDrawGraph {
-                    layer,
-                    shape,
-                    x,
-                    y,
-                    width,
-                    height,
-                    color,
-                });
+            ResolvedTag::Graph { layer, shape, x, y, width, height, color } => {
+                ev.write(EvLayerTag::DrawGraph { layer, shape, x, y, width, height, color });
             }
             _ => {}
         }

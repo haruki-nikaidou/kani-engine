@@ -51,8 +51,10 @@ pub enum EvCallback {
         join: bool,
     },
     Snapshot(Box<InterpreterSnapshot>),
-    TagRouted(ResolvedTag),
 }
+
+#[derive(Message, Debug, Clone)]
+pub struct EvTagRouted(pub ResolvedTag);
 
 // ─── 2a. Image / layer tag actions ───────────────────────────────────────────
 
@@ -154,10 +156,7 @@ pub enum EvAudioTag {
     /// Stop a sound-effect buffer (`[stopse]`).
     StopSe { buf: Option<u32> },
     /// Play a voice clip (`[vo]` / `[voice]`).
-    PlayVoice {
-        storage: String,
-        buf: Option<u32>,
-    },
+    PlayVoice { storage: String, buf: Option<u32> },
     /// Fade BGM to a target volume over time (`[fadebgm]`).
     FadeBgm {
         time: Option<u64>,
@@ -168,10 +167,7 @@ pub enum EvAudioTag {
     /// Resume paused BGM from the saved seek (`[resumebgm]`).
     ResumeBgm { buf: Option<u32> },
     /// Cross-fade to a new BGM track (`[xchgbgm]`).
-    CrossFadeBgm {
-        storage: String,
-        time: Option<u64>,
-    },
+    CrossFadeBgm { storage: String, time: Option<u64> },
     /// Change options on the currently-playing BGM (`[bgmopt]`).
     SetBgmOpt {
         looping: Option<bool>,
