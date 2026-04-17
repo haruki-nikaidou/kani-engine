@@ -1,46 +1,41 @@
-//! Video/movie tag handlers (`[bgmovie]`, `[stop_bgmovie]`, `[movie]`).
+//! Video/movie tag handlers.
 
 use bevy::prelude::*;
 use kag_interpreter::ResolvedTag;
 
-use crate::events::{EvTagRouted, EvVideoTag};
+use crate::events::EvVideoTag;
 
-pub fn handle_video_tags(
-    mut reader: MessageReader<EvTagRouted>,
-    mut ev: MessageWriter<EvVideoTag>,
-) {
-    for tag in reader.read() {
-        match tag.0.clone() {
-            ResolvedTag::Bgmovie {
-                storage: Some(storage),
+pub fn dispatch(resolved: ResolvedTag, ev: &mut MessageWriter<EvVideoTag>) {
+    match resolved {
+        ResolvedTag::Bgmovie {
+            storage: Some(storage),
+            looping,
+            volume,
+        } => {
+            ev.write(EvVideoTag::PlayBgMovie {
+                storage,
                 looping,
                 volume,
-            } => {
-                ev.write(EvVideoTag::PlayBgMovie {
-                    storage,
-                    looping,
-                    volume,
-                });
-            }
-            ResolvedTag::StopBgmovie => {
-                ev.write(EvVideoTag::StopBgMovie);
-            }
-            ResolvedTag::Movie {
-                storage: Some(storage),
+            });
+        }
+        ResolvedTag::StopBgmovie => {
+            ev.write(EvVideoTag::StopBgMovie);
+        }
+        ResolvedTag::Movie {
+            storage: Some(storage),
+            x,
+            y,
+            width,
+            height,
+        } => {
+            ev.write(EvVideoTag::PlayMovie {
+                storage,
                 x,
                 y,
                 width,
                 height,
-            } => {
-                ev.write(EvVideoTag::PlayMovie {
-                    storage,
-                    x,
-                    y,
-                    width,
-                    height,
-                });
-            }
-            _ => {}
+            });
         }
+        _ => {}
     }
 }

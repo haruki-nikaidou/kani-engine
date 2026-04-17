@@ -7,88 +7,83 @@
 use bevy::prelude::*;
 use kag_interpreter::ResolvedTag;
 
-use crate::events::{EvCharacterTag, EvTagRouted};
+use crate::events::EvCharacterTag;
 
-pub fn handle_chara_tags(
-    mut reader: MessageReader<EvTagRouted>,
-    mut ev: MessageWriter<EvCharacterTag>,
-) {
-    for tag in reader.read() {
-        match tag.0.clone() {
-            ResolvedTag::CharaShow {
+pub fn dispatch(resolved: ResolvedTag, ev: &mut MessageWriter<EvCharacterTag>) {
+    match resolved {
+        ResolvedTag::CharaShow {
+            name,
+            storage,
+            x,
+            y,
+            time,
+            method,
+        } => {
+            ev.write(EvCharacterTag::ShowCharacter {
                 name,
                 storage,
                 x,
                 y,
                 time,
                 method,
-            } => {
-                ev.write(EvCharacterTag::ShowCharacter {
-                    name,
-                    storage,
-                    x,
-                    y,
-                    time,
-                    method,
-                });
-            }
-            ResolvedTag::CharaHide { name, time, method } => {
-                ev.write(EvCharacterTag::HideCharacter { name, time, method });
-            }
-            ResolvedTag::CharaHideAll { time, method } => {
-                ev.write(EvCharacterTag::HideAllCharacters { time, method });
-            }
-            ResolvedTag::CharaFree { name } => {
-                ev.write(EvCharacterTag::FreeCharacter { name });
-            }
-            ResolvedTag::CharaDelete { name } => {
-                ev.write(EvCharacterTag::DeleteCharacter { name });
-            }
-            ResolvedTag::CharaMod {
+            });
+        }
+        ResolvedTag::CharaHide { name, time, method } => {
+            ev.write(EvCharacterTag::HideCharacter { name, time, method });
+        }
+        ResolvedTag::CharaHideAll { time, method } => {
+            ev.write(EvCharacterTag::HideAllCharacters { time, method });
+        }
+        ResolvedTag::CharaFree { name } => {
+            ev.write(EvCharacterTag::FreeCharacter { name });
+        }
+        ResolvedTag::CharaDelete { name } => {
+            ev.write(EvCharacterTag::DeleteCharacter { name });
+        }
+        ResolvedTag::CharaMod {
+            name,
+            storage,
+            face,
+            pose,
+        } => {
+            ev.write(EvCharacterTag::ModCharacter {
                 name,
                 storage,
                 face,
                 pose,
-            } => {
-                ev.write(EvCharacterTag::ModCharacter {
-                    name,
-                    storage,
-                    face,
-                    pose,
-                });
-            }
-            ResolvedTag::CharaMove { name, x, y, time } => {
-                ev.write(EvCharacterTag::MoveCharacter { name, x, y, time });
-            }
-            ResolvedTag::CharaLayer { name, layer } => {
-                ev.write(EvCharacterTag::SetCharacterLayer { name, layer });
-            }
-            ResolvedTag::CharaLayerMod {
+            });
+        }
+        ResolvedTag::CharaMove { name, x, y, time } => {
+            ev.write(EvCharacterTag::MoveCharacter { name, x, y, time });
+        }
+        ResolvedTag::CharaLayer { name, layer } => {
+            ev.write(EvCharacterTag::SetCharacterLayer { name, layer });
+        }
+        ResolvedTag::CharaLayerMod {
+            name,
+            opacity,
+            visible,
+        } => {
+            ev.write(EvCharacterTag::ModCharacterLayer {
                 name,
                 opacity,
                 visible,
-            } => {
-                ev.write(EvCharacterTag::ModCharacterLayer {
-                    name,
-                    opacity,
-                    visible,
-                });
-            }
-            ResolvedTag::CharaPart {
+            });
+        }
+        ResolvedTag::CharaPart {
+            name,
+            part,
+            storage,
+        } => {
+            ev.write(EvCharacterTag::SetCharacterPart {
                 name,
                 part,
                 storage,
-            } => {
-                ev.write(EvCharacterTag::SetCharacterPart {
-                    name,
-                    part,
-                    storage,
-                });
-            }
-            ResolvedTag::CharaPartReset { name } => {
-                ev.write(EvCharacterTag::ResetCharacterParts { name });
-            }
-            _ => {}
+            });
         }
+        ResolvedTag::CharaPartReset { name } => {
+            ev.write(EvCharacterTag::ResetCharacterParts { name });
+        }
+        _ => {}
     }
 }

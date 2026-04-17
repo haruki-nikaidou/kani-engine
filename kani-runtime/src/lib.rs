@@ -41,12 +41,7 @@ use bevy::prelude::*;
 
 use systems::input::{handle_click_input, handle_timer, handle_ui_inputs};
 use systems::poll::poll_interpreter;
-use systems::tags::{
-    animation::handle_animation_tags, audio::handle_audio_tags, chara::handle_chara_tags,
-    effect::handle_effect_tags, image::handle_image_tags, message::handle_message_tags,
-    misc::handle_misc_tags, transition::handle_transition_tags, ui::handle_ui_tags,
-    video::handle_video_tags,
-};
+use systems::tags::dispatch_tags;
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────
 
@@ -79,6 +74,8 @@ impl Plugin for KaniRuntimePlugin {
         app
             // core interpreter → Bevy
             .add_message::<events::EvInterpreterCall>()
+            // tag routing (interpreter → dispatch)
+            .add_message::<events::EvTagRouted>()
             // image / layer
             .add_message::<events::EvLayerTag>()
             // audio
@@ -107,26 +104,14 @@ impl Plugin for KaniRuntimePlugin {
         // 4. Add systems
         //
         // Order:
-        //   poll_interpreter  – drains channel, emits EvCallback variants
-        //   tag handlers      – read EvCallback::TagRouted, dispatch typed action events
+        //   poll_interpreter  – drains channel, emits EvInterpreterCall + EvTagRouted
+        //   dispatch_tags     – reads EvTagRouted, emits typed action events
         //   input systems     – translate Bevy input / EvHostInput → HostEvent
         app.add_systems(
             Update,
             (
                 poll_interpreter,
-                (
-                    handle_image_tags,
-                    handle_audio_tags,
-                    handle_animation_tags,
-                    handle_video_tags,
-                    handle_transition_tags,
-                    handle_effect_tags,
-                    handle_message_tags,
-                    handle_chara_tags,
-                    handle_ui_tags,
-                    handle_misc_tags,
-                )
-                    .after(poll_interpreter),
+                dispatch_tags.after(poll_interpreter),
                 (handle_click_input, handle_timer, handle_ui_inputs).after(poll_interpreter),
             ),
         );
