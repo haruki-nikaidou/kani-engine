@@ -32,8 +32,7 @@ use systems::input::{handle_click_input, handle_completion, handle_timer, handle
 use systems::poll::poll_interpreter;
 use systems::tags::{
     audio::handle_audio_tags, chara::handle_chara_tags, effect::handle_effect_tags,
-    emit_unknown_tags, image::handle_image_tags, message::handle_message_tags,
-    transition::handle_transition_tags,
+    image::handle_image_tags, message::handle_message_tags, transition::handle_transition_tags,
 };
 
 // ─── Plugin ───────────────────────────────────────────────────────────────────
@@ -74,10 +73,8 @@ impl Plugin for KaniRuntimePlugin {
             .add_message::<events::EvEmbedText>()
             .add_message::<events::EvPushBacklog>()
             .add_message::<events::EvSnapshot>()
-            // internal tag routing
+            // internal tag routing (ResolvedTag variants; game code matches Extension)
             .add_message::<events::EvTagRouted>()
-            // public unknown-tag escape hatch
-            .add_message::<events::EvUnknownTag>()
             // image
             .add_message::<events::EvSetBackground>()
             .add_message::<events::EvSetImageLayer>()
@@ -120,10 +117,9 @@ impl Plugin for KaniRuntimePlugin {
         // 4. Add systems
         //
         // Order:
-        //   poll_interpreter          – drains channel, emits EvTagRouted
-        //   tag handlers              – read EvTagRouted, emit typed action events
-        //   emit_unknown_tags         – turns unrecognised EvTagRouted into EvUnknownTag
-        //   input systems             – translate Bevy input → HostEvent
+        //   poll_interpreter  – drains channel, emits EvTagRouted(ResolvedTag)
+        //   tag handlers      – read EvTagRouted, dispatch typed action events
+        //   input systems     – translate Bevy input → HostEvent
         app.add_systems(
             Update,
             (
@@ -135,7 +131,6 @@ impl Plugin for KaniRuntimePlugin {
                     handle_effect_tags,
                     handle_message_tags,
                     handle_chara_tags,
-                    emit_unknown_tags,
                 )
                     .after(poll_interpreter),
                 (

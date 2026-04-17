@@ -81,8 +81,8 @@ pub fn poll_interpreter(
             KagEvent::Stop => {
                 bridge.state = BridgeState::Stopped;
             }
-            KagEvent::WaitForCompletion { tag, params } => {
-                bridge.state = BridgeState::WaitingCompletion { tag, params };
+            KagEvent::WaitForCompletion { which, canskip, buf } => {
+                bridge.state = BridgeState::WaitingCompletion { which, canskip, buf };
             }
             KagEvent::WaitForRawClick => {
                 bridge.state = BridgeState::WaitingClick { clear_after: false };
@@ -143,8 +143,8 @@ pub fn poll_interpreter(
             }
 
             // ── Passthrough tags ──────────────────────────────────────────────
-            KagEvent::Tag { name, params } => {
-                ev_tag.write(EvTagRouted { name, params });
+            KagEvent::Tag(resolved_tag) => {
+                ev_tag.write(EvTagRouted(resolved_tag));
             }
 
             // ── Lifecycle ─────────────────────────────────────────────────────

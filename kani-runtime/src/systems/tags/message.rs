@@ -3,8 +3,8 @@
 //! `[nowrap]`, `[endnowrap]`).
 
 use bevy::prelude::*;
+use kag_interpreter::ResolvedTag;
 
-use super::{param, param_bool, param_f32};
 use crate::events::{
     EvMessageWindow, EvResetFont, EvSetFont, EvSetNowrap, EvSetRuby, EvTagRouted, EvWindowControl,
 };
@@ -19,70 +19,48 @@ pub fn handle_message_tags(
     mut ev_nowrap: MessageWriter<EvSetNowrap>,
 ) {
     for tag in reader.read() {
-        let p = &tag.params;
-        match tag.name.as_str() {
-            "msgwnd" => {
-                ev_msgwnd.write(EvMessageWindow {
-                    visible: param_bool(p, "visible"),
-                    layer: param(p, "layer"),
-                });
+        match tag.0.clone() {
+            ResolvedTag::Msgwnd { visible, layer } => {
+                ev_msgwnd.write(EvMessageWindow { visible, layer });
             }
-            "wndctrl" => {
-                ev_wndctrl.write(EvWindowControl {
-                    x: param_f32(p, "x"),
-                    y: param_f32(p, "y"),
-                    width: param_f32(p, "width"),
-                    height: param_f32(p, "height"),
-                });
+            ResolvedTag::Wndctrl { x, y, width, height } => {
+                ev_wndctrl.write(EvWindowControl { x, y, width, height });
             }
-            "resetfont" => {
+            ResolvedTag::Resetfont => {
                 ev_resetfont.write(EvResetFont);
             }
-            "font" => {
-                ev_font.write(EvSetFont {
-                    face: param(p, "face"),
-                    size: param_f32(p, "size"),
-                    bold: param_bool(p, "bold"),
-                    italic: param_bool(p, "italic"),
-                });
+            ResolvedTag::Font { face, size, bold, italic } => {
+                ev_font.write(EvSetFont { face, size, bold, italic });
             }
-            "size" => {
+            ResolvedTag::Size { value } => {
                 ev_font.write(EvSetFont {
                     face: None,
-                    size: param_f32(p, "size").or_else(|| {
-                        // `[size value=…]` variant used in some KAG dialects
-                        param_f32(p, "value")
-                    }),
+                    size: value,
                     bold: None,
                     italic: None,
                 });
             }
-            "bold" => {
+            ResolvedTag::Bold { value } => {
                 ev_font.write(EvSetFont {
                     face: None,
                     size: None,
-                    bold: Some(param_bool(p, "enabled").unwrap_or(true)),
+                    bold: Some(value.unwrap_or(true)),
                     italic: None,
                 });
             }
-            "italic" => {
+            ResolvedTag::Italic { value } => {
                 ev_font.write(EvSetFont {
                     face: None,
                     size: None,
                     bold: None,
-                    italic: Some(param_bool(p, "enabled").unwrap_or(true)),
+                    italic: Some(value.unwrap_or(true)),
                 });
             }
-            "ruby" => {
-                ev_ruby.write(EvSetRuby {
-                    text: param(p, "text"),
-                });
+            ResolvedTag::Ruby { text } => {
+                ev_ruby.write(EvSetRuby { text });
             }
-            "nowrap" => {
-                ev_nowrap.write(EvSetNowrap { enabled: true });
-            }
-            "endnowrap" => {
-                ev_nowrap.write(EvSetNowrap { enabled: false });
+            ResolvedTag::Nowrap { enabled } => {
+                ev_nowrap.write(EvSetNowrap { enabled });
             }
             _ => {}
         }

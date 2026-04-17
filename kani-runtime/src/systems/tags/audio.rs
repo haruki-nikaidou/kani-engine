@@ -2,8 +2,8 @@
 //! `[vo]`/`[voice]`, `[fadebgm]`).
 
 use bevy::prelude::*;
+use kag_interpreter::ResolvedTag;
 
-use super::{param, param_bool, param_f32, param_u32, param_u64};
 use crate::events::{
     EvFadeBgm, EvPlayBgm, EvPlaySe, EvPlayVoice, EvStopBgm, EvStopSe, EvTagRouted,
 };
@@ -18,51 +18,40 @@ pub fn handle_audio_tags(
     mut ev_fade: MessageWriter<EvFadeBgm>,
 ) {
     for tag in reader.read() {
-        let p = &tag.params;
-        match tag.name.as_str() {
-            "bgm" => {
-                if let Some(storage) = param(p, "storage") {
+        match tag.0.clone() {
+            ResolvedTag::Bgm { storage, looping, volume, fadetime } => {
+                if let Some(storage) = storage {
                     ev_bgm.write(EvPlayBgm {
                         storage,
-                        looping: param_bool(p, "loop").unwrap_or(true),
-                        volume: param_f32(p, "volume"),
-                        fadetime: param_u64(p, "fadetime"),
+                        looping,
+                        volume,
+                        fadetime,
                     });
                 }
             }
-            "stopbgm" => {
-                ev_stop_bgm.write(EvStopBgm {
-                    fadetime: param_u64(p, "fadetime"),
-                });
+            ResolvedTag::Stopbgm { fadetime } => {
+                ev_stop_bgm.write(EvStopBgm { fadetime });
             }
-            "se" | "playSe" => {
-                if let Some(storage) = param(p, "storage") {
+            ResolvedTag::Se { storage, buf, volume, looping } => {
+                if let Some(storage) = storage {
                     ev_se.write(EvPlaySe {
                         storage,
-                        buf: param_u32(p, "buf"),
-                        volume: param_f32(p, "volume"),
-                        looping: param_bool(p, "loop").unwrap_or(false),
+                        buf,
+                        volume,
+                        looping,
                     });
                 }
             }
-            "stopse" => {
-                ev_stop_se.write(EvStopSe {
-                    buf: param_u32(p, "buf"),
-                });
+            ResolvedTag::Stopse { buf } => {
+                ev_stop_se.write(EvStopSe { buf });
             }
-            "vo" | "voice" => {
-                if let Some(storage) = param(p, "storage") {
-                    ev_voice.write(EvPlayVoice {
-                        storage,
-                        buf: param_u32(p, "buf"),
-                    });
+            ResolvedTag::Vo { storage, buf } => {
+                if let Some(storage) = storage {
+                    ev_voice.write(EvPlayVoice { storage, buf });
                 }
             }
-            "fadebgm" => {
-                ev_fade.write(EvFadeBgm {
-                    time: param_u64(p, "time"),
-                    volume: param_f32(p, "volume"),
-                });
+            ResolvedTag::Fadebgm { time, volume } => {
+                ev_fade.write(EvFadeBgm { time, volume });
             }
             _ => {}
         }

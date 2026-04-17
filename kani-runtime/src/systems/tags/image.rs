@@ -2,8 +2,8 @@
 //! `[free]`, `[position]`).
 
 use bevy::prelude::*;
+use kag_interpreter::ResolvedTag;
 
-use super::{param, param_bool, param_f32, param_u64};
 use crate::events::{
     EvFreeLayer, EvSetBackground, EvSetImageLayer, EvSetLayerOpt, EvSetLayerPosition, EvTagRouted,
 };
@@ -17,49 +17,30 @@ pub fn handle_image_tags(
     mut ev_pos: MessageWriter<EvSetLayerPosition>,
 ) {
     for tag in reader.read() {
-        let p = &tag.params;
-        match tag.name.as_str() {
-            "bg" => {
-                if let Some(storage) = param(p, "storage") {
-                    ev_bg.write(EvSetBackground {
-                        storage,
-                        time: param_u64(p, "time"),
-                        method: param(p, "method"),
-                    });
+        match tag.0.clone() {
+            ResolvedTag::Bg { storage, time, method } => {
+                if let Some(storage) = storage {
+                    ev_bg.write(EvSetBackground { storage, time, method });
                 }
             }
-            "image" => {
-                if let Some(storage) = param(p, "storage") {
-                    ev_image.write(EvSetImageLayer {
-                        storage,
-                        layer: param(p, "layer"),
-                        x: param_f32(p, "x"),
-                        y: param_f32(p, "y"),
-                        visible: param_bool(p, "visible"),
-                    });
+            ResolvedTag::Image { storage, layer, x, y, visible } => {
+                if let Some(storage) = storage {
+                    ev_image.write(EvSetImageLayer { storage, layer, x, y, visible });
                 }
             }
-            "layopt" => {
-                if let Some(layer) = param(p, "layer") {
-                    ev_layopt.write(EvSetLayerOpt {
-                        layer,
-                        visible: param_bool(p, "visible"),
-                        opacity: param_f32(p, "opacity"),
-                    });
+            ResolvedTag::Layopt { layer, visible, opacity } => {
+                if let Some(layer) = layer {
+                    ev_layopt.write(EvSetLayerOpt { layer, visible, opacity });
                 }
             }
-            "free" => {
-                if let Some(layer) = param(p, "layer") {
+            ResolvedTag::Free { layer } => {
+                if let Some(layer) = layer {
                     ev_free.write(EvFreeLayer { layer });
                 }
             }
-            "position" => {
-                if let Some(layer) = param(p, "layer") {
-                    ev_pos.write(EvSetLayerPosition {
-                        layer,
-                        x: param_f32(p, "x"),
-                        y: param_f32(p, "y"),
-                    });
+            ResolvedTag::Position { layer, x, y } => {
+                if let Some(layer) = layer {
+                    ev_pos.write(EvSetLayerPosition { layer, x, y });
                 }
             }
             _ => {}

@@ -702,14 +702,16 @@ async fn run_interpreter(
 
                 // ── WaitForCompletion (wa/wm/wt/wq/wb/wf/wl/ws/wv/wp) ─────
                 KagEvent::WaitForCompletion {
-                    ref tag,
-                    ref params,
+                    which,
+                    canskip,
+                    buf,
                 } => {
-                    let canskip = params.iter().any(|(k, v)| k == "canskip" && v != "false");
+                    let canskip_flag = canskip.unwrap_or(false);
                     let _ = event_tx
                         .send(KagEvent::WaitForCompletion {
-                            tag: tag.clone(),
-                            params: params.clone(),
+                            which,
+                            canskip,
+                            buf,
                         })
                         .await;
                     loop {
@@ -718,7 +720,7 @@ async fn run_interpreter(
                                 if let Some(event) = try_side_band(&mut ctx, event) {
                                     match event {
                                         HostEvent::CompletionSignal => break,
-                                        HostEvent::Clicked if canskip => break,
+                                        HostEvent::Clicked if canskip_flag => break,
                                         HostEvent::TakeSnapshot => {
                                             emit_snapshot(&ctx, &event_tx).await;
                                         }

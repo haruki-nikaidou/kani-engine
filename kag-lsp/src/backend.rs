@@ -135,8 +135,8 @@ impl LanguageServer for Backend {
             .store
             .with(uri, |doc| {
                 let offset = position_to_offset(&doc.source, pos);
-                let (in_value, key) = param_context(&doc.source, offset);
-                completion::completions(doc, in_value, key.as_deref())
+                let (in_value, key, tag) = param_context(&doc.source, offset);
+                completion::completions(doc, in_value, key.as_deref(), tag.as_deref())
             })
             .unwrap_or_default();
 
@@ -214,7 +214,7 @@ impl LanguageServer for Backend {
 /// The search is bounded to the innermost open tag so that `=` signs in
 /// earlier closed tags or in surrounding plain text are never mistaken for the
 /// current parameter assignment.
-fn param_context(source: &str, offset: usize) -> (bool, Option<String>) {
+fn param_context(source: &str, offset: usize) -> (bool, Option<String>, Option<String>) {
     let prefix = &source[..offset.min(source.len())];
 
     // Find the start of the current line, handling \n, \r\n, and bare \r.
@@ -235,14 +235,24 @@ fn param_context(source: &str, offset: usize) -> (bool, Option<String>) {
     let tag_slice: &str = if let Some(bracket_pos) = line.rfind('[') {
         // A `]` after the last `[` means the tag is closed; we are outside it.
         if line[bracket_pos..].contains(']') {
-            return (false, None);
+            return (false, None, None);
         }
         &line[bracket_pos..]
     } else if line.trim_start().starts_with('@') {
         // At-tag: the entire line prefix is the tag content.
         line
     } else {
-        return (false, None);
+        return (false, None, None);
+    };
+
+    // Extract the tag name — the first identifier after `[` or `@`.
+    let tag_name: Option<String> = {
+        let s = tag_slice.trim_start_matches(['[', '@']).trim_start();
+        let name = s
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .next()
+            .filter(|s| !s.is_empty());
+        name.map(String::from)
     };
 
     // Within the bounded tag slice, look for the last `=`.
@@ -255,10 +265,10 @@ fn param_context(source: &str, offset: usize) -> (bool, Option<String>) {
             .next_back()
             .filter(|s| !s.is_empty())
             .map(String::from);
-        return (true, key);
+        return (true, key, tag_name);
     }
 
-    (false, None)
+    (false, None, tag_name)
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -267,8 +277,14 @@ fn param_context(source: &str, offset: usize) -> (bool, Option<String>) {
 mod tests {
     use super::param_context;
 
+    /// Strip the tag-name field for backward-compat test assertions.
     fn ctx(src: &str) -> (bool, Option<String>) {
-        param_context(src, src.len())
+        let (in_val, key, _tag) = param_context(src, src.len());
+        (in_val, key)
+    }
+
+    fn ctx_tag(src: &str) -> Option<String> {
+        param_context(src, src.len()).2
     }
 
     // ── Inside an open inline tag ────────────────────────────────────────────
@@ -289,6 +305,14 @@ mod tests {
     fn inline_tag_no_eq() {
         // Cursor after the tag name, no `=` yet — not in a value.
         assert_eq!(ctx("[jump "), (false, None));
+    }
+
+    #[test]
+    fn inline_tag_name_extracted() {
+        assert_eq!(ctx_tag("[jump target="), Some("jump".into()));
+        assert_eq!(ctx_tag("[bgm "), Some("bgm".into()));
+        assert_eq!(ctx_tag("@bg storage="), Some("bg".into()));
+        assert_eq!(ctx_tag("[jump target=*a]"), None); // closed tag
     }
 
     #[test]

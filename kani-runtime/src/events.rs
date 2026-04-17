@@ -6,7 +6,7 @@
 //! 3. **Host → Interpreter** — sent by game code to drive the interpreter.
 
 use bevy::prelude::Message;
-use kag_interpreter::{ChoiceOption, InterpreterSnapshot};
+use kag_interpreter::{ChoiceOption, InterpreterSnapshot, ResolvedTag};
 
 // ─── 1. Interpreter → Bevy ───────────────────────────────────────────────────
 
@@ -63,23 +63,11 @@ pub struct EvSnapshot(pub Box<InterpreterSnapshot>);
 
 /// Internal routing event: every `KagEvent::Tag` is emitted here first.
 ///
-/// All built-in tag-handler systems read this event.  Game-specific code
-/// should listen to [`EvUnknownTag`] instead, which is emitted only for tags
-/// that are not claimed by any built-in handler.
+/// All built-in tag-handler systems match on the inner [`ResolvedTag`] to
+/// dispatch strongly-typed Bevy events.  Game-specific code matches on
+/// `ResolvedTag::Extension` to handle custom tags.
 #[derive(Message, Debug, Clone)]
-pub struct EvTagRouted {
-    pub name: String,
-    pub params: Vec<(String, String)>,
-}
-
-/// A `KagEvent::Tag` that was not matched by any built-in handler.
-///
-/// Game-specific code can listen for this to implement custom tags.
-#[derive(Message, Debug, Clone)]
-pub struct EvUnknownTag {
-    pub name: String,
-    pub params: Vec<(String, String)>,
-}
+pub struct EvTagRouted(pub ResolvedTag);
 
 // ─── 2a. Image / layer tag actions ───────────────────────────────────────────
 

@@ -1,3 +1,5 @@
+use kag_syntax::tag_defs::TagName;
+
 use crate::snapshot::InterpreterSnapshot;
 
 /// The variable-scope identifiers used in KAG scripts.
@@ -12,6 +14,103 @@ pub enum VarScope {
     Sf,
     Tf,
     Mp,
+}
+
+// ─── ResolvedTag ─────────────────────────────────────────────────────────────
+
+/// A KAG tag with all dynamic attribute values resolved to concrete types.
+///
+/// Produced by the interpreter after resolving all `MaybeResolved<T>` fields
+/// from the parsed [`kag_syntax::tag_defs::KnownTag`] against the current
+/// `RuntimeContext` (variable scopes and macro parameters).
+///
+/// The host bridge matches on this enum to dispatch Bevy events without any
+/// further string parsing.  Tags not explicitly listed are represented as
+/// [`ResolvedTag::Extension`], which game-specific code can match on.
+#[derive(Debug, Clone)]
+pub enum ResolvedTag {
+    // ── Image / layer ────────────────────────────────────────────────────────
+    Bg { storage: Option<String>, time: Option<u64>, method: Option<String> },
+    Image {
+        storage: Option<String>,
+        layer: Option<String>,
+        x: Option<f32>,
+        y: Option<f32>,
+        visible: Option<bool>,
+    },
+    Layopt { layer: Option<String>, visible: Option<bool>, opacity: Option<f32> },
+    Free { layer: Option<String> },
+    Position { layer: Option<String>, x: Option<f32>, y: Option<f32> },
+
+    // ── Audio ─────────────────────────────────────────────────────────────────
+    Bgm {
+        storage: Option<String>,
+        looping: bool,
+        volume: Option<f32>,
+        fadetime: Option<u64>,
+    },
+    Stopbgm { fadetime: Option<u64> },
+    Se {
+        storage: Option<String>,
+        buf: Option<u32>,
+        volume: Option<f32>,
+        looping: bool,
+    },
+    Stopse { buf: Option<u32> },
+    Vo { storage: Option<String>, buf: Option<u32> },
+    Fadebgm { time: Option<u64>, volume: Option<f32> },
+
+    // ── Transition ────────────────────────────────────────────────────────────
+    Trans { method: Option<String>, time: Option<u64>, rule: Option<String> },
+    Fadein { time: Option<u64>, color: Option<String> },
+    Fadeout { time: Option<u64>, color: Option<String> },
+    Movetrans { layer: Option<String>, time: Option<u64>, x: Option<f32>, y: Option<f32> },
+
+    // ── Effect ────────────────────────────────────────────────────────────────
+    Quake { time: Option<u64>, hmax: Option<f32>, vmax: Option<f32> },
+    Shake { time: Option<u64>, amount: Option<f32>, axis: Option<String> },
+    Flash { time: Option<u64>, color: Option<String> },
+
+    // ── Message window ────────────────────────────────────────────────────────
+    Msgwnd { visible: Option<bool>, layer: Option<String> },
+    Wndctrl { x: Option<f32>, y: Option<f32>, width: Option<f32>, height: Option<f32> },
+    Resetfont,
+    Font { face: Option<String>, size: Option<f32>, bold: Option<bool>, italic: Option<bool> },
+    /// `[size value=N]` — sets font size only.
+    Size { value: Option<f32> },
+    /// `[bold value=true|false]` — sets bold style only. Defaults to `true` if absent.
+    Bold { value: Option<bool> },
+    /// `[italic value=true|false]` — sets italic style only. Defaults to `true` if absent.
+    Italic { value: Option<bool> },
+    Ruby { text: Option<String> },
+    /// `[nowrap]` sets `enabled = true`; `[endnowrap]` sets `enabled = false`.
+    Nowrap { enabled: bool },
+
+    // ── Character sprites ─────────────────────────────────────────────────────
+    Chara {
+        name: Option<String>,
+        id: Option<String>,
+        storage: Option<String>,
+        slot: Option<String>,
+        x: Option<f32>,
+        y: Option<f32>,
+    },
+    CharaHide { name: Option<String>, id: Option<String>, slot: Option<String> },
+    CharaFree { name: Option<String>, id: Option<String>, slot: Option<String> },
+    CharaMod {
+        name: Option<String>,
+        id: Option<String>,
+        face: Option<String>,
+        pose: Option<String>,
+        storage: Option<String>,
+    },
+
+    /// A tag not handled by the engine's built-in dispatch — either an
+    /// engine-internal tag forwarded for host information (e.g. `[ct]`,
+    /// `[clickskip]`, `[chara_ptext]`) or a truly unknown game-specific tag.
+    ///
+    /// Game-specific systems should listen for this variant via `EvTagRouted`.
+    Extension { name: String, params: Vec<(String, String)> },
 }
 
 // ─── Events emitted by the interpreter ───────────────────────────────────────
@@ -61,14 +160,16 @@ pub enum KagEvent {
 
     /// Pause until the host signals that an asynchronous operation has
     /// finished.  Emitted by `[wa]`, `[wm]`, `[wt]`, `[wq]`, `[wb]`, `[wf]`,
-    /// `[wl]`, `[ws]`, `[wv]`, `[wp]` — the host can distinguish them by
-    /// inspecting `tag`.  `canskip` mirrors the KAG `canskip=` attribute; when
-    /// `true` the host may resolve the wait early on click.
+    /// `[wl]`, `[ws]`, `[wv]`, `[wp]`.  The host can distinguish them by
+    /// inspecting `which`.  `canskip` mirrors the KAG `canskip=` attribute;
+    /// when `true` the host may resolve the wait early on click.
     WaitForCompletion {
-        /// Original tag name, e.g. `"wa"`, `"wt"`, `"wb"`, …
-        tag: String,
-        /// All resolved parameters from the tag (e.g. `canskip`, `buf`, `slot`).
-        params: Vec<(String, String)>,
+        /// Which wait-for-completion tag was encountered.
+        which: TagName,
+        /// Whether the host may dismiss this wait on click.
+        canskip: Option<bool>,
+        /// Audio/animation buffer slot (for `[wb]`, `[ws]`, `[wv]`, etc.).
+        buf: Option<u32>,
     },
 
     /// Pause until the next raw click, like `[waitclick]`.
@@ -127,12 +228,10 @@ pub enum KagEvent {
     PushBacklog { text: String, join: bool },
 
     // ── Passthrough for non-core tags ────────────────────────────────────────
-    /// Any tag the interpreter does not handle internally is forwarded here.
-    /// The host can use this for images, audio, transitions, etc.
-    Tag {
-        name: String,
-        params: Vec<(String, String)>,
-    },
+    /// A tag the interpreter does not handle internally is forwarded here as a
+    /// typed [`ResolvedTag`].  The host bridge dispatches it to the appropriate
+    /// Bevy system.  Game-specific tags arrive as [`ResolvedTag::Extension`].
+    Tag(ResolvedTag),
 
     // ── Interpreter lifecycle ────────────────────────────────────────────────
     /// The scenario has reached its end naturally.

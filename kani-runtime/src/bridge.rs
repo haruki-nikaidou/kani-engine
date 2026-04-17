@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use anyhow::{Context as _, Result};
 use bevy::prelude::Resource;
-use kag_interpreter::{HostEvent, KagEvent, KagInterpreter};
+use kag_interpreter::{HostEvent, KagEvent, KagInterpreter, TagName};
 use tokio::runtime::Builder as RuntimeBuilder;
 use tokio::sync::mpsc;
 use tokio::task::LocalSet;
@@ -36,8 +36,9 @@ pub enum BridgeState {
     Stopped,
     /// Interpreter paused at a `[wa]`/`[wt]`/… completion wait.
     WaitingCompletion {
-        tag: String,
-        params: Vec<(String, String)>,
+        which: TagName,
+        canskip: Option<bool>,
+        buf: Option<u32>,
     },
     /// Interpreter waiting for a choice selection.
     WaitingChoice,

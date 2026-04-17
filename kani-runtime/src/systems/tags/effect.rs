@@ -1,8 +1,8 @@
 //! Screen-effect tag handlers (`[quake]`, `[shake]`, `[flash]`).
 
 use bevy::prelude::*;
+use kag_interpreter::ResolvedTag;
 
-use super::{param, param_f32, param_u64};
 use crate::events::{EvFlash, EvQuake, EvShake, EvTagRouted};
 
 pub fn handle_effect_tags(
@@ -12,27 +12,15 @@ pub fn handle_effect_tags(
     mut ev_flash: MessageWriter<EvFlash>,
 ) {
     for tag in reader.read() {
-        let p = &tag.params;
-        match tag.name.as_str() {
-            "quake" => {
-                ev_quake.write(EvQuake {
-                    time: param_u64(p, "time"),
-                    hmax: param_f32(p, "hmax"),
-                    vmax: param_f32(p, "vmax"),
-                });
+        match tag.0.clone() {
+            ResolvedTag::Quake { time, hmax, vmax } => {
+                ev_quake.write(EvQuake { time, hmax, vmax });
             }
-            "shake" => {
-                ev_shake.write(EvShake {
-                    time: param_u64(p, "time"),
-                    amount: param_f32(p, "amount"),
-                    axis: param(p, "axis"),
-                });
+            ResolvedTag::Shake { time, amount, axis } => {
+                ev_shake.write(EvShake { time, amount, axis });
             }
-            "flash" => {
-                ev_flash.write(EvFlash {
-                    time: param_u64(p, "time"),
-                    color: param(p, "color"),
-                });
+            ResolvedTag::Flash { time, color } => {
+                ev_flash.write(EvFlash { time, color });
             }
             _ => {}
         }

@@ -4,13 +4,13 @@ overview: Propagate `KnownTag`/`TagName` from `kag-syntax` through the interpret
 todos:
   - id: 6ab-interp
     content: "6a+6b: Add ResolvedTag to events.rs, change KagEvent::Tag/WaitForCompletion, rewrite executor.rs to use KnownTag matching, update lib.rs re-exports"
-    status: pending
+    status: completed
   - id: 6c-runtime
     content: "6c: Update BridgeState, poll.rs, EvTagRouted, and all kani-runtime/src/systems/tags/*.rs handlers to use ResolvedTag"
-    status: pending
+    status: completed
   - id: 6d-lsp
     content: "6d: Update completion.rs (TagName::all(), param-name completions) and hover.rs (TagName::doc_summary()) in kag-lsp"
-    status: pending
+    status: completed
 isProject: false
 ---
 

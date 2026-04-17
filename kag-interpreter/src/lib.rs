@@ -73,7 +73,10 @@ pub mod snapshot;
 pub use runtime::KagInterpreter;
 
 /// All event types used across the public API.
-pub use events::{ChoiceOption, HostEvent, KagEvent, VarScope, VariableSnapshot};
+pub use events::{ChoiceOption, HostEvent, KagEvent, ResolvedTag, VarScope, VariableSnapshot};
+
+/// Typed tag name enum — identifies every built-in KAG tag by variant.
+pub use kag_syntax::tag_defs::TagName;
 
 /// Jump-target registered by `[click]` or `[wheel]` before `[s]`.
 pub use runtime::context::JumpTarget;

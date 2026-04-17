@@ -1,8 +1,8 @@
 //! Transition tag handlers (`[trans]`, `[fadein]`, `[fadeout]`, `[movetrans]`).
 
 use bevy::prelude::*;
+use kag_interpreter::ResolvedTag;
 
-use super::{param, param_f32, param_u64};
 use crate::events::{EvFadeScreen, EvMoveLayerTransition, EvRunTransition, EvTagRouted};
 
 pub fn handle_transition_tags(
@@ -12,29 +12,26 @@ pub fn handle_transition_tags(
     mut ev_move: MessageWriter<EvMoveLayerTransition>,
 ) {
     for tag in reader.read() {
-        let p = &tag.params;
-        match tag.name.as_str() {
-            "trans" => {
-                ev_trans.write(EvRunTransition {
-                    method: param(p, "method"),
-                    time: param_u64(p, "time"),
-                    rule: param(p, "rule"),
-                });
+        match tag.0.clone() {
+            ResolvedTag::Trans { method, time, rule } => {
+                ev_trans.write(EvRunTransition { method, time, rule });
             }
-            "fadein" | "fadeout" => {
+            ResolvedTag::Fadein { time, color } => {
                 ev_fade.write(EvFadeScreen {
-                    kind: tag.name.clone(),
-                    time: param_u64(p, "time"),
-                    color: param(p, "color"),
+                    kind: "fadein".to_owned(),
+                    time,
+                    color,
                 });
             }
-            "movetrans" => {
-                ev_move.write(EvMoveLayerTransition {
-                    layer: param(p, "layer"),
-                    time: param_u64(p, "time"),
-                    x: param_f32(p, "x"),
-                    y: param_f32(p, "y"),
+            ResolvedTag::Fadeout { time, color } => {
+                ev_fade.write(EvFadeScreen {
+                    kind: "fadeout".to_owned(),
+                    time,
+                    color,
                 });
+            }
+            ResolvedTag::Movetrans { layer, time, x, y } => {
+                ev_move.write(EvMoveLayerTransition { layer, time, x, y });
             }
             _ => {}
         }

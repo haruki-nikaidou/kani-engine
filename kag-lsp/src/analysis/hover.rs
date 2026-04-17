@@ -1,5 +1,6 @@
 //! Hover provider — returns Markdown documentation for the token under cursor.
 
+use kag_syntax::tag_defs::TagName;
 use kag_syntax::SyntaxKind;
 use kag_syntax::cst::{self, AstNode as _};
 use rowan::{TextSize, TokenAtOffset};
@@ -7,28 +8,6 @@ use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind};
 
 use crate::convert::{offset_to_position, text_range_to_lsp_range};
 use crate::store::ParsedDoc;
-
-/// Built-in KAG tags and their brief descriptions.
-const BUILTIN_TAGS: &[(&str, &str)] = &[
-    ("r", "Insert a line break in the message window."),
-    ("p", "Wait for a page-break click, then clear the window."),
-    ("l", "Wait for a click (line wait)."),
-    (
-        "jump",
-        "Jump to another label or file. Params: `storage`, `target`.",
-    ),
-    ("call", "Call a subroutine. Params: `storage`, `target`."),
-    ("return", "Return from a subroutine."),
-    (
-        "wait",
-        "Wait for a fixed number of milliseconds. Params: `time`.",
-    ),
-    ("macro", "Define a macro. Params: `name`."),
-    ("endmacro", "End a macro definition."),
-    ("iscript", "Begin an inline Rhai script block."),
-    ("endscript", "End an inline script block."),
-    ("eval", "Evaluate a Rhai expression. Params: `exp`."),
-];
 
 /// Return hover content for the symbol at `offset` in `doc`, or `None`.
 pub fn hover(doc: &ParsedDoc, offset: usize) -> Option<Hover> {
@@ -60,9 +39,18 @@ pub fn hover(doc: &ParsedDoc, offset: usize) -> Option<Hover> {
 
     let markdown = match parent.kind() {
         SyntaxKind::TAG_NAME => {
-            // Tag name — show built-in docs or macro summary.
-            if let Some(desc) = builtin_tag_description(text) {
-                format!("**tag** `{text}`\n\n{desc}")
+            // Tag name — show built-in docs (from TagName metadata) or macro summary.
+            if let Some(tag_name) = TagName::from_name(text) {
+                let desc = tag_name.doc_summary();
+                let params = tag_name.param_names();
+                if params.is_empty() {
+                    format!("**tag** `{text}`\n\n{desc}")
+                } else {
+                    format!(
+                        "**tag** `{text}`\n\n{desc}\n\n**Params:** {}",
+                        params.join(", ")
+                    )
+                }
             } else if let Some(&macro_range) = doc.index.macros.get(text) {
                 let start = offset_to_position(&doc.source, usize::from(macro_range.start()));
                 format!("**macro** `{text}`\n\nDefined at line {}.", start.line + 1)
@@ -108,13 +96,6 @@ pub fn hover(doc: &ParsedDoc, offset: usize) -> Option<Hover> {
         }),
         range: Some(token_range),
     })
-}
-
-fn builtin_tag_description(name: &str) -> Option<&'static str> {
-    BUILTIN_TAGS
-        .iter()
-        .find(|(n, _)| *n == name)
-        .map(|(_, d)| *d)
 }
 
 /// Returns `true` when `node` is a `PARAM` whose key is `target` or `storage`.
